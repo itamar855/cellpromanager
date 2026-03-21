@@ -68,6 +68,17 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
               </p>
             </div>
           </div>
+          <div className="flex gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleTheme}
+              className="justify-start text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+            >
+              {theme === "dark" ? <Sun className="h-4 w-4 mr-2" /> : <Moon className="h-4 w-4 mr-2" />}
+              {theme === "dark" ? "Modo Claro" : "Modo Escuro"}
+            </Button>
+          </div>
           <Button
             variant="ghost"
             size="sm"
