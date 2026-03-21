@@ -1,9 +1,10 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutDashboard, Package, ArrowUpDown, ShoppingBag, Store,
-  LogOut, Smartphone, Wrench, Users,
+  LogOut, Smartphone, Wrench, Users, Sun, Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ const navItems = [
 
 const AppLayout = ({ children }: { children: ReactNode }) => {
   const { user, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
 
   return (
@@ -66,6 +68,17 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
               </p>
             </div>
           </div>
+          <div className="flex gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleTheme}
+              className="justify-start text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+            >
+              {theme === "dark" ? <Sun className="h-4 w-4 mr-2" /> : <Moon className="h-4 w-4 mr-2" />}
+              {theme === "dark" ? "Modo Claro" : "Modo Escuro"}
+            </Button>
+          </div>
           <Button
             variant="ghost"
             size="sm"
@@ -88,9 +101,14 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
             </div>
             <span className="font-display font-bold text-sm">CellManager</span>
           </div>
-          <Button variant="ghost" size="icon" onClick={signOut} className="h-8 w-8">
-            <LogOut className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8">
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
+            <Button variant="ghost" size="icon" onClick={signOut} className="h-8 w-8">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </header>
 
         {/* Page content */}
