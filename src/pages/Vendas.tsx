@@ -144,7 +144,7 @@ const Vendas = () => {
       tradeInProductId = tradeInProduct.id;
     }
 
-    // Create the sale record
+    // Create the sale record with commission
     const { error: saleError } = await supabase.from("sales").insert({
       product_id: form.product_id,
       store_id: selectedProduct.store_id,
@@ -162,6 +162,8 @@ const Vendas = () => {
       customer_name: form.customer_name || null,
       customer_phone: form.customer_phone || null,
       notes: form.notes || null,
+      commission_percent: commissionPercent,
+      commission_value: commissionValue,
       created_by: user.id,
     } as any);
 
