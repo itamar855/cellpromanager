@@ -234,6 +234,9 @@ const Vendas = () => {
                 <div className="rounded-lg bg-muted/50 p-3 text-xs space-y-0.5">
                   <p><span className="text-muted-foreground">Custo:</span> <span className="font-semibold">{formatCurrency(Number(selectedProduct.cost_price))}</span></p>
                   {selectedProduct.imei && <p><span className="text-muted-foreground">IMEI:</span> {selectedProduct.imei}</p>}
+                  {salePrice > 0 && (
+                    <p><span className="text-muted-foreground">Lucro estimado:</span> <span className={`font-semibold ${profit >= 0 ? "text-primary" : "text-destructive"}`}>{formatCurrency(profit)}</span></p>
+                  )}
                 </div>
               )}
 
