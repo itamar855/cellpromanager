@@ -370,6 +370,7 @@ const Vendas = () => {
                 <p className="text-[10px] text-muted-foreground">Calculada sobre o lucro: {formatCurrency(profit)} × {commissionPercent}%</p>
               </div>
 
+              <div className="space-y-1.5">
                 <Label className="text-xs">Observações</Label>
                 <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Observações da venda..." className="min-h-[60px]" />
               </div>
