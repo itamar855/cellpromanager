@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import SignatureCanvas from "@/components/SignatureCanvas";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";

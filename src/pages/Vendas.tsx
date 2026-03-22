@@ -352,7 +352,24 @@ const Vendas = () => {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
+              {/* Commission */}
+              <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                <p className="text-xs font-semibold text-primary">Comissão do Vendedor</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Comissão (%)</Label>
+                    <Input type="number" step="0.5" min="0" max="100" value={form.commission_percent} onChange={(e) => setForm({ ...form, commission_percent: e.target.value })} className="h-10" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Valor da Comissão</Label>
+                    <div className="h-10 flex items-center rounded-md border border-input bg-muted/50 px-3 text-sm font-semibold text-primary">
+                      {formatCurrency(commissionValue)}
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground">Calculada sobre o lucro: {formatCurrency(profit)} × {commissionPercent}%</p>
+              </div>
+
                 <Label className="text-xs">Observações</Label>
                 <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Observações da venda..." className="min-h-[60px]" />
               </div>
