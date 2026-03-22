@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutDashboard, Package, ArrowUpDown, ShoppingBag, Store,
-  LogOut, Smartphone, Wrench, Users, Sun, Moon,
+  LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
