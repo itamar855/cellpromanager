@@ -15,6 +15,8 @@ import Lojas from "./pages/Lojas";
 import OrdensServico from "./pages/OrdensServico";
 import Equipe from "./pages/Equipe";
 import Clientes from "./pages/Clientes";
+import Relatorios from "./pages/Relatorios";
+import Instalar from "./pages/Instalar";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 
@@ -58,6 +60,8 @@ const App = () => (
               <Route path="/ordens-servico" element={<ProtectedRoute><OrdensServico /></ProtectedRoute>} />
               <Route path="/equipe" element={<ProtectedRoute><Equipe /></ProtectedRoute>} />
               <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
+              <Route path="/relatorios" element={<ProtectedRoute><Relatorios /></ProtectedRoute>} />
+              <Route path="/instalar" element={<Instalar />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

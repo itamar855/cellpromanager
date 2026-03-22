@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import SignatureCanvas from "@/components/SignatureCanvas";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -44,6 +45,8 @@ const OrdensServico = () => {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [loading, setLoading] = useState(false);
+
+  const [signatureData, setSignatureData] = useState("");
 
   const [form, setForm] = useState({
     customer_name: "", customer_phone: "", customer_cpf: "",
@@ -112,6 +115,7 @@ const OrdensServico = () => {
       estimated_price: form.estimated_price ? parseFloat(form.estimated_price) : 0,
       estimated_completion: form.estimated_completion || null,
       terms_accepted: form.terms_accepted,
+      signature_data: signatureData || null,
       internal_notes: form.internal_notes || null,
       created_by: user.id,
       status: "open",
@@ -304,6 +308,9 @@ const OrdensServico = () => {
                 </div>
               </div>
 
+              {/* Digital Signature */}
+              <SignatureCanvas onSave={setSignatureData} initialData={signatureData} />
+
               <div className="space-y-1.5">
                 <Label className="text-xs">Observações Internas</Label>
                 <Textarea value={form.internal_notes} onChange={(e) => setForm({ ...form, internal_notes: e.target.value })} placeholder="Notas internas..." className="min-h-[50px]" />
@@ -451,6 +458,13 @@ const OrdensServico = () => {
                   <div className="rounded-lg bg-muted/50 p-3 text-xs">
                     <p className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wide">Notas Internas</p>
                     <p className="mt-1">{detailOrder.internal_notes}</p>
+                  </div>
+                )}
+
+                {detailOrder.signature_data && (
+                  <div className="rounded-lg bg-muted/50 p-3 text-xs">
+                    <p className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wide mb-2">Assinatura do Cliente</p>
+                    <img src={detailOrder.signature_data} alt="Assinatura" className="max-h-24 rounded border border-border" />
                   </div>
                 )}
 

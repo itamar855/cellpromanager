@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DollarSign, Package, TrendingUp, TrendingDown, Store, Wrench,
-  ArrowUpRight, ArrowDownRight, ShoppingBag,
+  ArrowUpRight, ArrowDownRight, ShoppingBag, AlertTriangle,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -26,6 +26,7 @@ const Dashboard = () => {
   const [expenseBreakdown, setExpenseBreakdown] = useState<{ name: string; value: number }[]>([]);
   const [dailySales, setDailySales] = useState<{ date: string; total: number }[]>([]);
   const [paymentBreakdown, setPaymentBreakdown] = useState<{ name: string; value: number }[]>([]);
+  const [lowStockStores, setLowStockStores] = useState<{ name: string; count: number }[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -103,6 +104,18 @@ const Dashboard = () => {
         { name: "PIX", value: totalPix },
         { name: "Troca", value: totalTradeIn },
       ].filter((p) => p.value > 0));
+
+      // Low stock alerts
+      const storeStockCounts: Record<string, number> = {};
+      inStock.forEach(p => {
+        const name = storeMap.get(p.store_id) || "Sem loja";
+        storeStockCounts[name] = (storeStockCounts[name] || 0) + 1;
+      });
+      setLowStockStores(
+        Object.entries(storeStockCounts)
+          .filter(([, count]) => count <= 3)
+          .map(([name, count]) => ({ name, count }))
+      );
     };
     fetchData();
   }, []);
@@ -122,6 +135,21 @@ const Dashboard = () => {
         <h1 className="font-display text-xl md:text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground text-sm mt-0.5">Visão geral das suas lojas</p>
       </div>
+
+      {/* Low stock alerts */}
+      {lowStockStores.length > 0 && (
+        <div className="space-y-2">
+          {lowStockStores.map(s => (
+            <div key={s.name} className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
+              <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+              <p className="text-xs">
+                <span className="font-semibold">{s.name}</span>: estoque baixo — apenas{" "}
+                <span className="font-bold text-destructive">{s.count}</span> produtos
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">

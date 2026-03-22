@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutDashboard, Package, ArrowUpDown, ShoppingBag, Store,
-  LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle,
+  LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle, FileText, Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ const navItems = [
   { label: "OS", icon: Wrench, path: "/ordens-servico" },
   { label: "Clientes", icon: UserCircle, path: "/clientes" },
   { label: "Transações", icon: ArrowUpDown, path: "/transacoes" },
+  { label: "Relatórios", icon: FileText, path: "/relatorios" },
   { label: "Lojas", icon: Store, path: "/lojas" },
   { label: "Equipe", icon: Users, path: "/equipe" },
 ];
@@ -40,7 +41,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
           </div>
         </div>
 
-        <nav className="flex-1 px-3 space-y-0.5">
+        <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
           {navItems.map((item) => (
             <Link
               key={item.path}
@@ -77,8 +78,13 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
               className="justify-start text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent"
             >
               {theme === "dark" ? <Sun className="h-4 w-4 mr-2" /> : <Moon className="h-4 w-4 mr-2" />}
-              {theme === "dark" ? "Modo Claro" : "Modo Escuro"}
+              {theme === "dark" ? "Claro" : "Escuro"}
             </Button>
+            <Link to="/instalar">
+              <Button variant="ghost" size="sm" className="text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent">
+                <Download className="h-4 w-4 mr-2" /> App
+              </Button>
+            </Link>
           </div>
           <Button
             variant="ghost"

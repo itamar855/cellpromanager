@@ -66,6 +66,7 @@ const Vendas = () => {
     customer_name: "",
     customer_phone: "",
     notes: "",
+    commission_percent: "10",
   });
 
   const fetchData = async () => {
@@ -93,6 +94,9 @@ const Vendas = () => {
   const salePrice = parseFloat(form.sale_price) || 0;
   const totalPayment = (form.has_trade_in ? tradeInVal : 0) + cashVal + cardVal + pixVal;
   const remaining = salePrice - totalPayment;
+  const profit = selectedProduct ? salePrice - Number(selectedProduct.cost_price) : 0;
+  const commissionPercent = parseFloat(form.commission_percent) || 0;
+  const commissionValue = Math.max(0, (profit * commissionPercent) / 100);
 
   const resetForm = () => setForm({
     product_id: "", sale_price: "", has_trade_in: false,
@@ -100,6 +104,7 @@ const Vendas = () => {
     trade_in_device_model: "", trade_in_device_imei: "",
     trade_in_value: "", payment_cash: "", payment_card: "",
     payment_pix: "", customer_name: "", customer_phone: "", notes: "",
+    commission_percent: "10",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -139,7 +144,7 @@ const Vendas = () => {
       tradeInProductId = tradeInProduct.id;
     }
 
-    // Create the sale record
+    // Create the sale record with commission
     const { error: saleError } = await supabase.from("sales").insert({
       product_id: form.product_id,
       store_id: selectedProduct.store_id,
@@ -157,6 +162,8 @@ const Vendas = () => {
       customer_name: form.customer_name || null,
       customer_phone: form.customer_phone || null,
       notes: form.notes || null,
+      commission_percent: commissionPercent,
+      commission_value: commissionValue,
       created_by: user.id,
     } as any);
 
@@ -227,6 +234,9 @@ const Vendas = () => {
                 <div className="rounded-lg bg-muted/50 p-3 text-xs space-y-0.5">
                   <p><span className="text-muted-foreground">Custo:</span> <span className="font-semibold">{formatCurrency(Number(selectedProduct.cost_price))}</span></p>
                   {selectedProduct.imei && <p><span className="text-muted-foreground">IMEI:</span> {selectedProduct.imei}</p>}
+                  {salePrice > 0 && (
+                    <p><span className="text-muted-foreground">Lucro estimado:</span> <span className={`font-semibold ${profit >= 0 ? "text-primary" : "text-destructive"}`}>{formatCurrency(profit)}</span></p>
+                  )}
                 </div>
               )}
 
@@ -340,6 +350,24 @@ const Vendas = () => {
                     </span>
                   </div>
                 </div>
+              </div>
+
+              {/* Commission */}
+              <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                <p className="text-xs font-semibold text-primary">Comissão do Vendedor</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Comissão (%)</Label>
+                    <Input type="number" step="0.5" min="0" max="100" value={form.commission_percent} onChange={(e) => setForm({ ...form, commission_percent: e.target.value })} className="h-10" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Valor da Comissão</Label>
+                    <div className="h-10 flex items-center rounded-md border border-input bg-muted/50 px-3 text-sm font-semibold text-primary">
+                      {formatCurrency(commissionValue)}
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground">Calculada sobre o lucro: {formatCurrency(profit)} × {commissionPercent}%</p>
               </div>
 
               <div className="space-y-1.5">
