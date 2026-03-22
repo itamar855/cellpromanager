@@ -14,6 +14,7 @@ const navItems = [
   { label: "Vendas", icon: ShoppingBag, path: "/vendas" },
   { label: "Estoque", icon: Package, path: "/estoque" },
   { label: "OS", icon: Wrench, path: "/ordens-servico" },
+  { label: "Clientes", icon: UserCircle, path: "/clientes" },
   { label: "Transações", icon: ArrowUpDown, path: "/transacoes" },
   { label: "Lojas", icon: Store, path: "/lojas" },
   { label: "Equipe", icon: Users, path: "/equipe" },
