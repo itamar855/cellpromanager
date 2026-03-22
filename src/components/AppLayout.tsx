@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutDashboard, Package, ArrowUpDown, ShoppingBag, Store,
-  LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle, FileText, Download,
+  LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle, FileText, Download, Brain,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ const navItems = [
   { label: "Relatórios", icon: FileText, path: "/relatorios" },
   { label: "Lojas", icon: Store, path: "/lojas" },
   { label: "Equipe", icon: Users, path: "/equipe" },
+  { label: "IA", icon: Brain, path: "/assistente-ia" },
 ];
 
 const AppLayout = ({ children }: { children: ReactNode }) => {
