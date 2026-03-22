@@ -136,6 +136,21 @@ const Dashboard = () => {
         <p className="text-muted-foreground text-sm mt-0.5">Visão geral das suas lojas</p>
       </div>
 
+      {/* Low stock alerts */}
+      {lowStockStores.length > 0 && (
+        <div className="space-y-2">
+          {lowStockStores.map(s => (
+            <div key={s.name} className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
+              <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+              <p className="text-xs">
+                <span className="font-semibold">{s.name}</span>: estoque baixo — apenas{" "}
+                <span className="font-bold text-destructive">{s.count}</span> produtos
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         {kpis.map((kpi) => (
