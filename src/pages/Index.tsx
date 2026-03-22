@@ -104,6 +104,18 @@ const Dashboard = () => {
         { name: "PIX", value: totalPix },
         { name: "Troca", value: totalTradeIn },
       ].filter((p) => p.value > 0));
+
+      // Low stock alerts
+      const storeStockCounts: Record<string, number> = {};
+      inStock.forEach(p => {
+        const name = storeMap.get(p.store_id) || "Sem loja";
+        storeStockCounts[name] = (storeStockCounts[name] || 0) + 1;
+      });
+      setLowStockStores(
+        Object.entries(storeStockCounts)
+          .filter(([, count]) => count <= 3)
+          .map(([name, count]) => ({ name, count }))
+      );
     };
     fetchData();
   }, []);
