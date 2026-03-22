@@ -461,6 +461,13 @@ const OrdensServico = () => {
                   </div>
                 )}
 
+                {detailOrder.signature_data && (
+                  <div className="rounded-lg bg-muted/50 p-3 text-xs">
+                    <p className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wide mb-2">Assinatura do Cliente</p>
+                    <img src={detailOrder.signature_data} alt="Assinatura" className="max-h-24 rounded border border-border" />
+                  </div>
+                )}
+
                 {/* Status update */}
                 {detailOrder.status !== "delivered" && detailOrder.status !== "cancelled" && (
                   <div className="space-y-2">
