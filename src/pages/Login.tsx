@@ -10,38 +10,35 @@ import { Smartphone, TrendingUp, Shield } from "lucide-react";
 
 const Login = () => {
   const navigate = useNavigate();
-  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [forgotPassword, setForgotPassword] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    if (isSignUp) {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { display_name: displayName },
-          emailRedirectTo: window.location.origin,
-        },
+    if (forgotPassword) {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
       });
       if (error) {
         toast.error(error.message);
       } else {
-        toast.success("Conta criada com sucesso!");
-        navigate("/");
+        setResetSent(true);
+        toast.success("E-mail de recuperação enviado!");
       }
+      setLoading(false);
+      return;
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      toast.error("E-mail ou senha incorretos.");
     } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        toast.error("E-mail ou senha incorretos.");
-      } else {
-        navigate("/");
-      }
+      navigate("/");
     }
     setLoading(false);
   };

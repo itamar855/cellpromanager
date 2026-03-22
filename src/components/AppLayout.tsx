@@ -119,7 +119,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         {/* Mobile bottom nav */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-lg border-t border-border safe-bottom z-50">
           <div className="flex justify-around py-1.5">
-            {navItems.slice(0, 5).map((item) => {
+            {navItems.map((item) => {
               const isActive = location.pathname === item.path;
               return (
                 <Link
