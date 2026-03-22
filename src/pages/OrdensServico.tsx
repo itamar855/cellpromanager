@@ -311,6 +311,7 @@ const OrdensServico = () => {
               {/* Digital Signature */}
               <SignatureCanvas onSave={setSignatureData} initialData={signatureData} />
 
+              <div className="space-y-1.5">
                 <Label className="text-xs">Observações Internas</Label>
                 <Textarea value={form.internal_notes} onChange={(e) => setForm({ ...form, internal_notes: e.target.value })} placeholder="Notas internas..." className="min-h-[50px]" />
               </div>
