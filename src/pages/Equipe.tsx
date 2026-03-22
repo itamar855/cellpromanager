@@ -3,15 +3,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Users, Shield, ShieldCheck, User } from "lucide-react";
+import { Users, Shield, ShieldCheck, User, Plus, Phone, Store } from "lucide-react";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 const roleConfig: Record<string, { label: string; color: string; icon: typeof Shield }> = {
@@ -20,18 +22,31 @@ const roleConfig: Record<string, { label: string; color: string; icon: typeof Sh
   vendedor: { label: "Vendedor", color: "bg-primary/15 text-primary border-primary/20", icon: User },
 };
 
-type ProfileWithRole = Tables<"profiles"> & { role?: Enums<"app_role"> | null };
+type ProfileWithRole = Tables<"profiles"> & {
+  role?: Enums<"app_role"> | null;
+  phone?: string | null;
+  store_id?: string | null;
+};
 
 const Equipe = () => {
   const { userRole, user } = useAuth();
   const [members, setMembers] = useState<ProfileWithRole[]>([]);
+  const [stores, setStores] = useState<Tables<"stores">[]>([]);
   const [selectedMember, setSelectedMember] = useState<ProfileWithRole | null>(null);
   const [newRole, setNewRole] = useState<string>("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editStoreId, setEditStoreId] = useState("");
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    email: "", password: "", display_name: "", phone: "", role: "vendedor", store_id: "",
+  });
+  const [loading, setLoading] = useState(false);
 
   const fetchData = async () => {
-    const [profilesRes, rolesRes] = await Promise.all([
+    const [profilesRes, rolesRes, storesRes] = await Promise.all([
       supabase.from("profiles").select("*"),
       supabase.from("user_roles").select("*"),
+      supabase.from("stores").select("*"),
     ]);
 
     const profiles = profilesRes.data ?? [];
@@ -39,21 +54,24 @@ const Equipe = () => {
     const roleMap = new Map(roles.map((r) => [r.user_id, r.role]));
 
     setMembers(
-      profiles.map((p) => ({
+      profiles.map((p: any) => ({
         ...p,
         role: roleMap.get(p.user_id) ?? null,
       }))
     );
+    setStores(storesRes.data ?? []);
   };
 
   useEffect(() => { fetchData(); }, []);
 
   const isAdmin = userRole === "admin";
+  const storeMap = new Map(stores.map((s) => [s.id, s.name]));
 
   const handleRoleChange = async () => {
     if (!selectedMember || !newRole) return;
+    setLoading(true);
 
-    // Check existing role
+    // Update role
     const { data: existing } = await supabase
       .from("user_roles")
       .select("id")
@@ -65,25 +83,73 @@ const Equipe = () => {
         .from("user_roles")
         .update({ role: newRole as any })
         .eq("user_id", selectedMember.user_id);
-      if (error) { toast.error(error.message); return; }
+      if (error) { toast.error(error.message); setLoading(false); return; }
     } else {
       const { error } = await supabase
         .from("user_roles")
         .insert({ user_id: selectedMember.user_id, role: newRole as any });
-      if (error) { toast.error(error.message); return; }
+      if (error) { toast.error(error.message); setLoading(false); return; }
     }
 
-    toast.success("Cargo atualizado!");
+    // Update profile (phone, store)
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({
+        phone: editPhone || null,
+        store_id: editStoreId || null,
+      } as any)
+      .eq("user_id", selectedMember.user_id);
+
+    if (profileError) toast.error(profileError.message);
+    else toast.success("Membro atualizado!");
+
     setSelectedMember(null);
-    setNewRole("");
+    setLoading(false);
     fetchData();
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const response = await supabase.functions.invoke("create-user", {
+        body: {
+          email: createForm.email,
+          password: createForm.password,
+          display_name: createForm.display_name,
+          phone: createForm.phone,
+          role: createForm.role,
+          store_id: createForm.store_id || null,
+        },
+      });
+
+      if (response.error) {
+        toast.error(response.error.message || "Erro ao criar usuário");
+      } else {
+        toast.success("Usuário criado com sucesso!");
+        setCreateDialogOpen(false);
+        setCreateForm({ email: "", password: "", display_name: "", phone: "", role: "vendedor", store_id: "" });
+        fetchData();
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao criar usuário");
+    }
+    setLoading(false);
   };
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="font-display text-xl md:text-3xl font-bold tracking-tight">Equipe</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">{members.length} membros cadastrados</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="font-display text-xl md:text-3xl font-bold tracking-tight">Equipe</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">{members.length} membros cadastrados</p>
+        </div>
+        {isAdmin && (
+          <Button className="gap-2 h-10" onClick={() => setCreateDialogOpen(true)}>
+            <Plus className="h-4 w-4" /> Novo Membro
+          </Button>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -98,6 +164,8 @@ const Equipe = () => {
                   if (isAdmin) {
                     setSelectedMember(member);
                     setNewRole(member.role || "vendedor");
+                    setEditPhone((member as any).phone || "");
+                    setEditStoreId((member as any).store_id || "");
                   }
                 }}
               >
@@ -108,7 +176,21 @@ const Equipe = () => {
                     </div>
                     <div className="min-w-0">
                       <p className="font-medium text-sm truncate">{member.display_name || "Sem nome"}</p>
-                      <p className="text-xs text-muted-foreground truncate">{member.user_id === user?.id ? "Você" : ""}</p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        {(member as any).phone && (
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                            <Phone className="h-2.5 w-2.5" /> {(member as any).phone}
+                          </span>
+                        )}
+                        {(member as any).store_id && (
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                            <Store className="h-2.5 w-2.5" /> {storeMap.get((member as any).store_id) || ""}
+                          </span>
+                        )}
+                        {member.user_id === user?.id && (
+                          <Badge variant="outline" className="text-[9px] px-1 py-0">Você</Badge>
+                        )}
+                      </div>
                     </div>
                   </div>
                   {rc ? (
@@ -132,13 +214,13 @@ const Equipe = () => {
         )}
       </div>
 
-      {/* Role edit dialog */}
+      {/* Edit member dialog */}
       <Dialog open={!!selectedMember} onOpenChange={(open) => !open && setSelectedMember(null)}>
         <DialogContent>
           {selectedMember && (
             <>
               <DialogHeader>
-                <DialogTitle className="font-display">Editar Cargo</DialogTitle>
+                <DialogTitle className="font-display">Editar Membro</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
@@ -148,7 +230,7 @@ const Equipe = () => {
                   <p className="font-medium">{selectedMember.display_name}</p>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs text-muted-foreground">Cargo</label>
+                  <Label className="text-xs">Cargo</Label>
                   <Select value={newRole} onValueChange={setNewRole}>
                     <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -158,12 +240,78 @@ const Equipe = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={handleRoleChange} className="w-full h-11 font-semibold">
-                  Salvar
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Telefone</Label>
+                  <Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="(11) 99999-9999" className="h-10" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Loja de Atuação</Label>
+                  <Select value={editStoreId} onValueChange={setEditStoreId}>
+                    <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Nenhuma</SelectItem>
+                      {stores.map((s) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={handleRoleChange} className="w-full h-11 font-semibold" disabled={loading}>
+                  {loading ? "Salvando..." : "Salvar"}
                 </Button>
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Create user dialog */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-display">Cadastrar Novo Membro</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateUser} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Nome</Label>
+              <Input value={createForm.display_name} onChange={(e) => setCreateForm({ ...createForm, display_name: e.target.value })} placeholder="Nome completo" required className="h-10" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">E-mail</Label>
+              <Input type="email" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} placeholder="email@exemplo.com" required className="h-10" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Senha</Label>
+              <Input type="password" value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} placeholder="Mínimo 6 caracteres" required minLength={6} className="h-10" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Telefone</Label>
+                <Input value={createForm.phone} onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })} placeholder="(11) 99999-9999" className="h-10" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Cargo</Label>
+                <Select value={createForm.role} onValueChange={(v) => setCreateForm({ ...createForm, role: v })}>
+                  <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Administrador</SelectItem>
+                    <SelectItem value="gerente">Gerente</SelectItem>
+                    <SelectItem value="vendedor">Vendedor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Loja de Atuação</Label>
+              <Select value={createForm.store_id} onValueChange={(v) => setCreateForm({ ...createForm, store_id: v })}>
+                <SelectTrigger className="h-10"><SelectValue placeholder="Selecione (opcional)" /></SelectTrigger>
+                <SelectContent>
+                  {stores.map((s) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button type="submit" className="w-full h-11 font-semibold" disabled={loading}>
+              {loading ? "Criando..." : "Cadastrar Membro"}
+            </Button>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

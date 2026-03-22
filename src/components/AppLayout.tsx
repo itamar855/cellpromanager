@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutDashboard, Package, ArrowUpDown, ShoppingBag, Store,
-  LogOut, Smartphone, Wrench, Users, Sun, Moon,
+  LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ const navItems = [
   { label: "Vendas", icon: ShoppingBag, path: "/vendas" },
   { label: "Estoque", icon: Package, path: "/estoque" },
   { label: "OS", icon: Wrench, path: "/ordens-servico" },
+  { label: "Clientes", icon: UserCircle, path: "/clientes" },
   { label: "Transações", icon: ArrowUpDown, path: "/transacoes" },
   { label: "Lojas", icon: Store, path: "/lojas" },
   { label: "Equipe", icon: Users, path: "/equipe" },
@@ -118,15 +119,15 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
 
         {/* Mobile bottom nav */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-lg border-t border-border safe-bottom z-50">
-          <div className="flex justify-around py-1.5">
-            {navItems.slice(0, 5).map((item) => {
+          <div className="flex overflow-x-auto scrollbar-none py-1.5 px-1">
+            {navItems.map((item) => {
               const isActive = location.pathname === item.path;
               return (
                 <Link
                   key={item.path}
                   to={item.path}
                   className={cn(
-                    "flex flex-col items-center gap-0.5 px-3 py-2 rounded-lg transition-all duration-200 min-w-[50px]",
+                    "flex flex-col items-center gap-0.5 px-2 py-2 rounded-lg transition-all duration-200 min-w-[48px] shrink-0",
                     isActive
                       ? "text-primary"
                       : "text-muted-foreground active:scale-95"
@@ -136,9 +137,9 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                     "rounded-lg p-1 transition-colors",
                     isActive && "bg-primary/15"
                   )}>
-                    <item.icon className="h-5 w-5" />
+                    <item.icon className="h-4 w-4" />
                   </div>
-                  <span className="text-[10px] font-medium">{item.label}</span>
+                  <span className="text-[9px] font-medium">{item.label}</span>
                 </Link>
               );
             })}

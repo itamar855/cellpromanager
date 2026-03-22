@@ -10,38 +10,35 @@ import { Smartphone, TrendingUp, Shield } from "lucide-react";
 
 const Login = () => {
   const navigate = useNavigate();
-  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [forgotPassword, setForgotPassword] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    if (isSignUp) {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { display_name: displayName },
-          emailRedirectTo: window.location.origin,
-        },
+    if (forgotPassword) {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
       });
       if (error) {
         toast.error(error.message);
       } else {
-        toast.success("Conta criada com sucesso!");
-        navigate("/");
+        setResetSent(true);
+        toast.success("E-mail de recuperação enviado!");
       }
+      setLoading(false);
+      return;
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      toast.error("E-mail ou senha incorretos.");
     } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        toast.error("E-mail ou senha incorretos.");
-      } else {
-        navigate("/");
-      }
+      navigate("/");
     }
     setLoading(false);
   };
@@ -95,64 +92,68 @@ const Login = () => {
           <Card className="border-border/50 shadow-2xl shadow-black/20">
             <CardHeader className="text-center pb-4">
               <CardTitle className="font-display text-xl">
-                {isSignUp ? "Criar conta" : "Entrar"}
+                {forgotPassword ? "Recuperar Senha" : "Entrar"}
               </CardTitle>
               <CardDescription className="text-xs">
-                {isSignUp ? "Preencha os dados para começar" : "Acesse seu painel de gestão"}
+                {forgotPassword
+                  ? resetSent ? "Verifique seu e-mail" : "Informe seu e-mail para recuperar"
+                  : "Acesse seu painel de gestão"}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-3">
-                {isSignUp && (
+              {resetSent ? (
+                <div className="text-center space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Um link de recuperação foi enviado para <strong>{email}</strong>.
+                  </p>
+                  <Button variant="outline" className="w-full h-11" onClick={() => { setForgotPassword(false); setResetSent(false); }}>
+                    Voltar ao login
+                  </Button>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmit} className="space-y-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="name" className="text-xs">Nome</Label>
+                    <Label htmlFor="email" className="text-xs">E-mail</Label>
                     <Input
-                      id="name"
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="Seu nome"
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="seu@email.com"
                       required
                       className="h-11"
                     />
                   </div>
-                )}
-                <div className="space-y-1.5">
-                  <Label htmlFor="email" className="text-xs">E-mail</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="seu@email.com"
-                    required
-                    className="h-11"
-                  />
+                  {!forgotPassword && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="password" className="text-xs">Senha</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        required
+                        minLength={6}
+                        className="h-11"
+                      />
+                    </div>
+                  )}
+                  <Button type="submit" className="w-full h-11 font-semibold" disabled={loading}>
+                    {loading ? "Carregando..." : forgotPassword ? "Enviar link" : "Entrar"}
+                  </Button>
+                </form>
+              )}
+              {!resetSent && (
+                <div className="mt-5 text-center">
+                  <button
+                    onClick={() => setForgotPassword(!forgotPassword)}
+                    className="text-xs text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    {forgotPassword ? "Voltar ao login" : "Esqueceu a senha?"}
+                  </button>
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="password" className="text-xs">Senha</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    required
-                    minLength={6}
-                    className="h-11"
-                  />
-                </div>
-                <Button type="submit" className="w-full h-11 font-semibold" disabled={loading}>
-                  {loading ? "Carregando..." : isSignUp ? "Criar conta" : "Entrar"}
-                </Button>
-              </form>
-              <div className="mt-5 text-center">
-                <button
-                  onClick={() => setIsSignUp(!isSignUp)}
-                  className="text-xs text-muted-foreground hover:text-primary transition-colors"
-                >
-                  {isSignUp ? "Já tem conta? Entrar" : "Não tem conta? Criar agora"}
-                </button>
-              </div>
+              )}
             </CardContent>
           </Card>
         </div>

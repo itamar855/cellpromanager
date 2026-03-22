@@ -14,6 +14,8 @@ import Vendas from "./pages/Vendas";
 import Lojas from "./pages/Lojas";
 import OrdensServico from "./pages/OrdensServico";
 import Equipe from "./pages/Equipe";
+import Clientes from "./pages/Clientes";
+import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -55,6 +57,8 @@ const App = () => (
               <Route path="/lojas" element={<ProtectedRoute><Lojas /></ProtectedRoute>} />
               <Route path="/ordens-servico" element={<ProtectedRoute><OrdensServico /></ProtectedRoute>} />
               <Route path="/equipe" element={<ProtectedRoute><Equipe /></ProtectedRoute>} />
+              <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>

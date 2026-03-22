@@ -127,6 +127,8 @@ export type Database = {
           created_at: string
           display_name: string | null
           id: string
+          phone: string | null
+          store_id: string | null
           updated_at: string
           user_id: string
         }
@@ -135,6 +137,8 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          phone?: string | null
+          store_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -143,10 +147,20 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          phone?: string | null
+          store_id?: string | null
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sales: {
         Row: {
@@ -387,6 +401,59 @@ export type Database = {
           },
           {
             foreignKeyName: "service_orders_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_bank_accounts: {
+        Row: {
+          account_number: string | null
+          account_type: string
+          agency: string | null
+          bank_name: string
+          created_at: string
+          holder_cpf_cnpj: string | null
+          holder_name: string | null
+          id: string
+          is_primary: boolean | null
+          pix_key: string | null
+          store_id: string
+          updated_at: string
+        }
+        Insert: {
+          account_number?: string | null
+          account_type?: string
+          agency?: string | null
+          bank_name: string
+          created_at?: string
+          holder_cpf_cnpj?: string | null
+          holder_name?: string | null
+          id?: string
+          is_primary?: boolean | null
+          pix_key?: string | null
+          store_id: string
+          updated_at?: string
+        }
+        Update: {
+          account_number?: string | null
+          account_type?: string
+          agency?: string | null
+          bank_name?: string
+          created_at?: string
+          holder_cpf_cnpj?: string | null
+          holder_name?: string | null
+          id?: string
+          is_primary?: boolean | null
+          pix_key?: string | null
+          store_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_bank_accounts_store_id_fkey"
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
