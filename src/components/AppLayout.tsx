@@ -19,6 +19,7 @@ const navItems = [
   { label: "Relatórios", icon: FileText, path: "/relatorios" },
   { label: "Lojas", icon: Store, path: "/lojas" },
   { label: "Equipe", icon: Users, path: "/equipe" },
+  { label: "IA", icon: Brain, path: "/assistente-ia" },
 ];
 
 const AppLayout = ({ children }: { children: ReactNode }) => {
