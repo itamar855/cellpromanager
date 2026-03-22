@@ -94,6 +94,9 @@ const Vendas = () => {
   const salePrice = parseFloat(form.sale_price) || 0;
   const totalPayment = (form.has_trade_in ? tradeInVal : 0) + cashVal + cardVal + pixVal;
   const remaining = salePrice - totalPayment;
+  const profit = selectedProduct ? salePrice - Number(selectedProduct.cost_price) : 0;
+  const commissionPercent = parseFloat(form.commission_percent) || 0;
+  const commissionValue = Math.max(0, (profit * commissionPercent) / 100);
 
   const resetForm = () => setForm({
     product_id: "", sale_price: "", has_trade_in: false,
