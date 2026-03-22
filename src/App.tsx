@@ -18,6 +18,7 @@ import Clientes from "./pages/Clientes";
 import Relatorios from "./pages/Relatorios";
 import Instalar from "./pages/Instalar";
 import ResetPassword from "./pages/ResetPassword";
+import AIAssistant from "./pages/AIAssistant";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
