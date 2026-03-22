@@ -26,6 +26,7 @@ const Dashboard = () => {
   const [expenseBreakdown, setExpenseBreakdown] = useState<{ name: string; value: number }[]>([]);
   const [dailySales, setDailySales] = useState<{ date: string; total: number }[]>([]);
   const [paymentBreakdown, setPaymentBreakdown] = useState<{ name: string; value: number }[]>([]);
+  const [lowStockStores, setLowStockStores] = useState<{ name: string; count: number }[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
