@@ -66,6 +66,7 @@ const Vendas = () => {
     customer_name: "",
     customer_phone: "",
     notes: "",
+    commission_percent: "10",
   });
 
   const fetchData = async () => {
