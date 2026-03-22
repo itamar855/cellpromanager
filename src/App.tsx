@@ -14,6 +14,7 @@ import Vendas from "./pages/Vendas";
 import Lojas from "./pages/Lojas";
 import OrdensServico from "./pages/OrdensServico";
 import Equipe from "./pages/Equipe";
+import Clientes from "./pages/Clientes";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 
