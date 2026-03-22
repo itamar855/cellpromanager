@@ -46,6 +46,8 @@ const OrdensServico = () => {
   const [filterStatus, setFilterStatus] = useState("all");
   const [loading, setLoading] = useState(false);
 
+  const [signatureData, setSignatureData] = useState("");
+
   const [form, setForm] = useState({
     customer_name: "", customer_phone: "", customer_cpf: "",
     device_brand: "iPhone", device_model: "", device_imei: "", device_color: "",
