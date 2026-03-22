@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DollarSign, Package, TrendingUp, TrendingDown, Store, Wrench,
-  ArrowUpRight, ArrowDownRight, ShoppingBag,
+  ArrowUpRight, ArrowDownRight, ShoppingBag, AlertTriangle,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
