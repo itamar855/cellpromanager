@@ -115,6 +115,7 @@ const OrdensServico = () => {
       estimated_price: form.estimated_price ? parseFloat(form.estimated_price) : 0,
       estimated_completion: form.estimated_completion || null,
       terms_accepted: form.terms_accepted,
+      signature_data: signatureData || null,
       internal_notes: form.internal_notes || null,
       created_by: user.id,
       status: "open",
