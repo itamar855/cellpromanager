@@ -104,6 +104,7 @@ const Vendas = () => {
     trade_in_device_model: "", trade_in_device_imei: "",
     trade_in_value: "", payment_cash: "", payment_card: "",
     payment_pix: "", customer_name: "", customer_phone: "", notes: "",
+    commission_percent: "10",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
