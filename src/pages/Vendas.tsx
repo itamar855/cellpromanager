@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
@@ -37,10 +36,23 @@ type Accessory = {
   brand: string | null; quantity: number; cost_price: number; sale_price: number | null;
 };
 
-type CartItem = {
-  acc: Accessory;
-  qty: number;
-  price: number;
+type CartItem = { acc: Accessory; qty: number; price: number };
+
+// Cria cash_entry pendente no caixa aberto da loja
+const createPendingCashEntry = async (
+  storeId: string, userId: string, amount: number,
+  description: string, paymentMethod: string,
+) => {
+  const { data: register } = await supabase
+    .from("cash_registers" as any).select("id")
+    .eq("store_id", storeId).eq("status", "open").maybeSingle();
+  if (!register) return;
+  await supabase.from("cash_entries" as any).insert({
+    cash_register_id: (register as any).id, store_id: storeId,
+    type: "entrada", amount, description,
+    payment_method: paymentMethod, receipt_url: null,
+    confirmed: false, created_by: userId,
+  });
 };
 
 const Vendas = () => {
@@ -99,7 +111,6 @@ const Vendas = () => {
   const commissionPercent = parseFloat(form.commission_percent) || 0;
   const commissionValue = Math.max(0, (profit * commissionPercent) / 100);
 
-  // PDV calculations
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
   const pdvCash = parseFloat(pdvPayment.cash) || 0;
   const pdvCard = parseFloat(pdvPayment.card) || 0;
@@ -111,24 +122,16 @@ const Vendas = () => {
   const addToCart = (acc: Accessory) => {
     setCart(prev => {
       const existing = prev.find(i => i.acc.id === acc.id);
-      if (existing) {
-        return prev.map(i => i.acc.id === acc.id ? { ...i, qty: i.qty + 1 } : i);
-      }
+      if (existing) return prev.map(i => i.acc.id === acc.id ? { ...i, qty: i.qty + 1 } : i);
       return [...prev, { acc, qty: 1, price: acc.sale_price ?? acc.cost_price }];
     });
   };
-
   const updateCartQty = (id: string, qty: number) => {
-    if (qty <= 0) {
-      setCart(prev => prev.filter(i => i.acc.id !== id));
-    } else {
-      setCart(prev => prev.map(i => i.acc.id === id ? { ...i, qty } : i));
-    }
+    if (qty <= 0) setCart(prev => prev.filter(i => i.acc.id !== id));
+    else setCart(prev => prev.map(i => i.acc.id === id ? { ...i, qty } : i));
   };
-
-  const updateCartPrice = (id: string, price: number) => {
+  const updateCartPrice = (id: string, price: number) =>
     setCart(prev => prev.map(i => i.acc.id === id ? { ...i, price } : i));
-  };
 
   const filteredAcc = accessories.filter(a =>
     a.name.toLowerCase().includes(accSearch.toLowerCase()) ||
@@ -143,7 +146,6 @@ const Vendas = () => {
     payment_pix: "", customer_name: "", customer_phone: "", notes: "",
     commission_percent: "10",
   });
-
   const resetPdv = () => {
     setCart([]);
     setPdvPayment({ cash: "", card: "", pix: "", customer: "", store_id: "" });
@@ -153,23 +155,17 @@ const Vendas = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !selectedProduct) return;
-    if (Math.abs(remaining) > 0.01) {
-      toast.error("A soma dos pagamentos deve ser igual ao valor de venda!");
-      return;
-    }
+    if (Math.abs(remaining) > 0.01) { toast.error("A soma dos pagamentos deve ser igual ao valor de venda!"); return; }
     setLoading(true);
 
     let tradeInProductId: string | null = null;
     if (form.has_trade_in && form.trade_in_device_name) {
-      const { data: tradeInProduct, error: tradeInError } = await supabase
-        .from("products")
-        .insert({
-          name: form.trade_in_device_name, brand: form.trade_in_device_brand,
-          model: form.trade_in_device_model || "N/A",
-          imei: form.trade_in_device_imei || null, cost_price: tradeInVal,
-          store_id: selectedProduct.store_id, created_by: user.id, status: "in_stock",
-        })
-        .select("id").single();
+      const { data: tradeInProduct, error: tradeInError } = await supabase.from("products").insert({
+        name: form.trade_in_device_name, brand: form.trade_in_device_brand,
+        model: form.trade_in_device_model || "N/A", imei: form.trade_in_device_imei || null,
+        cost_price: tradeInVal, store_id: selectedProduct.store_id,
+        created_by: user.id, status: "in_stock",
+      }).select("id").single();
       if (tradeInError) { toast.error("Erro ao cadastrar aparelho de troca: " + tradeInError.message); setLoading(false); return; }
       tradeInProductId = tradeInProduct.id;
     }
@@ -192,13 +188,18 @@ const Vendas = () => {
     if (saleError) { toast.error("Erro ao registrar venda: " + saleError.message); setLoading(false); return; }
 
     await supabase.from("products").update({ status: "sold", sale_price: salePrice }).eq("id", form.product_id);
+
+    const desc = `Venda: ${selectedProduct.name}${form.customer_name ? ` → ${form.customer_name}` : ""}`;
     await supabase.from("transactions").insert({
-      type: "sale", amount: salePrice,
-      description: `Venda: ${selectedProduct.name}${form.customer_name ? ` → ${form.customer_name}` : ""}`,
+      type: "sale", amount: salePrice, description: desc,
       store_id: selectedProduct.store_id, product_id: form.product_id, created_by: user.id,
     });
 
-    toast.success("Venda registrada com sucesso!");
+    // Cria entrada pendente no caixa
+    const mainPayment = cashVal > 0 ? "dinheiro" : cardVal > 0 ? "cartao_credito" : pixVal > 0 ? "pix" : "dinheiro";
+    await createPendingCashEntry(selectedProduct.store_id, user.id, salePrice, desc, mainPayment);
+
+    toast.success("Venda registrada! Confirme o recebimento no caixa.");
     setDialogOpen(false);
     resetForm();
     fetchData();
@@ -208,29 +209,25 @@ const Vendas = () => {
   const handlePdvSubmit = async () => {
     if (!user || cart.length === 0) return;
     if (!pdvPayment.store_id) { toast.error("Selecione a loja!"); return; }
-    if (Math.abs(pdvRemaining) > 0.01) { toast.error("A soma dos pagamentos deve ser igual ao total!"); return; }
-
+    if (Math.abs(pdvRemaining) > 0.01 && pdvTroco === 0) { toast.error("A soma dos pagamentos deve ser igual ao total!"); return; }
     setLoading(true);
-
     try {
-      // Atualizar estoque de cada acessório
       for (const item of cart) {
-        const newQty = item.acc.quantity - item.qty;
-        await supabase.from("accessories" as any).update({ quantity: newQty }).eq("id", item.acc.id);
+        await supabase.from("accessories" as any).update({ quantity: item.acc.quantity - item.qty }).eq("id", item.acc.id);
       }
-
-      // Registrar transação
       const itemsDesc = cart.map(i => `${i.qty}x ${i.acc.name}`).join(", ");
+      const desc = `PDV: ${itemsDesc}${pdvPayment.customer ? ` → ${pdvPayment.customer}` : ""}`;
+
       await supabase.from("transactions").insert({
-        type: "income",
-        category: "acessorio",
-        amount: cartTotal,
-        description: `PDV: ${itemsDesc}${pdvPayment.customer ? ` → ${pdvPayment.customer}` : ""}`,
-        store_id: pdvPayment.store_id,
-        created_by: user.id,
+        type: "income", category: "acessorio", amount: cartTotal,
+        description: desc, store_id: pdvPayment.store_id, created_by: user.id,
       });
 
-      toast.success("Venda rápida registrada!");
+      // Cria entrada pendente no caixa
+      const mainPayment = pdvCash > 0 ? "dinheiro" : pdvCard > 0 ? "cartao_credito" : pdvPix > 0 ? "pix" : "dinheiro";
+      await createPendingCashEntry(pdvPayment.store_id, user.id, cartTotal, desc, mainPayment);
+
+      toast.success("Venda rápida registrada! Confirme o recebimento no caixa.");
       setPdvOpen(false);
       resetPdv();
       fetchData();
@@ -260,7 +257,6 @@ const Vendas = () => {
                 </DialogTitle>
               </DialogHeader>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Lado esquerdo — produtos */}
                 <div className="space-y-3">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -268,11 +264,9 @@ const Vendas = () => {
                   </div>
                   <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                     {filteredAcc.length > 0 ? filteredAcc.map(a => (
-                      <div
-                        key={a.id}
+                      <div key={a.id}
                         className="flex items-center justify-between rounded-lg border border-border/50 p-3 cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-colors"
-                        onClick={() => addToCart(a)}
-                      >
+                        onClick={() => addToCart(a)}>
                         <div>
                           <p className="text-sm font-medium">{a.name}</p>
                           <p className="text-[10px] text-muted-foreground">{a.brand && `${a.brand} · `}Estoque: {a.quantity}</p>
@@ -282,13 +276,9 @@ const Vendas = () => {
                           <p className="text-[10px] text-muted-foreground">+ Adicionar</p>
                         </div>
                       </div>
-                    )) : (
-                      <p className="text-xs text-muted-foreground text-center py-8">Nenhum acessório disponível</p>
-                    )}
+                    )) : <p className="text-xs text-muted-foreground text-center py-8">Nenhum acessório disponível</p>}
                   </div>
                 </div>
-
-                {/* Lado direito — carrinho */}
                 <div className="space-y-3">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Carrinho</p>
                   {cart.length === 0 ? (
@@ -311,41 +301,32 @@ const Vendas = () => {
                               <span className="text-sm font-bold w-6 text-center">{item.qty}</span>
                               <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateCartQty(item.acc.id, item.qty + 1)}>+</Button>
                             </div>
-                            <Input
-                              type="number" step="0.01" value={item.price}
+                            <Input type="number" step="0.01" value={item.price}
                               onChange={(e) => updateCartPrice(item.acc.id, parseFloat(e.target.value) || 0)}
-                              className="h-7 text-xs w-24"
-                            />
+                              className="h-7 text-xs w-24" />
                             <span className="text-sm font-bold text-primary ml-auto">{formatCurrency(item.price * item.qty)}</span>
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
-
-                  {/* Total e pagamento */}
                   {cart.length > 0 && (
                     <div className="space-y-3 pt-2 border-t border-border">
                       <div className="flex justify-between items-center">
                         <span className="font-semibold">Total</span>
                         <span className="font-display font-bold text-lg text-primary">{formatCurrency(cartTotal)}</span>
                       </div>
-
                       <div className="space-y-1.5">
                         <Label className="text-xs">Loja</Label>
                         <Select value={pdvPayment.store_id} onValueChange={(v) => setPdvPayment({ ...pdvPayment, store_id: v })}>
                           <SelectTrigger className="h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                          <SelectContent>
-                            {stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                          </SelectContent>
+                          <SelectContent>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
-
                       <div className="space-y-1.5">
                         <Label className="text-xs">Cliente (opcional)</Label>
                         <Input value={pdvPayment.customer} onChange={(e) => setPdvPayment({ ...pdvPayment, customer: e.target.value })} placeholder="Nome do cliente" className="h-9" />
                       </div>
-
                       <div className="grid grid-cols-3 gap-2">
                         <div className="space-y-1">
                           <Label className="text-[10px] flex items-center gap-1"><Banknote className="h-3 w-3" /> Dinheiro</Label>
@@ -360,17 +341,12 @@ const Vendas = () => {
                           <Input type="number" step="0.01" value={pdvPayment.pix} onChange={(e) => setPdvPayment({ ...pdvPayment, pix: e.target.value })} placeholder="0.00" className="h-9 text-xs" />
                         </div>
                       </div>
-
                       <div className={`flex justify-between text-sm font-bold rounded-lg p-2 ${Math.abs(pdvRemaining) < 0.01 ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"}`}>
                         <span>{pdvTroco > 0 ? "Troco" : "Restante"}</span>
                         <span>{formatCurrency(pdvTroco > 0 ? pdvTroco : pdvRemaining)}</span>
                       </div>
-
-                      <Button
-                        className="w-full h-10 font-semibold"
-                        onClick={handlePdvSubmit}
-                        disabled={loading || (Math.abs(pdvRemaining) > 0.01 && pdvTroco === 0) || !pdvPayment.store_id}
-                      >
+                      <Button className="w-full h-10 font-semibold" onClick={handlePdvSubmit}
+                        disabled={loading || (Math.abs(pdvRemaining) > 0.01 && pdvTroco === 0) || !pdvPayment.store_id}>
                         {loading ? "Registrando..." : `Finalizar Venda — ${formatCurrency(cartTotal)}`}
                       </Button>
                     </div>
@@ -380,15 +356,13 @@ const Vendas = () => {
             </DialogContent>
           </Dialog>
 
-          {/* Nova Venda (aparelho) */}
+          {/* Nova Venda */}
           <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
             <DialogTrigger asChild>
               <Button className="gap-2 h-10"><Plus className="h-4 w-4" /> Nova Venda</Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle className="font-display">Registrar Venda</DialogTitle>
-              </DialogHeader>
+              <DialogHeader><DialogTitle className="font-display">Registrar Venda</DialogTitle></DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs">Produto</Label>
@@ -399,29 +373,22 @@ const Vendas = () => {
                     <SelectTrigger className="h-10"><SelectValue placeholder="Selecione o aparelho" /></SelectTrigger>
                     <SelectContent>
                       {availableProducts.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name} — {p.brand} ({storeMap.get(p.store_id) || "?"})
-                        </SelectItem>
+                        <SelectItem key={p.id} value={p.id}>{p.name} — {p.brand} ({storeMap.get(p.store_id) || "?"})</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-
                 {selectedProduct && (
                   <div className="rounded-lg bg-muted/50 p-3 text-xs space-y-0.5">
                     <p><span className="text-muted-foreground">Custo:</span> <span className="font-semibold">{formatCurrency(Number(selectedProduct.cost_price))}</span></p>
                     {selectedProduct.imei && <p><span className="text-muted-foreground">IMEI:</span> {selectedProduct.imei}</p>}
-                    {salePrice > 0 && (
-                      <p><span className="text-muted-foreground">Lucro estimado:</span> <span className={`font-semibold ${profit >= 0 ? "text-primary" : "text-destructive"}`}>{formatCurrency(profit)}</span></p>
-                    )}
+                    {salePrice > 0 && <p><span className="text-muted-foreground">Lucro estimado:</span> <span className={`font-semibold ${profit >= 0 ? "text-primary" : "text-destructive"}`}>{formatCurrency(profit)}</span></p>}
                   </div>
                 )}
-
                 <div className="space-y-1.5">
                   <Label className="text-xs">Valor de Venda (R$)</Label>
                   <Input type="number" step="0.01" value={form.sale_price} onChange={(e) => setForm({ ...form, sale_price: e.target.value })} placeholder="3500.00" required className="h-10" />
                 </div>
-
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs">Cliente</Label>
@@ -432,7 +399,6 @@ const Vendas = () => {
                     <Input value={form.customer_phone} onChange={(e) => setForm({ ...form, customer_phone: e.target.value })} placeholder="(11) 99999-9999" className="h-10" />
                   </div>
                 </div>
-
                 <div className="flex items-center justify-between rounded-lg border border-border p-3">
                   <div className="flex items-center gap-2">
                     <Smartphone className="h-4 w-4 text-muted-foreground" />
@@ -443,7 +409,6 @@ const Vendas = () => {
                   </div>
                   <Switch checked={form.has_trade_in} onCheckedChange={(v) => setForm({ ...form, has_trade_in: v })} />
                 </div>
-
                 {form.has_trade_in && (
                   <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
                     <p className="text-xs font-semibold text-primary">Dados do aparelho na troca</p>
@@ -456,12 +421,7 @@ const Vendas = () => {
                         <Label className="text-xs">Marca</Label>
                         <Select value={form.trade_in_device_brand} onValueChange={(v) => setForm({ ...form, trade_in_device_brand: v })}>
                           <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="iPhone">iPhone</SelectItem>
-                            <SelectItem value="Samsung">Samsung</SelectItem>
-                            <SelectItem value="Xiaomi">Xiaomi</SelectItem>
-                            <SelectItem value="Outro">Outro</SelectItem>
-                          </SelectContent>
+                          <SelectContent>{["iPhone","Samsung","Xiaomi","Outro"].map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                     </div>
@@ -481,7 +441,6 @@ const Vendas = () => {
                     </div>
                   </div>
                 )}
-
                 <div className="space-y-3">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Forma de pagamento (restante)</p>
                   <div className="grid grid-cols-3 gap-3">
@@ -499,29 +458,15 @@ const Vendas = () => {
                     </div>
                   </div>
                   <div className="rounded-lg bg-muted/50 p-3 text-xs space-y-1">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Valor de venda</span>
-                      <span className="font-semibold">{formatCurrency(salePrice)}</span>
-                    </div>
-                    {form.has_trade_in && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Aparelho na troca</span>
-                        <span className="font-semibold text-primary">-{formatCurrency(tradeInVal)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Dinheiro + Cartão + PIX</span>
-                      <span className="font-semibold">{formatCurrency(cashVal + cardVal + pixVal)}</span>
-                    </div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Valor de venda</span><span className="font-semibold">{formatCurrency(salePrice)}</span></div>
+                    {form.has_trade_in && <div className="flex justify-between"><span className="text-muted-foreground">Aparelho na troca</span><span className="font-semibold text-primary">-{formatCurrency(tradeInVal)}</span></div>}
+                    <div className="flex justify-between"><span className="text-muted-foreground">Dinheiro + Cartão + PIX</span><span className="font-semibold">{formatCurrency(cashVal + cardVal + pixVal)}</span></div>
                     <div className="border-t border-border pt-1 flex justify-between">
                       <span className="font-medium">Restante</span>
-                      <span className={`font-bold ${Math.abs(remaining) < 0.01 ? "text-primary" : "text-destructive"}`}>
-                        {formatCurrency(remaining)}
-                      </span>
+                      <span className={`font-bold ${Math.abs(remaining) < 0.01 ? "text-primary" : "text-destructive"}`}>{formatCurrency(remaining)}</span>
                     </div>
                   </div>
                 </div>
-
                 <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
                   <p className="text-xs font-semibold text-primary">Comissão do Vendedor</p>
                   <div className="grid grid-cols-2 gap-3">
@@ -531,19 +476,15 @@ const Vendas = () => {
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Valor da Comissão</Label>
-                      <div className="h-10 flex items-center rounded-md border border-input bg-muted/50 px-3 text-sm font-semibold text-primary">
-                        {formatCurrency(commissionValue)}
-                      </div>
+                      <div className="h-10 flex items-center rounded-md border border-input bg-muted/50 px-3 text-sm font-semibold text-primary">{formatCurrency(commissionValue)}</div>
                     </div>
                   </div>
                   <p className="text-[10px] text-muted-foreground">Calculada sobre o lucro: {formatCurrency(profit)} × {commissionPercent}%</p>
                 </div>
-
                 <div className="space-y-1.5">
                   <Label className="text-xs">Observações</Label>
                   <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Observações da venda..." className="min-h-[60px]" />
                 </div>
-
                 <Button type="submit" className="w-full h-11 font-semibold" disabled={loading || !form.product_id || Math.abs(remaining) > 0.01}>
                   {loading ? "Registrando..." : "Registrar Venda"}
                 </Button>
@@ -555,7 +496,6 @@ const Vendas = () => {
 
       {/* Sales list */}
       <div className="space-y-2">
-        {/* PDV Sales */}
         {pdvSales.map((tx) => (
           <Card key={tx.id} className="border-border/50 shadow-lg shadow-black/10">
             <CardContent className="p-4">
@@ -565,56 +505,39 @@ const Vendas = () => {
                     <p className="font-medium text-sm truncate">{tx.description}</p>
                     <Badge variant="outline" className="text-[10px] bg-yellow-500/15 text-yellow-500 border-yellow-500/20 shrink-0">PDV</Badge>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">
-                    {storeMap.get(tx.store_id) || ""} · {new Date(tx.created_at).toLocaleDateString("pt-BR")}
-                  </p>
+                  <p className="text-[10px] text-muted-foreground mt-1">{storeMap.get(tx.store_id) || ""} · {new Date(tx.created_at).toLocaleDateString("pt-BR")}</p>
                 </div>
                 <p className="font-display font-bold text-sm text-primary shrink-0">{formatCurrency(Number(tx.amount))}</p>
               </div>
             </CardContent>
           </Card>
         ))}
-
-        {/* Aparelho sales */}
         {sales.map((sale) => {
-            const product = productMap.get(sale.product_id);
-            return (
-              <Card key={sale.id} className="border-border/50 shadow-lg shadow-black/10">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-sm truncate">{product?.name || "Produto removido"}</p>
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                        {sale.has_trade_in && (
-                          <Badge variant="outline" className="text-[10px] bg-primary/15 text-primary border-primary/20">
-                            Troca: {sale.trade_in_device_name}
-                          </Badge>
-                        )}
-                        {Number(sale.payment_cash) > 0 && (
-                          <Badge variant="outline" className="text-[10px]">💵 {formatCurrency(Number(sale.payment_cash))}</Badge>
-                        )}
-                        {Number(sale.payment_card) > 0 && (
-                          <Badge variant="outline" className="text-[10px]">💳 {formatCurrency(Number(sale.payment_card))}</Badge>
-                        )}
-                        {Number(sale.payment_pix) > 0 && (
-                          <Badge variant="outline" className="text-[10px]">📱 {formatCurrency(Number(sale.payment_pix))}</Badge>
-                        )}
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mt-1">
-                        {sale.customer_name && `${sale.customer_name} · `}
-                        {storeMap.get(sale.store_id) || ""} · {new Date(sale.created_at).toLocaleDateString("pt-BR")}
-                      </p>
+          const product = productMap.get(sale.product_id);
+          return (
+            <Card key={sale.id} className="border-border/50 shadow-lg shadow-black/10">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-sm truncate">{product?.name || "Produto removido"}</p>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      {sale.has_trade_in && <Badge variant="outline" className="text-[10px] bg-primary/15 text-primary border-primary/20">Troca: {sale.trade_in_device_name}</Badge>}
+                      {Number(sale.payment_cash) > 0 && <Badge variant="outline" className="text-[10px]">💵 {formatCurrency(Number(sale.payment_cash))}</Badge>}
+                      {Number(sale.payment_card) > 0 && <Badge variant="outline" className="text-[10px]">💳 {formatCurrency(Number(sale.payment_card))}</Badge>}
+                      {Number(sale.payment_pix) > 0 && <Badge variant="outline" className="text-[10px]">📱 {formatCurrency(Number(sale.payment_pix))}</Badge>}
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="font-display font-bold text-sm text-primary">{formatCurrency(Number(sale.sale_price))}</p>
-                      {sale.has_trade_in && sale.trade_in_value && (
-                        <p className="text-[10px] text-muted-foreground">Troca: {formatCurrency(Number(sale.trade_in_value))}</p>
-                      )}
-                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      {sale.customer_name && `${sale.customer_name} · `}{storeMap.get(sale.store_id) || ""} · {new Date(sale.created_at).toLocaleDateString("pt-BR")}
+                    </p>
                   </div>
-                </CardContent>
-              </Card>
-            );
+                  <div className="text-right shrink-0">
+                    <p className="font-display font-bold text-sm text-primary">{formatCurrency(Number(sale.sale_price))}</p>
+                    {sale.has_trade_in && sale.trade_in_value && <p className="text-[10px] text-muted-foreground">Troca: {formatCurrency(Number(sale.trade_in_value))}</p>}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
         })}
         {sales.length === 0 && pdvSales.length === 0 && (
           <Card className="border-border/50">
