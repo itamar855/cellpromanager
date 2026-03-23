@@ -85,13 +85,13 @@ const Caixa = () => {
     const { data } = await supabase
       .from("cash_registers" as any).select("*")
       .eq("store_id", storeId).eq("status", "open").maybeSingle();
-    setCurrentRegister(data as CashRegister | null);
+    setCurrentRegister(data as unknown as CashRegister | null);
     if (data) {
       const { data: entriesData } = await supabase
         .from("cash_entries" as any).select("*")
         .eq("cash_register_id", (data as any).id)
         .order("created_at", { ascending: false });
-      setEntries((entriesData as CashEntry[]) ?? []);
+      setEntries((entriesData as unknown as CashEntry[]) ?? []);
     } else {
       setEntries([]);
     }
