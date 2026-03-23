@@ -77,7 +77,7 @@ const Estoque = () => {
     ]);
     setProducts(productsRes.data ?? []);
     setStores(storesRes.data ?? []);
-    setAccessories((accRes.data ?? []) as Accessory[]);
+    setAccessories((accRes.data ?? []) as unknown as Accessory[]);
   };
 
   useEffect(() => { fetchData(); }, []);
