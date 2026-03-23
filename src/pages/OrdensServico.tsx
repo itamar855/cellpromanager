@@ -69,11 +69,12 @@ const createPendingCashEntry = async (
 };
 
 // ── Gera PDF via jsPDF (importado dinamicamente) ──────────────────────────
-const generateOSPdf = async (order: any, storeName: string, techName: string, publicUrl: string) => {
+const generateOSPdf = async (order: any, store: any, techName: string, publicUrl: string) => {
   const { default: jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const W = 210; const pad = 15;
   let y = pad;
+  const storeName = store?.name ?? "Assistência Técnica";
 
   const line = () => { doc.setDrawColor(220, 220, 220); doc.line(pad, y, W - pad, y); y += 4; };
   const section = (title: string) => {
@@ -100,12 +101,33 @@ const generateOSPdf = async (order: any, storeName: string, techName: string, pu
   };
 
   // ── Header ──
-  doc.setFillColor(16, 185, 129); doc.rect(0, 0, W, 18, "F");
+  const headerH = store?.cnpj || store?.phone || store?.address ? 26 : 20;
+  doc.setFillColor(16, 185, 129); doc.rect(0, 0, W, headerH, "F");
+
+  let logoX = pad;
+  if (store?.logo_url) {
+    try { doc.addImage(store.logo_url, "PNG", pad, 4, 16, 16); logoX = pad + 20; } catch (_) {}
+  }
+
   doc.setFontSize(13); doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold");
-  doc.text(storeName, pad, 11);
+  doc.text(storeName, logoX, 12);
+
+  const headerInfo: string[] = [];
+  if (store?.cnpj)      headerInfo.push(`CNPJ: ${store.cnpj}`);
+  if (store?.phone)     headerInfo.push(`Tel: ${store.phone}`);
+  if (store?.whatsapp && store.whatsapp !== store.phone) headerInfo.push(`WhatsApp: ${store.whatsapp}`);
+  if (store?.instagram) headerInfo.push(store.instagram);
+  if (store?.website)   headerInfo.push(store.website);
+  if (store?.address)   headerInfo.push(store.address);
+  if (headerInfo.length > 0) {
+    doc.setFontSize(7); doc.setFont("helvetica", "normal");
+    doc.text(headerInfo.slice(0, 3).join("  ·  "), logoX, 18);
+    if (headerInfo.length > 3) doc.text(headerInfo.slice(3).join("  ·  "), logoX, 23);
+  }
+
   doc.setFontSize(9); doc.setFont("helvetica", "normal");
-  doc.text(`OS #${order.order_number}  ·  ${new Date(order.created_at).toLocaleString("pt-BR")}`, W - pad, 11, { align: "right" });
-  y = 25;
+  doc.text(`OS #${order.order_number}  ·  ${new Date(order.created_at).toLocaleString("pt-BR")}`, W - pad, 12, { align: "right" });
+  y = headerH + 6;
 
   // ── Status ──
   doc.setFontSize(10); doc.setTextColor(16, 185, 129); doc.setFont("helvetica", "bold");
@@ -178,6 +200,11 @@ const generateOSPdf = async (order: any, storeName: string, techName: string, pu
 
   // ── Rodapé ──
   doc.setFontSize(7); doc.setTextColor(160, 160, 160);
+  if (store?.pdf_footer) {
+    doc.setTextColor(80, 80, 80);
+    doc.text(store.pdf_footer, W / 2, 284, { align: "center", maxWidth: W - pad * 2 });
+  }
+  doc.setTextColor(160, 160, 160);
   doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")} · CellManager`, W / 2, 290, { align: "center" });
 
   return doc;
@@ -339,10 +366,10 @@ const OrdensServico = () => {
   const handleExportPdf = async (order: any) => {
     setPdfLoading(true);
     try {
-      const storeName = storeMap.get(order.store_id) ?? "Assistência Técnica";
+      const storeObj = stores.find(s => s.id === order.store_id) ?? { name: "Assistência Técnica" };
       const techName = profileMap.get(order.technician_id) ?? "";
       const publicUrl = getPublicUrl(order.id);
-      const doc = await generateOSPdf(order, storeName, techName, publicUrl);
+      const doc = await generateOSPdf(order, storeObj, techName, publicUrl);
       doc.save(`OS-${order.order_number}.pdf`);
       toast.success("PDF gerado!");
     } catch (err) {
@@ -355,10 +382,10 @@ const OrdensServico = () => {
     if (!order.customer_phone) { toast.error("Cliente sem telefone cadastrado!"); return; }
     setPdfLoading(true);
     try {
-      const storeName = storeMap.get(order.store_id) ?? "Assistência Técnica";
+      const storeObj = stores.find(s => s.id === order.store_id) ?? { name: "Assistência Técnica" };
       const techName = profileMap.get(order.technician_id) ?? "";
       const publicUrl = getPublicUrl(order.id);
-      const doc = await generateOSPdf(order, storeName, techName, publicUrl);
+      const doc = await generateOSPdf(order, storeObj, techName, publicUrl);
 
       // Faz upload do PDF para o Supabase Storage e compartilha o link
       const pdfBlob = doc.output("blob");
@@ -374,7 +401,7 @@ const OrdensServico = () => {
 
       const phone = order.customer_phone.replace(/\D/g, "");
       const msg = encodeURIComponent(
-        `Olá ${order.customer_name}! 👋\n\nSua Ordem de Serviço #${order.order_number} está com status: *${statusConfig[order.status]?.label}*.\n\n📄 Acesse sua OS completa:\n${shareUrl}\n\n_${storeName}_`
+        `Olá ${order.customer_name}! 👋\n\nSua Ordem de Serviço #${order.order_number} está com status: *${statusConfig[order.status]?.label}*.\n\n📄 Acesse sua OS completa:\n${shareUrl}\n\n_${storeObj.name}_`
       );
       window.open(`https://wa.me/55${phone}?text=${msg}`, "_blank");
       toast.success("WhatsApp aberto!");
