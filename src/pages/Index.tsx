@@ -3,8 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  DollarSign, Package, TrendingUp, TrendingDown, Store, Wrench,
-  ArrowUpRight, ArrowDownRight, ShoppingBag, AlertTriangle,
+  DollarSign, Package, TrendingUp, TrendingDown, Wrench,
+  ArrowUpRight, ArrowDownRight, ShoppingBag, AlertTriangle, Zap,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -19,23 +19,27 @@ const formatCurrency = (value: number) =>
 const Dashboard = () => {
   const { user } = useAuth();
   const [stats, setStats] = useState({
-    totalStock: 0, totalInvested: 0, totalSalesRevenue: 0, totalProfit: 0,
+    totalStock: 0, totalInvested: 0, totalInvestedAcc: 0,
+    totalSalesRevenue: 0, totalProfit: 0,
     expensesPJ: 0, expensesPF: 0, storeCount: 0, openOS: 0, salesCount: 0,
+    totalAccessories: 0,
   });
-  const [storeData, setStoreData] = useState<{ name: string; produtos: number; investido: number }[]>([]);
-  const [expenseBreakdown, setExpenseBreakdown] = useState<{ name: string; value: number }[]>([]);
+  const [storeData, setStoreData] = useState<{ name: string; aparelhos: number; acessorios: number; investido: number }[]>([]);
   const [dailySales, setDailySales] = useState<{ date: string; total: number }[]>([]);
   const [paymentBreakdown, setPaymentBreakdown] = useState<{ name: string; value: number }[]>([]);
+  const [categoryBreakdown, setCategoryBreakdown] = useState<{ name: string; value: number }[]>([]);
   const [lowStockStores, setLowStockStores] = useState<{ name: string; count: number }[]>([]);
+  const [lowStockAcc, setLowStockAcc] = useState<{ name: string; qty: number; min: number }[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
-      const [productsRes, transactionsRes, storesRes, salesRes, osRes] = await Promise.all([
+      const [productsRes, transactionsRes, storesRes, salesRes, osRes, accRes] = await Promise.all([
         supabase.from("products").select("*"),
         supabase.from("transactions").select("*"),
         supabase.from("stores").select("*"),
         supabase.from("sales").select("*"),
         supabase.from("service_orders").select("id, status"),
+        supabase.from("accessories" as any).select("*"),
       ]);
 
       const products = productsRes.data ?? [];
@@ -43,11 +47,12 @@ const Dashboard = () => {
       const stores = storesRes.data ?? [];
       const sales = salesRes.data ?? [];
       const serviceOrders = osRes.data ?? [];
+      const accessories = (accRes.data ?? []) as any[];
 
       const inStock = products.filter((p) => p.status === "in_stock");
       const totalInvested = inStock.reduce((sum, p) => sum + Number(p.cost_price), 0);
+      const totalInvestedAcc = accessories.reduce((sum: number, a: any) => sum + Number(a.cost_price) * a.quantity, 0);
 
-      // Sales-based revenue and profit
       const totalSalesRevenue = sales.reduce((sum, s) => sum + Number(s.sale_price), 0);
       const totalProfit = sales.reduce((sum, s) => {
         const product = products.find((p) => p.id === s.product_id);
@@ -56,34 +61,41 @@ const Dashboard = () => {
 
       const expensesPJ = transactions.filter((t) => t.type === "expense_pj").reduce((sum, t) => sum + Number(t.amount), 0);
       const expensesPF = transactions.filter((t) => t.type === "expense_pf" || t.type === "pro_labore").reduce((sum, t) => sum + Number(t.amount), 0);
-
       const openOS = serviceOrders.filter((o) => !["delivered", "cancelled"].includes(o.status)).length;
 
       setStats({
-        totalStock: inStock.length, totalInvested, totalSalesRevenue, totalProfit,
-        expensesPJ, expensesPF,
+        totalStock: inStock.length, totalInvested, totalInvestedAcc,
+        totalSalesRevenue, totalProfit, expensesPJ, expensesPF,
         storeCount: stores.filter((s) => s.status === "active").length,
         openOS, salesCount: sales.length,
+        totalAccessories: accessories.reduce((sum: number, a: any) => sum + a.quantity, 0),
       });
 
       // Store chart
       const storeMap = new Map(stores.map((s) => [s.id, s.name]));
-      const storeProducts: Record<string, { produtos: number; investido: number }> = {};
+      const storeProducts: Record<string, { aparelhos: number; acessorios: number; investido: number }> = {};
       inStock.forEach((p) => {
         const name = storeMap.get(p.store_id) || "Sem loja";
-        if (!storeProducts[name]) storeProducts[name] = { produtos: 0, investido: 0 };
-        storeProducts[name].produtos++;
+        if (!storeProducts[name]) storeProducts[name] = { aparelhos: 0, acessorios: 0, investido: 0 };
+        storeProducts[name].aparelhos++;
         storeProducts[name].investido += Number(p.cost_price);
+      });
+      accessories.forEach((a: any) => {
+        const name = storeMap.get(a.store_id) || "Sem loja";
+        if (!storeProducts[name]) storeProducts[name] = { aparelhos: 0, acessorios: 0, investido: 0 };
+        storeProducts[name].acessorios += a.quantity;
+        storeProducts[name].investido += Number(a.cost_price) * a.quantity;
       });
       setStoreData(Object.entries(storeProducts).map(([name, data]) => ({ name, ...data })));
 
-      // Expense breakdown
-      setExpenseBreakdown([
-        { name: "PJ", value: expensesPJ },
-        { name: "PF", value: expensesPF },
-      ]);
+      // Acessórios por categoria
+      const catMap: Record<string, number> = {};
+      accessories.forEach((a: any) => {
+        catMap[a.category] = (catMap[a.category] || 0) + a.quantity;
+      });
+      setCategoryBreakdown(Object.entries(catMap).map(([name, value]) => ({ name, value })));
 
-      // Daily sales (last 30 days)
+      // Daily sales
       const last30 = new Date();
       last30.setDate(last30.getDate() - 30);
       const dailyMap: Record<string, number> = {};
@@ -101,208 +113,212 @@ const Dashboard = () => {
       setPaymentBreakdown([
         { name: "Dinheiro", value: totalCash },
         { name: "Cartão", value: totalCard },
-        { name: "PIX", value: totalPix },
-        { name: "Troca", value: totalTradeIn },
-      ].filter((p) => p.value > 0));
+        { name: "Pix", value: totalPix },
+        { name: "Trade-in", value: totalTradeIn },
+      ].filter(p => p.value > 0));
 
-      // Low stock alerts
+      // Low stock
       const storeStockCounts: Record<string, number> = {};
-      inStock.forEach(p => {
-        const name = storeMap.get(p.store_id) || "Sem loja";
-        storeStockCounts[name] = (storeStockCounts[name] || 0) + 1;
-      });
-      setLowStockStores(
-        Object.entries(storeStockCounts)
-          .filter(([, count]) => count <= 3)
-          .map(([name, count]) => ({ name, count }))
-      );
+      inStock.forEach(p => { storeStockCounts[p.store_id] = (storeStockCounts[p.store_id] || 0) + 1; });
+      setLowStockStores(stores.filter(s => (storeStockCounts[s.id] || 0) <= 3).map(s => ({ name: s.name, count: storeStockCounts[s.id] || 0 })));
+      setLowStockAcc(accessories.filter((a: any) => a.quantity <= a.min_quantity).map((a: any) => ({ name: a.name, qty: a.quantity, min: a.min_quantity })));
     };
     fetchData();
   }, []);
 
-  const kpis = [
-    { title: "Estoque", value: `${stats.totalStock}`, subtitle: "aparelhos", icon: Package, trend: "neutral" as const },
-    { title: "Vendas", value: formatCurrency(stats.totalSalesRevenue), subtitle: `${stats.salesCount} vendas`, icon: ShoppingBag, trend: "up" as const },
-    { title: "Lucro", value: formatCurrency(stats.totalProfit - stats.expensesPJ - stats.expensesPF), icon: TrendingUp, trend: stats.totalProfit > 0 ? "up" as const : "down" as const },
-    { title: "OS Abertas", value: `${stats.openOS}`, icon: Wrench, trend: "neutral" as const },
-    { title: "Investido", value: formatCurrency(stats.totalInvested), icon: DollarSign, trend: "neutral" as const },
-    { title: "Gastos PF", value: formatCurrency(stats.expensesPF), icon: TrendingDown, trend: "down" as const },
-  ];
+  const totalInvestedAll = stats.totalInvested + stats.totalInvestedAcc;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div>
         <h1 className="font-display text-xl md:text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground text-sm mt-0.5">Visão geral das suas lojas</p>
       </div>
 
-      {/* Low stock alerts */}
-      {lowStockStores.length > 0 && (
+      {/* Alertas */}
+      {(lowStockStores.length > 0 || lowStockAcc.length > 0) && (
         <div className="space-y-2">
           {lowStockStores.map(s => (
             <div key={s.name} className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
               <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
-              <p className="text-xs">
-                <span className="font-semibold">{s.name}</span>: estoque baixo — apenas{" "}
-                <span className="font-bold text-destructive">{s.count}</span> produtos
-              </p>
+              <p className="text-xs"><span className="font-semibold">{s.name}</span>: estoque baixo — apenas <span className="font-bold text-destructive">{s.count}</span> aparelhos</p>
+            </div>
+          ))}
+          {lowStockAcc.map(a => (
+            <div key={a.name} className="flex items-center gap-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3">
+              <AlertTriangle className="h-4 w-4 text-yellow-500 shrink-0" />
+              <p className="text-xs"><span className="font-semibold">{a.name}</span>: apenas <span className="font-bold text-yellow-500">{a.qty}</span> unidades (mín: {a.min})</p>
             </div>
           ))}
         </div>
       )}
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-        {kpis.map((kpi) => (
-          <Card key={kpi.title} className="border-border/50 shadow-lg shadow-black/10">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        {[
+          { label: "Aparelhos", value: String(stats.totalStock), sub: "em estoque", icon: Package, color: "text-primary" },
+          { label: "Acessórios", value: String(stats.totalAccessories), sub: "unidades", icon: Zap, color: "text-accent" },
+          { label: "Vendas", value: formatCurrency(stats.totalSalesRevenue), sub: `${stats.salesCount} vendas`, icon: ShoppingBag, color: "text-primary" },
+          { label: "Lucro", value: formatCurrency(stats.totalProfit), sub: "nas vendas", icon: stats.totalProfit >= 0 ? TrendingUp : TrendingDown, color: stats.totalProfit >= 0 ? "text-primary" : "text-destructive" },
+          { label: "OS Abertas", value: String(stats.openOS), sub: "em andamento", icon: Wrench, color: "text-accent" },
+        ].map((card) => (
+          <Card key={card.label} className="border-border/50 shadow-lg shadow-black/10">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
-                <div className="rounded-lg bg-muted p-2">
-                  <kpi.icon className="h-4 w-4 text-muted-foreground" />
-                </div>
-                {kpi.trend === "up" && <ArrowUpRight className="h-3.5 w-3.5 text-primary" />}
-                {kpi.trend === "down" && <ArrowDownRight className="h-3.5 w-3.5 text-destructive" />}
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{card.label}</p>
+                <card.icon className={`h-4 w-4 ${card.color}`} />
               </div>
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{kpi.title}</p>
-              <p className="font-display text-lg font-bold mt-0.5 truncate">{kpi.value}</p>
-              {kpi.subtitle && <p className="text-[11px] text-muted-foreground">{kpi.subtitle}</p>}
+              <p className={`font-display text-xl font-bold ${card.color}`}>{card.value}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">{card.sub}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Charts */}
+      {/* Investimento total */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Card className="border-border/50 shadow-lg shadow-black/10">
+          <CardContent className="p-4">
+            <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Investido em Aparelhos</p>
+            <p className="font-display text-lg font-bold text-primary mt-1">{formatCurrency(stats.totalInvested)}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/50 shadow-lg shadow-black/10">
+          <CardContent className="p-4">
+            <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Investido em Acessórios</p>
+            <p className="font-display text-lg font-bold text-accent mt-1">{formatCurrency(stats.totalInvestedAcc)}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/50 shadow-lg shadow-black/10">
+          <CardContent className="p-4">
+            <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Total Investido</p>
+            <p className="font-display text-lg font-bold mt-1">{formatCurrency(totalInvestedAll)}</p>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Daily sales */}
+        {/* Vendas últimos 30 dias */}
         <Card className="border-border/50 shadow-lg shadow-black/10">
           <CardHeader className="pb-2">
             <CardTitle className="font-display text-sm">Vendas (últimos 30 dias)</CardTitle>
           </CardHeader>
           <CardContent>
             {dailySales.length > 0 ? (
-              <ResponsiveContainer width="100%" height={220}>
+              <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={dailySales}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 20%, 18%)" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(220, 10%, 55%)" }} />
-                  <YAxis tick={{ fontSize: 10, fill: "hsl(220, 10%, 55%)" }} />
-                  <Tooltip
-                    contentStyle={{ background: "hsl(220, 25%, 12%)", border: "1px solid hsl(220, 20%, 18%)", borderRadius: "8px", fontSize: 12 }}
-                    formatter={(value: number) => [formatCurrency(value), "Vendas"]}
-                  />
-                  <Line type="monotone" dataKey="total" stroke="hsl(152, 60%, 45%)" strokeWidth={2} dot={false} />
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip formatter={(v: number) => formatCurrency(v)} />
+                  <Line type="monotone" dataKey="total" stroke="hsl(152, 60%, 45%)" strokeWidth={2} dot={false} name="Vendas" />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[220px] text-muted-foreground text-xs">
-                Registre vendas para ver o gráfico
-              </div>
+              <div className="flex items-center justify-center h-[200px] text-muted-foreground text-xs">Registre vendas para ver o gráfico</div>
             )}
           </CardContent>
         </Card>
 
-        {/* Stock by store */}
+        {/* Estoque por Loja */}
         <Card className="border-border/50 shadow-lg shadow-black/10">
           <CardHeader className="pb-2">
             <CardTitle className="font-display text-sm">Estoque por Loja</CardTitle>
           </CardHeader>
           <CardContent>
             {storeData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={220}>
+              <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={storeData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 20%, 18%)" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(220, 10%, 55%)" }} />
-                  <YAxis tick={{ fontSize: 11, fill: "hsl(220, 10%, 55%)" }} />
-                  <Tooltip
-                    contentStyle={{ background: "hsl(220, 25%, 12%)", border: "1px solid hsl(220, 20%, 18%)", borderRadius: "8px", fontSize: 12 }}
-                    formatter={(value: number, name: string) => [
-                      name === "investido" ? formatCurrency(value) : value,
-                      name === "investido" ? "Investido" : "Produtos",
-                    ]}
-                  />
-                  <Bar dataKey="produtos" fill="hsl(152, 60%, 45%)" radius={[6, 6, 0, 0]} />
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Bar dataKey="aparelhos" fill="hsl(152, 60%, 45%)" radius={[4, 4, 0, 0]} name="Aparelhos" />
+                  <Bar dataKey="acessorios" fill="hsl(38, 92%, 50%)" radius={[4, 4, 0, 0]} name="Acessórios" />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[220px] text-muted-foreground text-xs">
-                Cadastre produtos para ver o gráfico
-              </div>
+              <div className="flex items-center justify-center h-[200px] text-muted-foreground text-xs">Cadastre produtos para ver o gráfico</div>
             )}
           </CardContent>
         </Card>
 
-        {/* PJ vs PF */}
-        <Card className="border-border/50 shadow-lg shadow-black/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="font-display text-sm">Gastos PJ vs PF</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {expenseBreakdown.some((e) => e.value > 0) ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie data={expenseBreakdown} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={4} dataKey="value"
-                    label={({ name, value }) => `${name}: ${formatCurrency(value)}`}>
-                    {expenseBreakdown.map((_, index) => (<Cell key={index} fill={COLORS[index % COLORS.length]} />))}
-                  </Pie>
-                  <Tooltip contentStyle={{ background: "hsl(220, 25%, 12%)", border: "1px solid hsl(220, 20%, 18%)", borderRadius: "8px", fontSize: 12 }} formatter={(value: number) => formatCurrency(value)} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-[220px] text-muted-foreground text-xs">
-                Registre transações para ver o gráfico
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Payment methods */}
+        {/* Formas de Pagamento */}
         <Card className="border-border/50 shadow-lg shadow-black/10">
           <CardHeader className="pb-2">
             <CardTitle className="font-display text-sm">Formas de Pagamento</CardTitle>
           </CardHeader>
           <CardContent>
             {paymentBreakdown.length > 0 ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie data={paymentBreakdown} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={4} dataKey="value"
-                    label={({ name, value }) => `${name}: ${formatCurrency(value)}`}>
-                    {paymentBreakdown.map((_, index) => (<Cell key={index} fill={COLORS[index % COLORS.length]} />))}
-                  </Pie>
-                  <Tooltip contentStyle={{ background: "hsl(220, 25%, 12%)", border: "1px solid hsl(220, 20%, 18%)", borderRadius: "8px", fontSize: 12 }} formatter={(value: number) => formatCurrency(value)} />
-                </PieChart>
+              <div className="flex items-center gap-4">
+                <ResponsiveContainer width="50%" height={160}>
+                  <PieChart>
+                    <Pie data={paymentBreakdown} cx="50%" cy="50%" innerRadius={40} outerRadius={70} dataKey="value">
+                      {paymentBreakdown.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={(v: number) => formatCurrency(v)} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="space-y-2">
+                  {paymentBreakdown.map((p, i) => (
+                    <div key={p.name} className="flex items-center gap-2">
+                      <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
+                      <div>
+                        <p className="text-xs font-medium">{p.name}</p>
+                        <p className="text-[10px] text-muted-foreground">{formatCurrency(p.value)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-[160px] text-muted-foreground text-xs">Sem vendas registradas</div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Acessórios por Categoria */}
+        <Card className="border-border/50 shadow-lg shadow-black/10">
+          <CardHeader className="pb-2">
+            <CardTitle className="font-display text-sm">Acessórios por Categoria</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {categoryBreakdown.length > 0 ? (
+              <ResponsiveContainer width="100%" height={160}>
+                <BarChart data={categoryBreakdown} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis type="number" tick={{ fontSize: 10 }} />
+                  <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={70} />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="hsl(38, 92%, 50%)" radius={[0, 4, 4, 0]} name="Qtd" />
+                </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[220px] text-muted-foreground text-xs">
-                Registre vendas para ver o gráfico
-              </div>
+              <div className="flex items-center justify-center h-[160px] text-muted-foreground text-xs">Cadastre acessórios para ver o gráfico</div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Summary */}
-      <Card className="border-border/50 shadow-lg shadow-black/10">
-        <CardHeader className="pb-2">
-          <div className="flex items-center gap-2">
-            <Store className="h-4 w-4 text-primary" />
-            <CardTitle className="font-display text-sm">Resumo Financeiro</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { label: "Lojas Ativas", value: stats.storeCount },
-              { label: "Receita Total", value: formatCurrency(stats.totalSalesRevenue) },
-              { label: "Gastos Totais", value: formatCurrency(stats.expensesPJ + stats.expensesPF) },
-              { label: "Lucro Líquido", value: formatCurrency(stats.totalProfit - stats.expensesPJ - stats.expensesPF) },
-            ].map((item) => (
-              <div key={item.label} className="rounded-lg bg-muted/50 p-3">
-                <p className="text-[11px] text-muted-foreground">{item.label}</p>
-                <p className="font-display text-base md:text-xl font-bold mt-0.5">{item.value}</p>
+      {/* Gastos PJ vs PF */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {[
+          { label: "Gastos PJ", value: stats.expensesPJ, icon: ArrowUpRight, color: "text-destructive" },
+          { label: "Gastos PF + Pro-labore", value: stats.expensesPF, icon: ArrowDownRight, color: "text-destructive" },
+        ].map(card => (
+          <Card key={card.label} className="border-border/50 shadow-lg shadow-black/10">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-destructive/10 flex items-center justify-center shrink-0">
+                <card.icon className="h-5 w-5 text-destructive" />
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              <div>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{card.label}</p>
+                <p className={`font-display text-lg font-bold ${card.color}`}>{formatCurrency(card.value)}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 };
