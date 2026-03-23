@@ -66,8 +66,6 @@ const Vendas = () => {
     commission_percent: "10",
   });
 
-  const [pdvSales, setPdvSales] = useState<any[]>([]);
-
   const fetchData = async () => {
     const [salesRes, productsRes, storesRes, accRes, pdvRes] = await Promise.all([
       supabase.from("sales").select("*").order("created_at", { ascending: false }),
