@@ -56,7 +56,11 @@ const Caixa = () => {
   const [entries, setEntries] = useState<CashEntry[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [openDialog, setOpenDialog] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState(false);
+  const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
+  const [confirmReceipt, setConfirmReceipt] = useState<File | null>(null);
+  const confirmFileRef = useRef<HTMLInputElement>(null);
+  const confirmCameraRef = useRef<HTMLInputElement>(null);
   const [closeDialog, setCloseDialog] = useState(false);
   const [entryDialog, setEntryDialog] = useState(false);
   const [sangriaDialog, setSangriaDialog] = useState(false);
