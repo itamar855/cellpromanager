@@ -103,6 +103,7 @@ const Vendas = () => {
   const pdvPix = parseFloat(pdvPayment.pix) || 0;
   const pdvPaid = pdvCash + pdvCard + pdvPix;
   const pdvRemaining = cartTotal - pdvPaid;
+  const pdvTroco = pdvCash > cartTotal && pdvCard === 0 && pdvPix === 0 ? pdvCash - cartTotal : 0;
 
   const addToCart = (acc: Accessory) => {
     setCart(prev => {
@@ -358,14 +359,14 @@ const Vendas = () => {
                       </div>
 
                       <div className={`flex justify-between text-sm font-bold rounded-lg p-2 ${Math.abs(pdvRemaining) < 0.01 ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"}`}>
-                        <span>Restante</span>
-                        <span>{formatCurrency(pdvRemaining)}</span>
+                        <span>{pdvTroco > 0 ? "Troco" : "Restante"}</span>
+                        <span>{formatCurrency(pdvTroco > 0 ? pdvTroco : pdvRemaining)}</span>
                       </div>
 
                       <Button
                         className="w-full h-10 font-semibold"
                         onClick={handlePdvSubmit}
-                        disabled={loading || Math.abs(pdvRemaining) > 0.01 || !pdvPayment.store_id}
+                        disabled={loading || (Math.abs(pdvRemaining) > 0.01 && pdvTroco === 0) || !pdvPayment.store_id}
                       >
                         {loading ? "Registrando..." : `Finalizar Venda — ${formatCurrency(cartTotal)}`}
                       </Button>
