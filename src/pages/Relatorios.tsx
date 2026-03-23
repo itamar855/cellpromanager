@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { FileText, TrendingUp, TrendingDown } from "lucide-react";
 
@@ -14,10 +13,11 @@ const months = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","A
 const Relatorios = () => {
   const [period, setPeriod] = useState("month");
   const [dre, setDre] = useState({
-    receitaVendas: 0, cmv: 0, lucroBruto: 0,
-    despesasPJ: 0, despesasPF: 0, proLabore: 0,
+    receitaAparelhos: 0, receitaAcessorios: 0, receitaOS: 0, totalReceita: 0,
+    cmvAparelhos: 0, cmvAcessorios: 0, totalCmv: 0,
+    lucroBruto: 0, despesasPJ: 0, despesasPF: 0, proLabore: 0,
     totalDespesas: 0, lucroLiquido: 0,
-    receitaOS: 0, totalReceita: 0,
+    qtdVendasAparelhos: 0, qtdVendasAcessorios: 0,
   });
   const [monthlyData, setMonthlyData] = useState<{ name: string; receita: number; despesa: number; lucro: number }[]>([]);
   const [storeBreakdown, setStoreBreakdown] = useState<{ name: string; vendas: number; lucro: number }[]>([]);
@@ -36,12 +36,13 @@ const Relatorios = () => {
       }
       const start = startDate.toISOString();
 
-      const [salesRes, productsRes, txRes, storesRes, osRes] = await Promise.all([
+      const [salesRes, productsRes, txRes, storesRes, osRes, accTxRes] = await Promise.all([
         supabase.from("sales").select("*").gte("created_at", start),
         supabase.from("products").select("*"),
         supabase.from("transactions").select("*").gte("created_at", start),
         supabase.from("stores").select("*"),
         supabase.from("service_orders").select("*").eq("status", "delivered").gte("created_at", start),
+        supabase.from("transactions").select("*").eq("type", "sale").gte("created_at", start),
       ]);
 
       const sales = salesRes.data ?? [];
@@ -52,34 +53,51 @@ const Relatorios = () => {
       const productMap = new Map(products.map(p => [p.id, p]));
       const storeMap = new Map(stores.map(s => [s.id, s.name]));
 
-      const receitaVendas = sales.reduce((s, sale) => s + Number(sale.sale_price), 0);
-      const cmv = sales.reduce((s, sale) => {
+      // Receitas
+      const receitaAparelhos = sales.reduce((s, sale) => s + Number(sale.sale_price), 0);
+      const receitaOS = os.reduce((s, o) => s + Number(o.final_price || o.estimated_price || 0), 0);
+
+      // Transações de venda de acessórios (type=sale com product_id nulo = acessório)
+      const accSales = tx.filter(t => t.type === "income" && t.category === "acessorio");
+      const receitaAcessorios = accSales.reduce((s, t) => s + Number(t.amount), 0);
+
+      // CMV aparelhos
+      const cmvAparelhos = sales.reduce((s, sale) => {
         const p = productMap.get(sale.product_id);
         return s + Number(p?.cost_price || 0);
       }, 0);
-      const receitaOS = os.reduce((s, o) => s + Number(o.final_price || o.estimated_price || 0), 0);
 
-      const despesasPJ = tx.filter(t => t.type === "expense_pj").reduce((s, t) => s + Number(t.amount), 0);
+      // CMV acessórios (transações de despesa categoria acessório)
+      const accCosts = tx.filter(t => t.type === "expense_pj" && t.category === "acessorio");
+      const cmvAcessorios = accCosts.reduce((s, t) => s + Number(t.amount), 0);
+
+      const totalReceita = receitaAparelhos + receitaAcessorios + receitaOS;
+      const totalCmv = cmvAparelhos + cmvAcessorios;
+
+      const despesasPJ = tx.filter(t => t.type === "expense_pj" && t.category !== "acessorio").reduce((s, t) => s + Number(t.amount), 0);
       const despesasPF = tx.filter(t => t.type === "expense_pf").reduce((s, t) => s + Number(t.amount), 0);
       const proLabore = tx.filter(t => t.type === "pro_labore").reduce((s, t) => s + Number(t.amount), 0);
 
-      const lucroBruto = receitaVendas + receitaOS - cmv;
+      const lucroBruto = totalReceita - totalCmv;
       const totalDespesas = despesasPJ + despesasPF + proLabore;
       const lucroLiquido = lucroBruto - totalDespesas;
 
       setDre({
-        receitaVendas, cmv, lucroBruto, despesasPJ, despesasPF, proLabore,
-        totalDespesas, lucroLiquido, receitaOS, totalReceita: receitaVendas + receitaOS,
+        receitaAparelhos, receitaAcessorios, receitaOS, totalReceita,
+        cmvAparelhos, cmvAcessorios, totalCmv,
+        lucroBruto, despesasPJ, despesasPF, proLabore,
+        totalDespesas, lucroLiquido,
+        qtdVendasAparelhos: sales.length,
+        qtdVendasAcessorios: accSales.length,
       });
 
-      // Monthly breakdown (last 6 months)
+      // Monthly breakdown
       const monthlyMap: Record<string, { receita: number; despesa: number }> = {};
       for (let i = 5; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const key = months[d.getMonth()].substring(0, 3);
         monthlyMap[key] = { receita: 0, despesa: 0 };
       }
-
       sales.forEach(s => {
         const key = months[new Date(s.created_at).getMonth()].substring(0, 3);
         if (monthlyMap[key]) monthlyMap[key].receita += Number(s.sale_price);
@@ -90,7 +108,6 @@ const Relatorios = () => {
           if (monthlyMap[key]) monthlyMap[key].despesa += Number(t.amount);
         }
       });
-
       setMonthlyData(Object.entries(monthlyMap).map(([name, d]) => ({
         name, receita: d.receita, despesa: d.despesa, lucro: d.receita - d.despesa,
       })));
@@ -110,10 +127,12 @@ const Relatorios = () => {
   }, [period]);
 
   const dreLines = [
-    { label: "Receita de Vendas", value: dre.receitaVendas, type: "income" },
+    { label: "Receita de Aparelhos", value: dre.receitaAparelhos, sub: `${dre.qtdVendasAparelhos} vendas`, type: "income" },
+    { label: "Receita de Acessórios", value: dre.receitaAcessorios, sub: `${dre.qtdVendasAcessorios} vendas`, type: "income" },
     { label: "Receita de Serviços (OS)", value: dre.receitaOS, type: "income" },
-    { label: "Receita Total", value: dre.totalReceita, type: "total", bold: true },
-    { label: "(-) Custo das Mercadorias Vendidas (CMV)", value: -dre.cmv, type: "expense" },
+    { label: "= Receita Total", value: dre.totalReceita, type: "total", bold: true },
+    { label: "(-) CMV Aparelhos", value: -dre.cmvAparelhos, type: "expense" },
+    { label: "(-) CMV Acessórios", value: -dre.cmvAcessorios, type: "expense" },
     { label: "= Lucro Bruto", value: dre.lucroBruto, type: "total", bold: true },
     { label: "(-) Despesas PJ (Operacionais)", value: -dre.despesasPJ, type: "expense" },
     { label: "(-) Despesas PF (Pessoais)", value: -dre.despesasPF, type: "expense" },
@@ -156,14 +175,16 @@ const Relatorios = () => {
                   line.bold ? "bg-muted/50 font-semibold" : ""
                 } ${line.type === "result" ? "bg-primary/10 text-primary font-bold text-base" : ""}`}
               >
-                <span className={line.bold ? "" : "text-muted-foreground"}>{line.label}</span>
+                <div>
+                  <span className={line.bold ? "" : "text-muted-foreground"}>{line.label}</span>
+                  {(line as any).sub && <span className="text-[10px] text-muted-foreground ml-2">({(line as any).sub})</span>}
+                </div>
                 <span className={
                   line.type === "result"
                     ? line.value >= 0 ? "text-primary" : "text-destructive"
                     : line.type === "expense" ? "text-destructive" : ""
                 }>
-                  {formatCurrency(Math.abs(line.value))}
-                  {line.type === "expense" && line.value < 0 && " ⬇"}
+                  {line.type === "expense" ? "- " : ""}{formatCurrency(Math.abs(line.value))}
                 </span>
               </div>
             ))}
@@ -182,17 +203,16 @@ const Relatorios = () => {
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={monthlyData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} className="fill-muted-foreground" />
-                  <YAxis tick={{ fontSize: 11 }} className="fill-muted-foreground" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip formatter={(v: number) => formatCurrency(v)} />
                   <Bar dataKey="receita" fill="hsl(152, 60%, 45%)" radius={[4, 4, 0, 0]} name="Receita" />
                   <Bar dataKey="despesa" fill="hsl(0, 62%, 50%)" radius={[4, 4, 0, 0]} name="Despesas" />
+                  <Bar dataKey="lucro" fill="hsl(38, 92%, 50%)" radius={[4, 4, 0, 0]} name="Lucro" />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[220px] text-muted-foreground text-xs">
-                Sem dados para o período
-              </div>
+              <div className="flex items-center justify-center h-[220px] text-muted-foreground text-xs">Sem dados para o período</div>
             )}
           </CardContent>
         </Card>
@@ -224,9 +244,7 @@ const Relatorios = () => {
                 ))}
               </div>
             ) : (
-              <div className="flex items-center justify-center h-[220px] text-muted-foreground text-xs">
-                Sem dados para o período
-              </div>
+              <div className="flex items-center justify-center h-[220px] text-muted-foreground text-xs">Sem dados para o período</div>
             )}
           </CardContent>
         </Card>
@@ -237,8 +255,8 @@ const Relatorios = () => {
         {[
           { label: "Margem Bruta", value: dre.totalReceita > 0 ? `${((dre.lucroBruto / dre.totalReceita) * 100).toFixed(1)}%` : "0%", color: "text-primary" },
           { label: "Margem Líquida", value: dre.totalReceita > 0 ? `${((dre.lucroLiquido / dre.totalReceita) * 100).toFixed(1)}%` : "0%", color: dre.lucroLiquido >= 0 ? "text-primary" : "text-destructive" },
-          { label: "Ticket Médio", value: formatCurrency(dre.receitaVendas > 0 ? dre.receitaVendas / Math.max(1, 1) : 0), color: "" },
-          { label: "Gastos PF/Total", value: dre.totalDespesas > 0 ? `${((dre.despesasPF / dre.totalDespesas) * 100).toFixed(1)}%` : "0%", color: "text-destructive" },
+          { label: "Ticket Médio", value: dre.qtdVendasAparelhos > 0 ? formatCurrency(dre.receitaAparelhos / dre.qtdVendasAparelhos) : formatCurrency(0), color: "" },
+          { label: "Gastos PF/Total", value: dre.totalDespesas > 0 ? `${(((dre.despesasPF + dre.proLabore) / dre.totalDespesas) * 100).toFixed(1)}%` : "0%", color: "text-destructive" },
         ].map(k => (
           <Card key={k.label} className="border-border/50 shadow-lg shadow-black/10">
             <CardContent className="p-4">
