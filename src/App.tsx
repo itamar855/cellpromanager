@@ -21,6 +21,7 @@ import ResetPassword from "./pages/ResetPassword";
 import AIAssistant from "./pages/AIAssistant";
 import NotFound from "./pages/NotFound";
 import Caixa from "./pages/Caixa";
+import OSPublica from "./pages/OSPublica";
 
 const queryClient = new QueryClient();
 
@@ -67,6 +68,8 @@ const App = () => (
               <Route path="/assistente-ia" element={<ProtectedRoute><AIAssistant /></ProtectedRoute>} />
               <Route path="/instalar" element={<Instalar />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              {/* Rota pública para o cliente acompanhar a OS */}
+              <Route path="/os/:id" element={<OSPublica />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>
