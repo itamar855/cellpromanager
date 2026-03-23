@@ -5,15 +5,20 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Users, Shield, ShieldCheck, User, Plus, Phone, Store } from "lucide-react";
+import { Users, Shield, ShieldCheck, User, Plus, Phone, Store, Trash2 } from "lucide-react";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 const roleConfig: Record<string, { label: string; color: string; icon: typeof Shield }> = {
@@ -22,10 +27,31 @@ const roleConfig: Record<string, { label: string; color: string; icon: typeof Sh
   vendedor: { label: "Vendedor", color: "bg-primary/15 text-primary border-primary/20", icon: User },
 };
 
+const MODULES = [
+  { key: "vendas", label: "Vendas" },
+  { key: "estoque", label: "Estoque" },
+  { key: "os", label: "Ordens de Serviço" },
+  { key: "clientes", label: "Clientes" },
+  { key: "transacoes", label: "Transações" },
+  { key: "relatorios", label: "Relatórios" },
+  { key: "lojas", label: "Lojas" },
+  { key: "equipe", label: "Equipe" },
+  { key: "ia", label: "IA" },
+];
+
+type Permissions = Record<string, boolean>;
+
+const defaultPermissions = (role: string): Permissions => {
+  if (role === "admin") return Object.fromEntries(MODULES.map((m) => [m.key, true]));
+  if (role === "gerente") return Object.fromEntries(MODULES.map((m) => [m.key, !["lojas", "equipe"].includes(m.key)]));
+  return Object.fromEntries(MODULES.map((m) => [m.key, ["vendas", "estoque", "os", "clientes"].includes(m.key)]));
+};
+
 type ProfileWithRole = Tables<"profiles"> & {
   role?: Enums<"app_role"> | null;
   phone?: string | null;
   store_id?: string | null;
+  permissions?: Permissions;
 };
 
 const Equipe = () => {
@@ -33,9 +59,11 @@ const Equipe = () => {
   const [members, setMembers] = useState<ProfileWithRole[]>([]);
   const [stores, setStores] = useState<Tables<"stores">[]>([]);
   const [selectedMember, setSelectedMember] = useState<ProfileWithRole | null>(null);
+  const [memberToDelete, setMemberToDelete] = useState<ProfileWithRole | null>(null);
   const [newRole, setNewRole] = useState<string>("");
   const [editPhone, setEditPhone] = useState("");
   const [editStoreId, setEditStoreId] = useState("");
+  const [permissions, setPermissions] = useState<Permissions>({});
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
     email: "", password: "", display_name: "", phone: "", role: "vendedor", store_id: "",
@@ -67,11 +95,19 @@ const Equipe = () => {
   const isAdmin = userRole === "admin";
   const storeMap = new Map(stores.map((s) => [s.id, s.name]));
 
+  const openEditDialog = (member: ProfileWithRole) => {
+    if (!isAdmin) return;
+    setSelectedMember(member);
+    setNewRole(member.role || "vendedor");
+    setEditPhone((member as any).phone || "");
+    setEditStoreId((member as any).store_id || "");
+    setPermissions(member.permissions || defaultPermissions(member.role || "vendedor"));
+  };
+
   const handleRoleChange = async () => {
     if (!selectedMember || !newRole) return;
     setLoading(true);
 
-    // Update role
     const { data: existing } = await supabase
       .from("user_roles")
       .select("id")
@@ -91,12 +127,11 @@ const Equipe = () => {
       if (error) { toast.error(error.message); setLoading(false); return; }
     }
 
-    // Update profile (phone, store)
     const { error: profileError } = await supabase
       .from("profiles")
       .update({
         phone: editPhone || null,
-        store_id: editStoreId || null,
+        store_id: editStoreId === "none" ? null : editStoreId || null,
       } as any)
       .eq("user_id", selectedMember.user_id);
 
@@ -106,6 +141,22 @@ const Equipe = () => {
     setSelectedMember(null);
     setLoading(false);
     fetchData();
+  };
+
+  const handleDeleteMember = async () => {
+    if (!memberToDelete) return;
+    setLoading(true);
+
+    try {
+      await supabase.from("user_roles").delete().eq("user_id", memberToDelete.user_id);
+      await supabase.from("profiles").delete().eq("user_id", memberToDelete.user_id);
+      toast.success("Membro removido com sucesso!");
+      setMemberToDelete(null);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao remover membro");
+    }
+    setLoading(false);
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -156,18 +207,12 @@ const Equipe = () => {
         {members.length > 0 ? (
           members.map((member) => {
             const rc = member.role ? roleConfig[member.role] : null;
+            const isMe = member.user_id === user?.id;
             return (
               <Card
                 key={member.id}
                 className="border-border/50 shadow-lg shadow-black/10 cursor-pointer hover:border-primary/30 transition-colors"
-                onClick={() => {
-                  if (isAdmin) {
-                    setSelectedMember(member);
-                    setNewRole(member.role || "vendedor");
-                    setEditPhone((member as any).phone || "");
-                    setEditStoreId((member as any).store_id || "");
-                  }
-                }}
+                onClick={() => openEditDialog(member)}
               >
                 <CardContent className="p-4 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
@@ -187,19 +232,31 @@ const Equipe = () => {
                             <Store className="h-2.5 w-2.5" /> {storeMap.get((member as any).store_id) || ""}
                           </span>
                         )}
-                        {member.user_id === user?.id && (
+                        {isMe && (
                           <Badge variant="outline" className="text-[9px] px-1 py-0">Você</Badge>
                         )}
                       </div>
                     </div>
                   </div>
-                  {rc ? (
-                    <Badge variant="outline" className={`text-[10px] shrink-0 ${rc.color}`}>
-                      {rc.label}
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-[10px] text-muted-foreground">Sem cargo</Badge>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {rc ? (
+                      <Badge variant="outline" className={`text-[10px] shrink-0 ${rc.color}`}>
+                        {rc.label}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] text-muted-foreground">Sem cargo</Badge>
+                    )}
+                    {isAdmin && !isMe && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={(e) => { e.stopPropagation(); setMemberToDelete(member); }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             );
@@ -216,7 +273,7 @@ const Equipe = () => {
 
       {/* Edit member dialog */}
       <Dialog open={!!selectedMember} onOpenChange={(open) => !open && setSelectedMember(null)}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           {selectedMember && (
             <>
               <DialogHeader>
@@ -231,7 +288,7 @@ const Equipe = () => {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Cargo</Label>
-                  <Select value={newRole} onValueChange={setNewRole}>
+                  <Select value={newRole} onValueChange={(v) => { setNewRole(v); setPermissions(defaultPermissions(v)); }}>
                     <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="admin">Administrador</SelectItem>
@@ -246,7 +303,7 @@ const Equipe = () => {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Loja de Atuação</Label>
-                  <Select value={editStoreId} onValueChange={setEditStoreId}>
+                  <Select value={editStoreId || "none"} onValueChange={setEditStoreId}>
                     <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhuma</SelectItem>
@@ -254,6 +311,27 @@ const Equipe = () => {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Permissões por módulo */}
+                <div className="space-y-2">
+                  <Label className="text-xs">Permissões de Acesso</Label>
+                  <div className="rounded-lg border border-border/50 divide-y divide-border/50">
+                    {MODULES.map((mod) => (
+                      <div key={mod.key} className="flex items-center justify-between px-3 py-2.5">
+                        <span className="text-sm">{mod.label}</span>
+                        <Switch
+                          checked={permissions[mod.key] ?? false}
+                          onCheckedChange={(v) => setPermissions((prev) => ({ ...prev, [mod.key]: v }))}
+                          disabled={newRole === "admin"}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  {newRole === "admin" && (
+                    <p className="text-[11px] text-muted-foreground">Administradores têm acesso total ao sistema.</p>
+                  )}
+                </div>
+
                 <Button onClick={handleRoleChange} className="w-full h-11 font-semibold" disabled={loading}>
                   {loading ? "Salvando..." : "Salvar"}
                 </Button>
@@ -262,6 +340,28 @@ const Equipe = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!memberToDelete} onOpenChange={(open) => !open && setMemberToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover membro</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja remover <strong>{memberToDelete?.display_name || memberToDelete?.user_id}</strong> da equipe? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={handleDeleteMember}
+              disabled={loading}
+            >
+              {loading ? "Removendo..." : "Remover"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Create user dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
@@ -301,9 +401,10 @@ const Equipe = () => {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Loja de Atuação</Label>
-              <Select value={createForm.store_id} onValueChange={(v) => setCreateForm({ ...createForm, store_id: v })}>
+              <Select value={createForm.store_id || "none"} onValueChange={(v) => setCreateForm({ ...createForm, store_id: v === "none" ? "" : v })}>
                 <SelectTrigger className="h-10"><SelectValue placeholder="Selecione (opcional)" /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none">Nenhuma</SelectItem>
                   {stores.map((s) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
                 </SelectContent>
               </Select>
