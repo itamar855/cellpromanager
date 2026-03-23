@@ -249,7 +249,7 @@ const Equipe = () => {
                   <Select value={editStoreId} onValueChange={setEditStoreId}>
                     <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Nenhuma</SelectItem>
+                      <SelectItem value="none">Nenhuma</SelectItem>
                       {stores.map((s) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
                     </SelectContent>
                   </Select>
