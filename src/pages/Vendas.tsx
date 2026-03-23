@@ -15,8 +15,12 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, ShoppingBag, Smartphone, CreditCard, Banknote, QrCode, Zap, Trash2, Search } from "lucide-react";
+import {
+  Plus, ShoppingBag, Smartphone, CreditCard, Banknote, QrCode,
+  Zap, Trash2, Search, FileText, MessageCircle,
+} from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
+import { gerarNotaFiscalInterna, type NotaFiscalData } from "@/utils/notaFiscalInterna";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -29,6 +33,7 @@ type Sale = {
   trade_in_product_id: string | null; payment_cash: number; payment_card: number;
   payment_pix: number; customer_name: string | null; customer_phone: string | null;
   notes: string | null; created_by: string; created_at: string;
+  commission_value: number | null;
 };
 
 type Accessory = {
@@ -38,7 +43,7 @@ type Accessory = {
 
 type CartItem = { acc: Accessory; qty: number; price: number };
 
-// Cria cash_entry pendente no caixa aberto da loja
+// Cria cash_entry pendente no caixa aberto
 const createPendingCashEntry = async (
   storeId: string, userId: string, amount: number,
   description: string, paymentMethod: string,
@@ -60,11 +65,12 @@ const Vendas = () => {
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Tables<"products">[]>([]);
   const [accessories, setAccessories] = useState<Accessory[]>([]);
-  const [stores, setStores] = useState<Tables<"stores">[]>([]);
+  const [stores, setStores] = useState<any[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pdvOpen, setPdvOpen] = useState(false);
   const [pdvSales, setPdvSales] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [notaLoading, setNotaLoading] = useState<string | null>(null);
   const [accSearch, setAccSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [pdvPayment, setPdvPayment] = useState({ cash: "", card: "", pix: "", customer: "", store_id: "" });
@@ -97,7 +103,7 @@ const Vendas = () => {
 
   const availableProducts = products.filter((p) => p.status === "in_stock");
   const selectedProduct = products.find((p) => p.id === form.product_id);
-  const storeMap = new Map(stores.map((s) => [s.id, s.name]));
+  const storeMap = new Map(stores.map((s) => [s.id, s]));
   const productMap = new Map(products.map((p) => [p.id, p]));
 
   const tradeInVal = parseFloat(form.trade_in_value) || 0;
@@ -152,6 +158,71 @@ const Vendas = () => {
     setAccSearch("");
   };
 
+  // ── Gerar nota fiscal interna ──────────────────────────────────────────
+  const buildNotaData = (sale: Sale, numeroNota: string): NotaFiscalData => {
+    const product = productMap.get(sale.product_id);
+    const store = storeMap.get(sale.store_id);
+    return {
+      numeroNota,
+      dataVenda: new Date(sale.created_at).toLocaleString("pt-BR"),
+      lojaNome: store?.name ?? "Loja",
+      lojaCnpj: store?.cnpj,
+      lojaEndereco: store?.address,
+      lojaTelefone: store?.phone,
+      lojaWhatsapp: store?.whatsapp,
+      lojaInstagram: store?.instagram,
+      lojaLogoUrl: store?.logo_url,
+      clienteNome: sale.customer_name ?? undefined,
+      clienteTelefone: sale.customer_phone ?? undefined,
+      produtoNome: product?.name ?? "Produto",
+      produtoMarca: product?.brand ?? "",
+      produtoModelo: product?.model,
+      produtoImei: product?.imei ?? undefined,
+      produtoCor: product?.color ?? undefined,
+      valorVenda: Number(sale.sale_price),
+      valorDinheiro: Number(sale.payment_cash) || undefined,
+      valorCartao: Number(sale.payment_card) || undefined,
+      valorPix: Number(sale.payment_pix) || undefined,
+      tradeIn: sale.has_trade_in,
+      tradeInValor: sale.trade_in_value ? Number(sale.trade_in_value) : undefined,
+      tradeInNome: sale.trade_in_device_name ?? undefined,
+      observacoes: sale.notes ?? undefined,
+    };
+  };
+
+  const handleGerarNota = async (sale: Sale, enviarWhatsApp = false) => {
+    setNotaLoading(sale.id);
+    try {
+      const numeroNota = `VND-${sale.id.slice(0, 8).toUpperCase()}`;
+      const data = buildNotaData(sale, numeroNota);
+      const doc = await gerarNotaFiscalInterna(data);
+
+      if (enviarWhatsApp) {
+        if (!sale.customer_phone) { toast.error("Cliente sem telefone cadastrado!"); setNotaLoading(null); return; }
+        const pdfBlob = doc.output("blob");
+        const fileName = `nota-${numeroNota}-${Date.now()}.pdf`;
+        const { data: uploadData, error } = await supabase.storage
+          .from("comprovantes").upload(`notas/${fileName}`, pdfBlob, { upsert: true, contentType: "application/pdf" });
+        if (error) { toast.error("Erro ao enviar PDF"); setNotaLoading(null); return; }
+        const { data: urlData } = supabase.storage.from("comprovantes").getPublicUrl(uploadData.path);
+        const phone = sale.customer_phone.replace(/\D/g, "");
+        const store = storeMap.get(sale.store_id);
+        const msg = encodeURIComponent(
+          `Olá ${sale.customer_name || ""}! 👋\n\nSegue o comprovante da sua compra na *${store?.name ?? "nossa loja"}*.\n\n📄 Comprovante Nº ${numeroNota}:\n${urlData.publicUrl}\n\nObrigado pela preferência! 🙏`
+        );
+        window.open(`https://wa.me/55${phone}?text=${msg}`, "_blank");
+        toast.success("WhatsApp aberto com o link da nota!");
+      } else {
+        doc.save(`nota-${numeroNota}.pdf`);
+        toast.success("Nota gerada com sucesso!");
+      }
+    } catch (err) {
+      toast.error("Erro ao gerar nota. Verifique se o jsPDF está instalado.");
+    }
+    setNotaLoading(null);
+  };
+
+  // ── Submit venda ───────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !selectedProduct) return;
@@ -188,14 +259,11 @@ const Vendas = () => {
     if (saleError) { toast.error("Erro ao registrar venda: " + saleError.message); setLoading(false); return; }
 
     await supabase.from("products").update({ status: "sold", sale_price: salePrice }).eq("id", form.product_id);
-
     const desc = `Venda: ${selectedProduct.name}${form.customer_name ? ` → ${form.customer_name}` : ""}`;
     await supabase.from("transactions").insert({
       type: "sale", amount: salePrice, description: desc,
       store_id: selectedProduct.store_id, product_id: form.product_id, created_by: user.id,
     });
-
-    // Cria entrada pendente no caixa
     const mainPayment = cashVal > 0 ? "dinheiro" : cardVal > 0 ? "cartao_credito" : pixVal > 0 ? "pix" : "dinheiro";
     await createPendingCashEntry(selectedProduct.store_id, user.id, salePrice, desc, mainPayment);
 
@@ -217,16 +285,12 @@ const Vendas = () => {
       }
       const itemsDesc = cart.map(i => `${i.qty}x ${i.acc.name}`).join(", ");
       const desc = `PDV: ${itemsDesc}${pdvPayment.customer ? ` → ${pdvPayment.customer}` : ""}`;
-
       await supabase.from("transactions").insert({
         type: "income", category: "acessorio", amount: cartTotal,
         description: desc, store_id: pdvPayment.store_id, created_by: user.id,
       });
-
-      // Cria entrada pendente no caixa
       const mainPayment = pdvCash > 0 ? "dinheiro" : pdvCard > 0 ? "cartao_credito" : pdvPix > 0 ? "pix" : "dinheiro";
       await createPendingCashEntry(pdvPayment.store_id, user.id, cartTotal, desc, mainPayment);
-
       toast.success("Venda rápida registrada! Confirme o recebimento no caixa.");
       setPdvOpen(false);
       resetPdv();
@@ -264,9 +328,7 @@ const Vendas = () => {
                   </div>
                   <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                     {filteredAcc.length > 0 ? filteredAcc.map(a => (
-                      <div key={a.id}
-                        className="flex items-center justify-between rounded-lg border border-border/50 p-3 cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-colors"
-                        onClick={() => addToCart(a)}>
+                      <div key={a.id} className="flex items-center justify-between rounded-lg border border-border/50 p-3 cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-colors" onClick={() => addToCart(a)}>
                         <div>
                           <p className="text-sm font-medium">{a.name}</p>
                           <p className="text-[10px] text-muted-foreground">{a.brand && `${a.brand} · `}Estoque: {a.quantity}</p>
@@ -282,18 +344,14 @@ const Vendas = () => {
                 <div className="space-y-3">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Carrinho</p>
                   {cart.length === 0 ? (
-                    <div className="flex items-center justify-center h-32 text-muted-foreground text-xs border border-dashed border-border rounded-lg">
-                      Clique nos produtos para adicionar
-                    </div>
+                    <div className="flex items-center justify-center h-32 text-muted-foreground text-xs border border-dashed border-border rounded-lg">Clique nos produtos para adicionar</div>
                   ) : (
                     <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                       {cart.map(item => (
                         <div key={item.acc.id} className="rounded-lg border border-border/50 p-2.5 space-y-2">
                           <div className="flex items-center justify-between">
                             <p className="text-sm font-medium truncate flex-1">{item.acc.name}</p>
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive shrink-0" onClick={() => updateCartQty(item.acc.id, 0)}>
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive shrink-0" onClick={() => updateCartQty(item.acc.id, 0)}><Trash2 className="h-3 w-3" /></Button>
                           </div>
                           <div className="flex items-center gap-2">
                             <div className="flex items-center gap-1">
@@ -301,9 +359,7 @@ const Vendas = () => {
                               <span className="text-sm font-bold w-6 text-center">{item.qty}</span>
                               <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateCartQty(item.acc.id, item.qty + 1)}>+</Button>
                             </div>
-                            <Input type="number" step="0.01" value={item.price}
-                              onChange={(e) => updateCartPrice(item.acc.id, parseFloat(e.target.value) || 0)}
-                              className="h-7 text-xs w-24" />
+                            <Input type="number" step="0.01" value={item.price} onChange={(e) => updateCartPrice(item.acc.id, parseFloat(e.target.value) || 0)} className="h-7 text-xs w-24" />
                             <span className="text-sm font-bold text-primary ml-auto">{formatCurrency(item.price * item.qty)}</span>
                           </div>
                         </div>
@@ -373,7 +429,7 @@ const Vendas = () => {
                     <SelectTrigger className="h-10"><SelectValue placeholder="Selecione o aparelho" /></SelectTrigger>
                     <SelectContent>
                       {availableProducts.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>{p.name} — {p.brand} ({storeMap.get(p.store_id) || "?"})</SelectItem>
+                        <SelectItem key={p.id} value={p.id}>{p.name} — {p.brand} ({(storeMap.get(p.store_id) as any)?.name || "?"})</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -442,7 +498,7 @@ const Vendas = () => {
                   </div>
                 )}
                 <div className="space-y-3">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Forma de pagamento (restante)</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Forma de pagamento</p>
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs flex items-center gap-1"><Banknote className="h-3 w-3" /> Dinheiro</Label>
@@ -475,11 +531,10 @@ const Vendas = () => {
                       <Input type="number" step="0.5" min="0" max="100" value={form.commission_percent} onChange={(e) => setForm({ ...form, commission_percent: e.target.value })} className="h-10" />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Valor da Comissão</Label>
+                      <Label className="text-xs">Valor</Label>
                       <div className="h-10 flex items-center rounded-md border border-input bg-muted/50 px-3 text-sm font-semibold text-primary">{formatCurrency(commissionValue)}</div>
                     </div>
                   </div>
-                  <p className="text-[10px] text-muted-foreground">Calculada sobre o lucro: {formatCurrency(profit)} × {commissionPercent}%</p>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Observações</Label>
@@ -505,15 +560,17 @@ const Vendas = () => {
                     <p className="font-medium text-sm truncate">{tx.description}</p>
                     <Badge variant="outline" className="text-[10px] bg-yellow-500/15 text-yellow-500 border-yellow-500/20 shrink-0">PDV</Badge>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">{storeMap.get(tx.store_id) || ""} · {new Date(tx.created_at).toLocaleDateString("pt-BR")}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">{(storeMap.get(tx.store_id) as any)?.name || ""} · {new Date(tx.created_at).toLocaleDateString("pt-BR")}</p>
                 </div>
                 <p className="font-display font-bold text-sm text-primary shrink-0">{formatCurrency(Number(tx.amount))}</p>
               </div>
             </CardContent>
           </Card>
         ))}
+
         {sales.map((sale) => {
           const product = productMap.get(sale.product_id);
+          const isLoading = notaLoading === sale.id;
           return (
             <Card key={sale.id} className="border-border/50 shadow-lg shadow-black/10">
               <CardContent className="p-4">
@@ -527,8 +584,24 @@ const Vendas = () => {
                       {Number(sale.payment_pix) > 0 && <Badge variant="outline" className="text-[10px]">📱 {formatCurrency(Number(sale.payment_pix))}</Badge>}
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-1">
-                      {sale.customer_name && `${sale.customer_name} · `}{storeMap.get(sale.store_id) || ""} · {new Date(sale.created_at).toLocaleDateString("pt-BR")}
+                      {sale.customer_name && `${sale.customer_name} · `}
+                      {(storeMap.get(sale.store_id) as any)?.name || ""} · {new Date(sale.created_at).toLocaleDateString("pt-BR")}
                     </p>
+                    {/* Botões de nota */}
+                    <div className="flex gap-2 mt-2">
+                      <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1 px-2"
+                        onClick={() => handleGerarNota(sale, false)} disabled={isLoading}>
+                        <FileText className="h-3 w-3" />
+                        {isLoading ? "Gerando..." : "Comprovante PDF"}
+                      </Button>
+                      {sale.customer_phone && (
+                        <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1 px-2 text-green-500 border-green-500/30 hover:bg-green-500/10"
+                          onClick={() => handleGerarNota(sale, true)} disabled={isLoading}>
+                          <MessageCircle className="h-3 w-3" />
+                          WhatsApp
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <div className="text-right shrink-0">
                     <p className="font-display font-bold text-sm text-primary">{formatCurrency(Number(sale.sale_price))}</p>
@@ -539,6 +612,7 @@ const Vendas = () => {
             </Card>
           );
         })}
+
         {sales.length === 0 && pdvSales.length === 0 && (
           <Card className="border-border/50">
             <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground">
