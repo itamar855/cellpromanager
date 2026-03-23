@@ -73,14 +73,14 @@ const Caixa = () => {
   const [closeForm, setCloseForm] = useState({ amount: "", note: "", reason: "", receipt: null as File | null });
   const [entryForm, setEntryForm] = useState({
     type: "entrada" as "entrada" | "saida",
-    amount: "", description: "", payment_method: "dinheiro", receipt: null as File | null,
+    amount: "", description: "", payment_method: "dinheiro",
   });
-  const [sangriaForm, setSangriaForm] = useState({ amount: "", description: "", receipt: null as File | null });
+  const [sangriaForm, setSangriaForm] = useState({ amount: "", description: "" });
 
   // File refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  const [activeTarget, setActiveTarget] = useState<"open" | "close" | "entry" | "sangria" | "confirm" | null>(null);
+  const [activeTarget, setActiveTarget] = useState<"open" | "close" | "confirm" | null>(null);
 
   const fetchData = async () => {
     const { data: storesData } = await supabase.from("stores").select("*");
@@ -95,14 +95,26 @@ const Caixa = () => {
       .from("cash_registers" as any).select("*")
       .eq("store_id", storeId).eq("status", "open").maybeSingle();
     setCurrentRegister(data as unknown as CashRegister | null);
+
     if (data) {
+      const registerId = (data as any).id;
+
+      // Busca todos os pendentes (qualquer data) + confirmados do caixa atual
       const { data: entriesData } = await supabase
         .from("cash_entries" as any).select("*")
-        .eq("cash_register_id", (data as any).id)
+        .eq("cash_register_id", registerId)
+        .order("confirmed", { ascending: true })       // pendentes primeiro
         .order("created_at", { ascending: false });
+
       setEntries((entriesData as unknown as CashEntry[]) ?? []);
     } else {
-      setEntries([]);
+      // Sem caixa aberto: busca apenas pendentes soltos da loja (de outros caixas fechados)
+      const { data: pendingData } = await supabase
+        .from("cash_entries" as any).select("*")
+        .eq("store_id", storeId)
+        .eq("confirmed", false)
+        .order("created_at", { ascending: false });
+      setEntries((pendingData as unknown as CashEntry[]) ?? []);
     }
   };
 
@@ -119,21 +131,19 @@ const Caixa = () => {
   const handleFileSelect = (file: File) => {
     if (activeTarget === "open")    setOpenForm(f => ({ ...f, receipt: file }));
     if (activeTarget === "close")   setCloseForm(f => ({ ...f, receipt: file }));
-    if (activeTarget === "entry")   setEntryForm(f => ({ ...f, receipt: file }));
-    if (activeTarget === "sangria") setSangriaForm(f => ({ ...f, receipt: file }));
     if (activeTarget === "confirm") setConfirmFile(file);
   };
 
-  // Apenas lançamentos confirmados entram no cálculo
+  // Apenas confirmados entram nos cálculos
   const confirmedEntries = entries.filter(e => e.confirmed === true);
-  const totalEntradas = confirmedEntries.filter(e => ["entrada", "abertura"].includes(e.type)).reduce((s, e) => s + Number(e.amount), 0);
-  const totalSaidas  = confirmedEntries.filter(e => ["saida", "sangria"].includes(e.type)).reduce((s, e) => s + Number(e.amount), 0);
+  const totalEntradas = confirmedEntries.filter(e => ["entrada","abertura"].includes(e.type)).reduce((s, e) => s + Number(e.amount), 0);
+  const totalSaidas   = confirmedEntries.filter(e => ["saida","sangria"].includes(e.type)).reduce((s, e) => s + Number(e.amount), 0);
   const expectedAmount = Number(currentRegister?.opening_amount || 0) + totalEntradas - totalSaidas;
   const closingAmount = parseFloat(closeForm.amount) || 0;
   const difference = closingAmount - expectedAmount;
   const pendingCount = entries.filter(e => !e.confirmed).length;
 
-  // ── Confirmação de lançamento ──────────────────────────────────────────────
+  // ── Confirmar lançamento ──────────────────────────────────────────────────
   const openConfirmDialog = (entry: CashEntry) => {
     setConfirmEntry(entry);
     setConfirmFile(null);
@@ -185,6 +195,13 @@ const Caixa = () => {
       description: "Abertura de caixa", payment_method: "dinheiro",
       receipt_url: receiptUrl, confirmed: true, created_by: user.id,
     });
+
+    // Migra pendentes soltos da loja para este caixa
+    await supabase.from("cash_entries" as any)
+      .update({ cash_register_id: (reg as any).id })
+      .eq("store_id", selectedStore)
+      .eq("confirmed", false)
+      .neq("cash_register_id", (reg as any).id);
 
     toast.success("Caixa aberto!");
     setOpenDialog(false);
@@ -247,7 +264,7 @@ const Caixa = () => {
 
     toast.success("Lançamento criado — confirme anexando o comprovante!");
     setEntryDialog(false);
-    setEntryForm({ type: "entrada", amount: "", description: "", payment_method: "dinheiro", receipt: null });
+    setEntryForm({ type: "entrada", amount: "", description: "", payment_method: "dinheiro" });
     fetchRegister(selectedStore);
     setLoading(false);
   };
@@ -268,7 +285,7 @@ const Caixa = () => {
 
     toast.success("Sangria criada — confirme anexando o comprovante!");
     setSangriaDialog(false);
-    setSangriaForm({ amount: "", description: "", receipt: null });
+    setSangriaForm({ amount: "", description: "" });
     fetchRegister(selectedStore);
     setLoading(false);
   };
@@ -287,28 +304,19 @@ const Caixa = () => {
           <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => {
             if (target === "open")    setOpenForm(f => ({ ...f, receipt: null }));
             if (target === "close")   setCloseForm(f => ({ ...f, receipt: null }));
-            if (target === "entry")   setEntryForm(f => ({ ...f, receipt: null }));
-            if (target === "sangria") setSangriaForm(f => ({ ...f, receipt: null }));
             if (target === "confirm") setConfirmFile(null);
           }}>Remover</Button>
         </div>
       ) : (
-        <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-            <Button type="button" variant="outline" className="h-10 gap-2 text-xs"
-              onClick={() => { setActiveTarget(target); cameraInputRef.current?.click(); }}>
-              <Camera className="h-4 w-4" /> Tirar Foto
-            </Button>
-            <Button type="button" variant="outline" className="h-10 gap-2 text-xs"
-              onClick={() => { setActiveTarget(target); fileInputRef.current?.click(); }}>
-              <Upload className="h-4 w-4" /> Galeria
-            </Button>
-          </div>
-          {target !== "open" && (
-            <p className="text-[10px] text-destructive flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3" /> Comprovante obrigatório para confirmar
-            </p>
-          )}
+        <div className="grid grid-cols-2 gap-2">
+          <Button type="button" variant="outline" className="h-10 gap-2 text-xs"
+            onClick={() => { setActiveTarget(target); cameraInputRef.current?.click(); }}>
+            <Camera className="h-4 w-4" /> Tirar Foto
+          </Button>
+          <Button type="button" variant="outline" className="h-10 gap-2 text-xs"
+            onClick={() => { setActiveTarget(target); fileInputRef.current?.click(); }}>
+            <Upload className="h-4 w-4" /> Galeria
+          </Button>
         </div>
       )}
     </div>
@@ -335,7 +343,6 @@ const Caixa = () => {
 
       {currentRegister ? (
         <>
-          {/* Banner pendentes */}
           {pendingCount > 0 && (
             <div className="flex items-center gap-3 rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-3">
               <Clock className="h-4 w-4 text-orange-500 shrink-0" />
@@ -375,10 +382,10 @@ const Caixa = () => {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { label: "Fundo Inicial",   value: Number(currentRegister.opening_amount), color: "text-blue-500"      },
-              { label: "Total Entradas",  value: totalEntradas,  color: "text-primary"                               },
-              { label: "Total Saídas",    value: totalSaidas,    color: "text-destructive"                           },
-              { label: "Saldo Esperado",  value: expectedAmount, color: expectedAmount >= 0 ? "text-primary" : "text-destructive" },
+              { label: "Fundo Inicial",  value: Number(currentRegister.opening_amount), color: "text-blue-500" },
+              { label: "Total Entradas", value: totalEntradas,  color: "text-primary"   },
+              { label: "Total Saídas",   value: totalSaidas,    color: "text-destructive" },
+              { label: "Saldo Esperado", value: expectedAmount, color: expectedAmount >= 0 ? "text-primary" : "text-destructive" },
             ].map(card => (
               <Card key={card.label} className="border-border/50">
                 <CardContent className="p-4">
@@ -397,7 +404,7 @@ const Caixa = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {["dinheiro", "pix", "cartao_credito", "cartao_debito", "transferencia"].map(method => {
+                {["dinheiro","pix","cartao_credito","cartao_debito","transferencia"].map(method => {
                   const ent = confirmedEntries.filter(e => ["entrada","abertura"].includes(e.type) && e.payment_method === method).reduce((s, e) => s + Number(e.amount), 0);
                   const sai = confirmedEntries.filter(e => ["saida","sangria"].includes(e.type) && e.payment_method === method).reduce((s, e) => s + Number(e.amount), 0);
                   if (ent === 0 && sai === 0) return null;
@@ -420,7 +427,7 @@ const Caixa = () => {
           <Card className="border-border/50">
             <CardHeader className="pb-2">
               <CardTitle className="font-display text-sm">
-                Lançamentos do Dia ({entries.length})
+                Lançamentos ({entries.length})
                 {pendingCount > 0 && (
                   <Badge className="ml-2 bg-orange-500/15 text-orange-500 border-orange-500/30 text-[10px]">
                     {pendingCount} pendente{pendingCount > 1 ? "s" : ""}
@@ -433,16 +440,12 @@ const Caixa = () => {
                 <div className="space-y-2">
                   {entries.map(entry => {
                     const cfg = typeConfig[entry.type];
-                    const isPositive = ["entrada", "abertura"].includes(entry.type);
+                    const isPositive = ["entrada","abertura"].includes(entry.type);
                     const isPending = !entry.confirmed;
-
                     return (
-                      <div
-                        key={entry.id}
+                      <div key={entry.id}
                         className={`flex items-center justify-between rounded-lg border p-3 transition-colors ${
-                          isPending
-                            ? "border-orange-500/30 bg-orange-500/5 cursor-pointer hover:bg-orange-500/10"
-                            : "border-border/50"
+                          isPending ? "border-orange-500/30 bg-orange-500/5 cursor-pointer hover:bg-orange-500/10" : "border-border/50"
                         }`}
                         onClick={() => isPending && openConfirmDialog(entry)}
                       >
@@ -454,7 +457,7 @@ const Caixa = () => {
                             <p className={`text-sm font-medium truncate ${isPending ? "opacity-70" : ""}`}>{entry.description}</p>
                             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                               <Badge variant="outline" className={`text-[9px] ${cfg.color}`}>{cfg.label}</Badge>
-                              {entry.payment_method && <span className="text-[10px] text-muted-foreground">{paymentLabels[entry.payment_method]}</span>}
+                              {entry.payment_method && <span className="text-[10px] text-muted-foreground">{paymentLabels[entry.payment_method] ?? entry.payment_method}</span>}
                               {isPending ? (
                                 <Badge className="text-[9px] bg-orange-500/15 text-orange-500 border-orange-500/30 gap-1">
                                   <Clock className="h-2.5 w-2.5" /> Pendente — clique para confirmar
@@ -475,7 +478,7 @@ const Caixa = () => {
                           <p className={`font-bold text-sm ${isPending ? "opacity-60" : ""} ${isPositive ? "text-primary" : "text-destructive"}`}>
                             {isPositive ? "+" : "-"}{formatCurrency(Number(entry.amount))}
                           </p>
-                          <p className="text-[10px] text-muted-foreground">{new Date(entry.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</p>
+                          <p className="text-[10px] text-muted-foreground">{new Date(entry.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</p>
                           {isPending && (
                             <Button size="sm" variant="outline"
                               className="h-6 text-[10px] border-orange-500/40 text-orange-500 hover:bg-orange-500/10 px-2"
@@ -504,6 +507,12 @@ const Caixa = () => {
               <p className="font-semibold">Caixa fechado</p>
               <p className="text-xs text-muted-foreground mt-1">Abra o caixa para começar a registrar lançamentos</p>
             </div>
+            {pendingCount > 0 && (
+              <div className="flex items-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-500">
+                <Clock className="h-4 w-4 shrink-0" />
+                {pendingCount} lançamento{pendingCount > 1 ? "s" : ""} pendente{pendingCount > 1 ? "s" : ""} de vendas/OS aguardando confirmação
+              </div>
+            )}
             <Button className="gap-2" onClick={() => setOpenDialog(true)} disabled={!selectedStore}>
               <Unlock className="h-4 w-4" /> Abrir Caixa
             </Button>
@@ -511,7 +520,7 @@ const Caixa = () => {
         </Card>
       )}
 
-      {/* ── Dialog Confirmar Lançamento ───────────────────────────────────── */}
+      {/* ── Dialog Confirmar ─────────────────────────────────────────────────── */}
       <Dialog open={confirmDialog} onOpenChange={(o) => { setConfirmDialog(o); if (!o) { setConfirmEntry(null); setConfirmFile(null); } }}>
         <DialogContent>
           <DialogHeader>
@@ -528,7 +537,7 @@ const Caixa = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Descrição</span>
-                  <span className="font-medium">{confirmEntry.description}</span>
+                  <span className="font-medium text-right max-w-[60%]">{confirmEntry.description}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Valor</span>
@@ -540,6 +549,10 @@ const Caixa = () => {
                     <span>{paymentLabels[confirmEntry.payment_method] ?? confirmEntry.payment_method}</span>
                   </div>
                 )}
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Data</span>
+                  <span>{new Date(confirmEntry.created_at).toLocaleString("pt-BR")}</span>
+                </div>
               </div>
               <ReceiptUpload target="confirm" file={confirmFile} />
               <Button className="w-full h-11" onClick={handleConfirmEntry} disabled={loading || !confirmFile}>
@@ -550,7 +563,7 @@ const Caixa = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog Abrir Caixa ────────────────────────────────────────────── */}
+      {/* ── Dialog Abrir Caixa ───────────────────────────────────────────────── */}
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
         <DialogContent>
           <DialogHeader><DialogTitle className="font-display flex items-center gap-2"><Unlock className="h-4 w-4 text-primary" /> Abrir Caixa</DialogTitle></DialogHeader>
@@ -571,7 +584,7 @@ const Caixa = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog Fechar Caixa ───────────────────────────────────────────── */}
+      {/* ── Dialog Fechar Caixa ──────────────────────────────────────────────── */}
       <Dialog open={closeDialog} onOpenChange={setCloseDialog}>
         <DialogContent>
           <DialogHeader><DialogTitle className="font-display flex items-center gap-2"><Lock className="h-4 w-4 text-destructive" /> Fechar Caixa</DialogTitle></DialogHeader>
@@ -582,7 +595,7 @@ const Caixa = () => {
                 {pendingCount} lançamento{pendingCount > 1 ? "s" : ""} pendente{pendingCount > 1 ? "s" : ""}. Confirme todos antes de fechar.
               </div>
             )}
-            <div className="rounded-lg bg-muted/50 p-3 text-xs space-y-1">
+            <div className="rounded-lg bg-muted/50 p-3 text-xs">
               <div className="flex justify-between"><span className="text-muted-foreground">Saldo esperado pelo sistema</span><span className="font-bold">{formatCurrency(expectedAmount)}</span></div>
             </div>
             <div className="space-y-1.5">
@@ -616,7 +629,7 @@ const Caixa = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog Lançamento ─────────────────────────────────────────────── */}
+      {/* ── Dialog Lançamento ────────────────────────────────────────────────── */}
       <Dialog open={entryDialog} onOpenChange={setEntryDialog}>
         <DialogContent>
           <DialogHeader><DialogTitle className="font-display">Novo Lançamento</DialogTitle></DialogHeader>
@@ -659,7 +672,7 @@ const Caixa = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog Sangria ────────────────────────────────────────────────── */}
+      {/* ── Dialog Sangria ───────────────────────────────────────────────────── */}
       <Dialog open={sangriaDialog} onOpenChange={setSangriaDialog}>
         <DialogContent>
           <DialogHeader><DialogTitle className="font-display flex items-center gap-2"><Minus className="h-4 w-4 text-yellow-500" /> Sangria de Caixa</DialogTitle></DialogHeader>
