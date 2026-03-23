@@ -23,17 +23,34 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
 const statusConfig: Record<string, { label: string; color: string; icon: typeof Clock }> = {
-  open: { label: "Aberta", color: "bg-blue-500/15 text-blue-400 border-blue-500/20", icon: Clock },
-  analyzing: { label: "Em Análise", color: "bg-accent/15 text-accent border-accent/20", icon: AlertCircle },
-  waiting_part: { label: "Aguardando Peça", color: "bg-orange-500/15 text-orange-400 border-orange-500/20", icon: Package },
-  repairing: { label: "Em Reparo", color: "bg-purple-500/15 text-purple-400 border-purple-500/20", icon: Wrench },
-  waiting_approval: { label: "Aguardando Aprovação", color: "bg-accent/15 text-accent border-accent/20", icon: AlertCircle },
-  ready: { label: "Pronta p/ Retirada", color: "bg-primary/15 text-primary border-primary/20", icon: CheckCircle2 },
-  delivered: { label: "Entregue", color: "bg-muted text-muted-foreground border-border", icon: CheckCircle2 },
-  cancelled: { label: "Cancelada", color: "bg-destructive/15 text-destructive border-destructive/20", icon: AlertCircle },
+  open:              { label: "Aberta",                color: "bg-blue-500/15 text-blue-400 border-blue-500/20",       icon: Clock         },
+  analyzing:         { label: "Em Análise",            color: "bg-accent/15 text-accent border-accent/20",             icon: AlertCircle   },
+  waiting_part:      { label: "Aguardando Peça",       color: "bg-orange-500/15 text-orange-400 border-orange-500/20", icon: Package       },
+  repairing:         { label: "Em Reparo",             color: "bg-purple-500/15 text-purple-400 border-purple-500/20", icon: Wrench        },
+  waiting_approval:  { label: "Aguardando Aprovação",  color: "bg-accent/15 text-accent border-accent/20",             icon: AlertCircle   },
+  ready:             { label: "Pronta p/ Retirada",    color: "bg-primary/15 text-primary border-primary/20",          icon: CheckCircle2  },
+  delivered:         { label: "Entregue",              color: "bg-muted text-muted-foreground border-border",          icon: CheckCircle2  },
+  cancelled:         { label: "Cancelada",             color: "bg-destructive/15 text-destructive border-destructive/20", icon: AlertCircle },
 };
 
 const allStatuses = Object.keys(statusConfig);
+
+// Cria cash_entry pendente no caixa aberto da loja
+const createPendingCashEntry = async (
+  storeId: string, userId: string, amount: number, description: string,
+) => {
+  if (!storeId || amount <= 0) return;
+  const { data: register } = await supabase
+    .from("cash_registers" as any).select("id")
+    .eq("store_id", storeId).eq("status", "open").maybeSingle();
+  if (!register) return;
+  await supabase.from("cash_entries" as any).insert({
+    cash_register_id: (register as any).id, store_id: storeId,
+    type: "entrada", amount, description,
+    payment_method: "dinheiro", receipt_url: null,
+    confirmed: false, created_by: userId,
+  });
+};
 
 const OrdensServico = () => {
   const { user } = useAuth();
@@ -45,7 +62,6 @@ const OrdensServico = () => {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [loading, setLoading] = useState(false);
-
   const [signatureData, setSignatureData] = useState("");
 
   const [form, setForm] = useState({
@@ -70,13 +86,10 @@ const OrdensServico = () => {
 
   useEffect(() => { fetchData(); }, []);
 
-  // Realtime subscription
   useEffect(() => {
     const channel = supabase
       .channel("service_orders_changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "service_orders" }, () => {
-        fetchData();
-      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "service_orders" }, () => { fetchData(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
@@ -139,17 +152,23 @@ const OrdensServico = () => {
     if (newStatus === "ready") updates.completed_at = new Date().toISOString();
 
     const { error } = await supabase.from("service_orders").update(updates).eq("id", orderId);
-    if (error) {
-      toast.error("Erro ao atualizar status");
-      return;
-    }
+    if (error) { toast.error("Erro ao atualizar status"); return; }
 
     await supabase.from("service_order_history").insert({
-      service_order_id: orderId,
-      old_status: oldStatus,
-      new_status: newStatus,
-      created_by: user.id,
+      service_order_id: orderId, old_status: oldStatus,
+      new_status: newStatus, created_by: user.id,
     } as any);
+
+    // Quando entregue, cria entrada pendente no caixa com o valor final (ou estimado)
+    if (newStatus === "delivered") {
+      const order = orders.find(o => o.id === orderId);
+      if (order && order.store_id) {
+        const amount = Number(order.final_price || order.estimated_price || 0);
+        const desc = `OS #${order.order_number} — ${order.requested_service} (${order.customer_name})`;
+        await createPendingCashEntry(order.store_id, user.id, amount, desc);
+        if (amount > 0) toast.info("Entrada pendente criada no caixa — confirme o recebimento.");
+      }
+    }
 
     toast.success(`Status atualizado para: ${statusConfig[newStatus]?.label}`);
     fetchData();
@@ -160,7 +179,8 @@ const OrdensServico = () => {
 
   const filtered = orders.filter((o) => {
     const q = search.toLowerCase();
-    const matchSearch = o.customer_name.toLowerCase().includes(q) ||
+    const matchSearch =
+      o.customer_name.toLowerCase().includes(q) ||
       (o.device_imei && o.device_imei.includes(search)) ||
       (o.device_model && o.device_model.toLowerCase().includes(q)) ||
       String(o.order_number).includes(search);
@@ -188,7 +208,6 @@ const OrdensServico = () => {
               <DialogTitle className="font-display">Abrir Ordem de Serviço</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Client data */}
               <div className="space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
                   <User className="h-3 w-3" /> Dados do Cliente
@@ -209,7 +228,6 @@ const OrdensServico = () => {
                 </div>
               </div>
 
-              {/* Device data */}
               <div className="space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
                   <Phone className="h-3 w-3" /> Dados do Aparelho
@@ -220,9 +238,7 @@ const OrdensServico = () => {
                     <Select value={form.device_brand} onValueChange={(v) => setForm({ ...form, device_brand: v })}>
                       <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {["iPhone", "Samsung", "Xiaomi", "Motorola", "Huawei", "Outro"].map((b) => (
-                          <SelectItem key={b} value={b}>{b}</SelectItem>
-                        ))}
+                        {["iPhone","Samsung","Xiaomi","Motorola","Huawei","Outro"].map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -255,7 +271,6 @@ const OrdensServico = () => {
                 </div>
               </div>
 
-              {/* Service info */}
               <div className="space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
                   <Wrench className="h-3 w-3" /> Serviço
@@ -269,7 +284,7 @@ const OrdensServico = () => {
                   <Select value={form.requested_service} onValueChange={(v) => setForm({ ...form, requested_service: v })}>
                     <SelectTrigger className="h-10"><SelectValue placeholder="Selecione o serviço" /></SelectTrigger>
                     <SelectContent>
-                      {["Troca de Tela", "Troca de Bateria", "Reparo de Placa", "Troca de Conector", "Troca de Câmera", "Desbloqueio", "Formatação", "Diagnóstico", "Outro"].map((s) => (
+                      {["Troca de Tela","Troca de Bateria","Reparo de Placa","Troca de Conector","Troca de Câmera","Desbloqueio","Formatação","Diagnóstico","Outro"].map((s) => (
                         <SelectItem key={s} value={s}>{s}</SelectItem>
                       ))}
                     </SelectContent>
@@ -289,14 +304,11 @@ const OrdensServico = () => {
                   <Label className="text-xs">Loja</Label>
                   <Select value={form.store_id} onValueChange={(v) => setForm({ ...form, store_id: v })}>
                     <SelectTrigger className="h-10"><SelectValue placeholder="Selecione a loja" /></SelectTrigger>
-                    <SelectContent>
-                      {stores.map((s) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
-                    </SelectContent>
+                    <SelectContent>{stores.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               </div>
 
-              {/* Terms */}
               <div className="space-y-3 rounded-lg border border-border p-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Termos e Condições</p>
                 <p className="text-xs text-muted-foreground leading-relaxed">
@@ -308,7 +320,6 @@ const OrdensServico = () => {
                 </div>
               </div>
 
-              {/* Digital Signature */}
               <SignatureCanvas onSave={setSignatureData} initialData={signatureData} />
 
               <div className="space-y-1.5">
@@ -324,24 +335,13 @@ const OrdensServico = () => {
         </Dialog>
       </div>
 
-      {/* Status summary chips */}
+      {/* Status chips */}
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-        <Button
-          variant={filterStatus === "all" ? "default" : "outline"}
-          size="sm"
-          className="h-7 text-xs shrink-0"
-          onClick={() => setFilterStatus("all")}
-        >
+        <Button variant={filterStatus === "all" ? "default" : "outline"} size="sm" className="h-7 text-xs shrink-0" onClick={() => setFilterStatus("all")}>
           Todas ({orders.length})
         </Button>
         {allStatuses.filter((s) => statusCounts[s]).map((s) => (
-          <Button
-            key={s}
-            variant={filterStatus === s ? "default" : "outline"}
-            size="sm"
-            className="h-7 text-xs shrink-0"
-            onClick={() => setFilterStatus(s)}
-          >
+          <Button key={s} variant={filterStatus === s ? "default" : "outline"} size="sm" className="h-7 text-xs shrink-0" onClick={() => setFilterStatus(s)}>
             {statusConfig[s].label} ({statusCounts[s]})
           </Button>
         ))}
@@ -355,45 +355,32 @@ const OrdensServico = () => {
 
       {/* Orders list */}
       <div className="space-y-2">
-        {filtered.length > 0 ? (
-          filtered.map((order) => {
-            const sc = statusConfig[order.status] || statusConfig.open;
-            return (
-              <Card
-                key={order.id}
-                className="border-border/50 shadow-lg shadow-black/10 cursor-pointer hover:border-primary/30 transition-colors"
-                onClick={() => setDetailOrder(order)}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs text-muted-foreground font-mono">#{order.order_number}</span>
-                        <p className="font-medium text-sm truncate">{order.customer_name}</p>
-                        <Badge variant="outline" className={`text-[10px] ${sc.color}`}>
-                          {sc.label}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {order.device_brand} {order.device_model}
-                        {order.device_imei && ` · IMEI: ${order.device_imei}`}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {order.requested_service} · {storeMap.get(order.store_id || "") || "—"}
-                      </p>
+        {filtered.length > 0 ? filtered.map((order) => {
+          const sc = statusConfig[order.status] || statusConfig.open;
+          return (
+            <Card key={order.id} className="border-border/50 shadow-lg shadow-black/10 cursor-pointer hover:border-primary/30 transition-colors" onClick={() => setDetailOrder(order)}>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-muted-foreground font-mono">#{order.order_number}</span>
+                      <p className="font-medium text-sm truncate">{order.customer_name}</p>
+                      <Badge variant="outline" className={`text-[10px] ${sc.color}`}>{sc.label}</Badge>
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="font-display font-bold text-sm">{formatCurrency(Number(order.estimated_price || 0))}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        {new Date(order.created_at).toLocaleDateString("pt-BR")}
-                      </p>
-                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {order.device_brand} {order.device_model}{order.device_imei && ` · IMEI: ${order.device_imei}`}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{order.requested_service} · {storeMap.get(order.store_id || "") || "—"}</p>
                   </div>
-                </CardContent>
-              </Card>
-            );
-          })
-        ) : (
+                  <div className="text-right shrink-0">
+                    <p className="font-display font-bold text-sm">{formatCurrency(Number(order.estimated_price || 0))}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{new Date(order.created_at).toLocaleDateString("pt-BR")}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        }) : (
           <Card className="border-border/50">
             <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <Wrench className="h-10 w-10 mb-3 opacity-30" />
@@ -416,25 +403,16 @@ const OrdensServico = () => {
                 </DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
-                {/* Status */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline" className={`${statusConfig[detailOrder.status]?.color}`}>
-                    {statusConfig[detailOrder.status]?.label}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    Criada em {new Date(detailOrder.created_at).toLocaleString("pt-BR")}
-                  </span>
+                  <Badge variant="outline" className={`${statusConfig[detailOrder.status]?.color}`}>{statusConfig[detailOrder.status]?.label}</Badge>
+                  <span className="text-xs text-muted-foreground">Criada em {new Date(detailOrder.created_at).toLocaleString("pt-BR")}</span>
                 </div>
-
-                {/* Client */}
                 <div className="rounded-lg bg-muted/50 p-3 space-y-1 text-xs">
                   <p className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wide">Cliente</p>
                   <p>{detailOrder.customer_name}</p>
                   {detailOrder.customer_phone && <p>📞 {detailOrder.customer_phone}</p>}
                   {detailOrder.customer_cpf && <p>CPF: {detailOrder.customer_cpf}</p>}
                 </div>
-
-                {/* Device */}
                 <div className="rounded-lg bg-muted/50 p-3 space-y-1 text-xs">
                   <p className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wide">Aparelho</p>
                   <p>{detailOrder.device_brand} {detailOrder.device_model}</p>
@@ -443,8 +421,6 @@ const OrdensServico = () => {
                   {detailOrder.device_condition && <p>Condição: {detailOrder.device_condition}</p>}
                   {detailOrder.device_accessories && <p>Acessórios: {detailOrder.device_accessories}</p>}
                 </div>
-
-                {/* Service */}
                 <div className="rounded-lg bg-muted/50 p-3 space-y-1 text-xs">
                   <p className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wide">Serviço</p>
                   <p><span className="text-muted-foreground">Defeito:</span> {detailOrder.reported_defect}</p>
@@ -453,39 +429,28 @@ const OrdensServico = () => {
                   {detailOrder.final_price > 0 && <p><span className="text-muted-foreground">Valor Final:</span> {formatCurrency(Number(detailOrder.final_price))}</p>}
                   {detailOrder.estimated_completion && <p><span className="text-muted-foreground">Previsão:</span> {new Date(detailOrder.estimated_completion).toLocaleString("pt-BR")}</p>}
                 </div>
-
                 {detailOrder.internal_notes && (
                   <div className="rounded-lg bg-muted/50 p-3 text-xs">
                     <p className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wide">Notas Internas</p>
                     <p className="mt-1">{detailOrder.internal_notes}</p>
                   </div>
                 )}
-
                 {detailOrder.signature_data && (
                   <div className="rounded-lg bg-muted/50 p-3 text-xs">
                     <p className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wide mb-2">Assinatura do Cliente</p>
                     <img src={detailOrder.signature_data} alt="Assinatura" className="max-h-24 rounded border border-border" />
                   </div>
                 )}
-
-                {/* Status update */}
                 {detailOrder.status !== "delivered" && detailOrder.status !== "cancelled" && (
                   <div className="space-y-2">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Atualizar Status</p>
                     <div className="flex flex-wrap gap-2">
-                      {allStatuses
-                        .filter((s) => s !== detailOrder.status)
-                        .map((s) => (
-                          <Button
-                            key={s}
-                            variant="outline"
-                            size="sm"
-                            className="text-xs h-8"
-                            onClick={() => updateStatus(detailOrder.id, s, detailOrder.status)}
-                          >
-                            {statusConfig[s].label}
-                          </Button>
-                        ))}
+                      {allStatuses.filter((s) => s !== detailOrder.status).map((s) => (
+                        <Button key={s} variant="outline" size="sm" className="text-xs h-8"
+                          onClick={() => updateStatus(detailOrder.id, s, detailOrder.status)}>
+                          {statusConfig[s].label}
+                        </Button>
+                      ))}
                     </div>
                   </div>
                 )}
