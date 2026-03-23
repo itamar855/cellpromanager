@@ -20,6 +20,7 @@ import Instalar from "./pages/Instalar";
 import ResetPassword from "./pages/ResetPassword";
 import AIAssistant from "./pages/AIAssistant";
 import NotFound from "./pages/NotFound";
+import Caixa from "./pages/Caixa";
 
 const queryClient = new QueryClient();
 
@@ -62,6 +63,7 @@ const App = () => (
               <Route path="/equipe" element={<ProtectedRoute><Equipe /></ProtectedRoute>} />
               <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
               <Route path="/relatorios" element={<ProtectedRoute><Relatorios /></ProtectedRoute>} />
+              <Route path="/caixa" element={<ProtectedRoute><Caixa /></ProtectedRoute>} />
               <Route path="/assistente-ia" element={<ProtectedRoute><AIAssistant /></ProtectedRoute>} />
               <Route path="/instalar" element={<Instalar />} />
               <Route path="/reset-password" element={<ResetPassword />} />
