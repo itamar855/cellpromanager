@@ -1,13 +1,13 @@
-import { Landmark, ReactNode } from "react";
-import { Landmark, Link, useLocation } from "react-router-dom";
-import { Landmark, useAuth } from "@/contexts/AuthContext";
-import { Landmark, useTheme } from "@/contexts/ThemeContext";
-import { Landmark,
-  LayoutDashboard, Package, ArrowUpDown, ShoppingBag, Store,
+import { ReactNode } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import {
+  LayoutDashboard, Package, ArrowUpDown, ShoppingBag, Store, Landmark,
   LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle, FileText, Download, Brain,
 } from "lucide-react";
-import { Landmark, cn } from "@/lib/utils";
-import { Landmark, Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/" },
