@@ -51,6 +51,7 @@ const Vendas = () => {
   const [stores, setStores] = useState<Tables<"stores">[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pdvOpen, setPdvOpen] = useState(false);
+  const [pdvSales, setPdvSales] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [accSearch, setAccSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -65,17 +66,21 @@ const Vendas = () => {
     commission_percent: "10",
   });
 
+  const [pdvSales, setPdvSales] = useState<any[]>([]);
+
   const fetchData = async () => {
-    const [salesRes, productsRes, storesRes, accRes] = await Promise.all([
+    const [salesRes, productsRes, storesRes, accRes, pdvRes] = await Promise.all([
       supabase.from("sales").select("*").order("created_at", { ascending: false }),
       supabase.from("products").select("*"),
       supabase.from("stores").select("*"),
       supabase.from("accessories" as any).select("*").gt("quantity", 0),
+      supabase.from("transactions").select("*").eq("type", "income").eq("category", "acessorio").order("created_at", { ascending: false }),
     ]);
     setSales((salesRes.data as Sale[]) ?? []);
     setProducts(productsRes.data ?? []);
     setStores(storesRes.data ?? []);
     setAccessories((accRes.data as unknown as Accessory[]) ?? []);
+    setPdvSales(pdvRes.data ?? []);
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -552,8 +557,28 @@ const Vendas = () => {
 
       {/* Sales list */}
       <div className="space-y-2">
-        {sales.length > 0 ? (
-          sales.map((sale) => {
+        {/* PDV Sales */}
+        {pdvSales.map((tx) => (
+          <Card key={tx.id} className="border-border/50 shadow-lg shadow-black/10">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-sm truncate">{tx.description}</p>
+                    <Badge variant="outline" className="text-[10px] bg-yellow-500/15 text-yellow-500 border-yellow-500/20 shrink-0">PDV</Badge>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {storeMap.get(tx.store_id) || ""} · {new Date(tx.created_at).toLocaleDateString("pt-BR")}
+                  </p>
+                </div>
+                <p className="font-display font-bold text-sm text-primary shrink-0">{formatCurrency(Number(tx.amount))}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+
+        {/* Aparelho sales */}
+        {sales.map((sale) => {
             const product = productMap.get(sale.product_id);
             return (
               <Card key={sale.id} className="border-border/50 shadow-lg shadow-black/10">
@@ -592,8 +617,8 @@ const Vendas = () => {
                 </CardContent>
               </Card>
             );
-          })
-        ) : (
+        })}
+        {sales.length === 0 && pdvSales.length === 0 && (
           <Card className="border-border/50">
             <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <ShoppingBag className="h-10 w-10 mb-3 opacity-30" />
