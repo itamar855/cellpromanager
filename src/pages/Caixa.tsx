@@ -56,15 +56,13 @@ const Caixa = () => {
   const [entries, setEntries] = useState<CashEntry[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [confirmDialog, setConfirmDialog] = useState(false);
-  const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
-  const [confirmReceipt, setConfirmReceipt] = useState<File | null>(null);
-  const confirmFileRef = useRef<HTMLInputElement>(null);
-  const confirmCameraRef = useRef<HTMLInputElement>(null);
+  // Dialogs
+  const [openDialog, setOpenDialog] = useState(false);
   const [closeDialog, setCloseDialog] = useState(false);
   const [entryDialog, setEntryDialog] = useState(false);
   const [sangriaDialog, setSangriaDialog] = useState(false);
 
+  // Forms
   const [openForm, setOpenForm] = useState({ amount: "", note: "", receipt: null as File | null });
   const [closeForm, setCloseForm] = useState({ amount: "", note: "", reason: "", receipt: null as File | null });
   const [entryForm, setEntryForm] = useState({
@@ -73,6 +71,7 @@ const Caixa = () => {
   });
   const [sangriaForm, setSangriaForm] = useState({ amount: "", description: "", receipt: null as File | null });
 
+  // File refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [activeTarget, setActiveTarget] = useState<"open" | "close" | "entry" | "sangria" | null>(null);
@@ -190,8 +189,10 @@ const Caixa = () => {
 
   const handleEntry = async () => {
     if (!user || !currentRegister) return;
-    if (!entryForm.receipt) { toast.error("Comprovante obrigatório!"); return; }
+    if (!entryForm.receipt) { toast.error("Comprovante obrigatório para confirmar o lançamento!"); return; }
+    if (!entryForm.amount || !entryForm.description) { toast.error("Preencha todos os campos!"); return; }
     setLoading(true);
+
     const receiptUrl = await uploadReceipt(entryForm.receipt, `lancamento/${Date.now()}`);
     if (!receiptUrl) { setLoading(false); return; }
 
@@ -202,7 +203,7 @@ const Caixa = () => {
       receipt_url: receiptUrl, receipt_required: true, created_by: user.id,
     });
 
-    toast.success("Lançamento registrado!");
+    toast.success("Lançamento confirmado com comprovante!");
     setEntryDialog(false);
     setEntryForm({ type: "entrada", amount: "", description: "", payment_method: "dinheiro", receipt: null });
     fetchRegister(selectedStore);
@@ -211,8 +212,10 @@ const Caixa = () => {
 
   const handleSangria = async () => {
     if (!user || !currentRegister) return;
-    if (!sangriaForm.receipt) { toast.error("Comprovante obrigatório!"); return; }
+    if (!sangriaForm.receipt) { toast.error("Comprovante obrigatório para sangria!"); return; }
+    if (!sangriaForm.amount) { toast.error("Informe o valor da sangria!"); return; }
     setLoading(true);
+
     const receiptUrl = await uploadReceipt(sangriaForm.receipt, `sangria/${Date.now()}`);
     if (!receiptUrl) { setLoading(false); return; }
 
@@ -224,7 +227,7 @@ const Caixa = () => {
       receipt_required: true, created_by: user.id,
     });
 
-    toast.success("Sangria registrada!");
+    toast.success("Sangria registrada com comprovante!");
     setSangriaDialog(false);
     setSangriaForm({ amount: "", description: "", receipt: null });
     fetchRegister(selectedStore);
@@ -234,7 +237,8 @@ const Caixa = () => {
   const ReceiptUpload = ({ target, file }: { target: typeof activeTarget; file: File | null }) => (
     <div className="space-y-2">
       <Label className="text-xs flex items-center gap-1">
-        <Receipt className="h-3 w-3" /> Comprovante {target !== "open" && <span className="text-destructive">*</span>}
+        <Receipt className="h-3 w-3" /> Comprovante
+        {target !== "open" && <span className="text-destructive ml-0.5">* obrigatório</span>}
       </Label>
       {file ? (
         <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
@@ -248,15 +252,22 @@ const Caixa = () => {
           }}>Remover</Button>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-2">
-          <Button type="button" variant="outline" className="h-10 gap-2 text-xs"
-            onClick={() => { setActiveTarget(target); cameraInputRef.current?.click(); }}>
-            <Camera className="h-4 w-4" /> Tirar Foto
-          </Button>
-          <Button type="button" variant="outline" className="h-10 gap-2 text-xs"
-            onClick={() => { setActiveTarget(target); fileInputRef.current?.click(); }}>
-            <Upload className="h-4 w-4" /> Galeria
-          </Button>
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <Button type="button" variant="outline" className="h-10 gap-2 text-xs"
+              onClick={() => { setActiveTarget(target); cameraInputRef.current?.click(); }}>
+              <Camera className="h-4 w-4" /> Tirar Foto
+            </Button>
+            <Button type="button" variant="outline" className="h-10 gap-2 text-xs"
+              onClick={() => { setActiveTarget(target); fileInputRef.current?.click(); }}>
+              <Upload className="h-4 w-4" /> Galeria
+            </Button>
+          </div>
+          {target !== "open" && (
+            <p className="text-[10px] text-destructive flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3" /> Anexe o comprovante para confirmar o lançamento
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -264,6 +275,7 @@ const Caixa = () => {
 
   return (
     <div className="space-y-4">
+      {/* Hidden file inputs */}
       <input ref={fileInputRef} type="file" accept="image/*,application/pdf" className="hidden"
         onChange={e => { if (e.target.files?.[0]) handleFileSelect(e.target.files[0]); e.target.value = ""; }} />
       <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
@@ -295,7 +307,8 @@ const Caixa = () => {
                   </div>
                 </div>
                 <div className="flex gap-2 flex-wrap">
-                  <Button variant="outline" size="sm" className="gap-1.5 h-9 text-yellow-500 border-yellow-500/30 hover:bg-yellow-500/10" onClick={() => setSangriaDialog(true)}>
+                  <Button variant="outline" size="sm" className="gap-1.5 h-9 text-yellow-500 border-yellow-500/30 hover:bg-yellow-500/10"
+                    onClick={() => setSangriaDialog(true)}>
                     <Minus className="h-3.5 w-3.5" /> Sangria
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={() => setEntryDialog(true)}>
@@ -375,7 +388,9 @@ const Caixa = () => {
                               <Badge variant="outline" className={`text-[9px] ${cfg.color}`}>{cfg.label}</Badge>
                               {entry.payment_method && <span className="text-[10px] text-muted-foreground">{paymentLabels[entry.payment_method]}</span>}
                               {entry.receipt_url && (
-                                <a href={entry.receipt_url} target="_blank" rel="noreferrer" className="text-[10px] text-primary underline">Ver comprovante</a>
+                                <a href={entry.receipt_url} target="_blank" rel="noreferrer" className="text-[10px] text-primary underline flex items-center gap-0.5">
+                                  <Receipt className="h-2.5 w-2.5" /> Comprovante
+                                </a>
                               )}
                             </div>
                           </div>
@@ -413,7 +428,7 @@ const Caixa = () => {
         </Card>
       )}
 
-      {/* Dialog Abrir */}
+      {/* Dialog Abrir Caixa */}
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
         <DialogContent>
           <DialogHeader><DialogTitle className="font-display flex items-center gap-2"><Unlock className="h-4 w-4 text-primary" /> Abrir Caixa</DialogTitle></DialogHeader>
@@ -434,7 +449,7 @@ const Caixa = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog Fechar */}
+      {/* Dialog Fechar Caixa */}
       <Dialog open={closeDialog} onOpenChange={setCloseDialog}>
         <DialogContent>
           <DialogHeader><DialogTitle className="font-display flex items-center gap-2"><Lock className="h-4 w-4 text-destructive" /> Fechar Caixa</DialogTitle></DialogHeader>
@@ -476,21 +491,27 @@ const Caixa = () => {
         <DialogContent>
           <DialogHeader><DialogTitle className="font-display">Novo Lançamento</DialogTitle></DialogHeader>
           <div className="space-y-4">
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-primary flex items-center gap-2">
+              <Receipt className="h-4 w-4 shrink-0" />
+              Comprovante obrigatório — o lançamento só será confirmado após anexar o comprovante.
+            </div>
             <div className="grid grid-cols-2 gap-3">
-              <Button variant={entryForm.type === "entrada" ? "default" : "outline"} className="gap-2" onClick={() => setEntryForm(f => ({ ...f, type: "entrada" }))}>
+              <Button variant={entryForm.type === "entrada" ? "default" : "outline"} className="gap-2"
+                onClick={() => setEntryForm(f => ({ ...f, type: "entrada" }))}>
                 <TrendingUp className="h-4 w-4" /> Entrada
               </Button>
-              <Button variant={entryForm.type === "saida" ? "destructive" : "outline"} className="gap-2" onClick={() => setEntryForm(f => ({ ...f, type: "saida" }))}>
+              <Button variant={entryForm.type === "saida" ? "destructive" : "outline"} className="gap-2"
+                onClick={() => setEntryForm(f => ({ ...f, type: "saida" }))}>
                 <TrendingDown className="h-4 w-4" /> Saída
               </Button>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Descrição</Label>
+              <Label className="text-xs">Descrição *</Label>
               <Input value={entryForm.description} onChange={e => setEntryForm(f => ({ ...f, description: e.target.value }))} placeholder="Descrição do lançamento" className="h-10" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs">Valor (R$)</Label>
+                <Label className="text-xs">Valor (R$) *</Label>
                 <Input type="number" step="0.01" value={entryForm.amount} onChange={e => setEntryForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" className="h-10" />
               </div>
               <div className="space-y-1.5">
@@ -502,8 +523,9 @@ const Caixa = () => {
               </div>
             </div>
             <ReceiptUpload target="entry" file={entryForm.receipt} />
-            <Button className="w-full h-11" onClick={handleEntry} disabled={loading || !entryForm.amount || !entryForm.description || !entryForm.receipt}>
-              {loading ? "Registrando..." : "Registrar Lançamento"}
+            <Button className="w-full h-11" onClick={handleEntry}
+              disabled={loading || !entryForm.amount || !entryForm.description || !entryForm.receipt}>
+              {loading ? "Confirmando..." : "Confirmar Lançamento"}
             </Button>
           </div>
         </DialogContent>
@@ -516,18 +538,19 @@ const Caixa = () => {
           <div className="space-y-4">
             <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-xs text-yellow-500 flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 shrink-0" />
-              Retirada de dinheiro do caixa. Comprovante obrigatório.
+              Retirada de dinheiro do caixa. Comprovante obrigatório — a sangria só será registrada após anexar.
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Valor (R$)</Label>
+              <Label className="text-xs">Valor (R$) *</Label>
               <Input type="number" step="0.01" value={sangriaForm.amount} onChange={e => setSangriaForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" className="h-10" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Motivo</Label>
+              <Label className="text-xs">Motivo *</Label>
               <Input value={sangriaForm.description} onChange={e => setSangriaForm(f => ({ ...f, description: e.target.value }))} placeholder="Ex: Pagamento de fornecedor" className="h-10" />
             </div>
             <ReceiptUpload target="sangria" file={sangriaForm.receipt} />
-            <Button className="w-full h-11 bg-yellow-500 hover:bg-yellow-600 text-black font-bold" onClick={handleSangria} disabled={loading || !sangriaForm.amount || !sangriaForm.receipt}>
+            <Button className="w-full h-11 bg-yellow-500 hover:bg-yellow-600 text-black font-bold" onClick={handleSangria}
+              disabled={loading || !sangriaForm.amount || !sangriaForm.receipt}>
               {loading ? "Registrando..." : "Confirmar Sangria"}
             </Button>
           </div>
