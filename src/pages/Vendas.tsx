@@ -139,7 +139,7 @@ const Vendas = () => {
     const { data } = await supabase.from("sales").select("*")
       .or(`customer_id.eq.${c.id},customer_phone.eq.${c.phone ?? ""}`)
       .order("created_at", { ascending: false }).limit(5);
-    setCustomerSalesHistory((data as Sale[]) ?? []);
+    setCustomerSalesHistory((data as unknown as Sale[]) ?? []);
   };
 
   const clearCustomer = () => {
