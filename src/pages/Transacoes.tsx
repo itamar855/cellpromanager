@@ -14,20 +14,28 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, ArrowUpDown, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Plus, ArrowUpDown, ArrowUpRight, ArrowDownRight, Tag } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
 const typeLabels: Record<string, string> = {
-  sale: "Venda", expense_pj: "PJ", expense_pf: "PF", income: "Receita", pro_labore: "Pro-labore", transfer: "Transferência",
+  sale: "Venda", expense_pj: "Gasto PJ", expense_pf: "Gasto PF", income: "Receita", pro_labore: "Pro-labore", transfer: "Transferência",
 };
+
 const typeColors: Record<string, string> = {
   sale: "bg-primary/15 text-primary", income: "bg-primary/15 text-primary",
-  expense_pj: "bg-accent/15 text-accent", expense_pf: "bg-destructive/15 text-destructive",
-  pro_labore: "bg-destructive/15 text-destructive", transfer: "bg-blue-500/15 text-blue-500",
+  expense_pj: "bg-orange-500/15 text-orange-500", expense_pf: "bg-destructive/15 text-destructive",
+  pro_labore: "bg-violet-500/15 text-violet-500", transfer: "bg-blue-500/15 text-blue-500",
 };
+
+const TRANSACTION_CATEGORIES = [
+  "Alimentação", "Moradia (Aluguel/Luz)", "Transporte/Combustível", "Lazer/Viagens", 
+  "Saúde", "Educação", "Vestuário", "Investimentos", "Pro-labore", 
+  "Software/Ferramentas", "Marketing", "Estoque/Peças", "Manutenção", 
+  "Impostos/Taxas", "Tarifas Bancárias", "Outros"
+];
 
 const Transacoes = () => {
   const { user } = useAuth();
@@ -69,6 +77,7 @@ const Transacoes = () => {
       expected_settlement_date: new Date().toISOString(),
       reconciled: false,
     } as any);
+    
     if (error) { toast.error(error.message); }
     else {
       toast.success("Transação registrada!");
@@ -95,7 +104,7 @@ const Transacoes = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="font-display text-xl md:text-3xl font-bold tracking-tight">Transações</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Entradas e saídas</p>
+          <p className="text-muted-foreground text-sm mt-0.5">Histórico financeiro completo</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
@@ -105,36 +114,38 @@ const Transacoes = () => {
             <DialogHeader>
               <DialogTitle className="font-display">Registrar Transação</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-3">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <Label className="text-xs">Tipo</Label>
+                <Label className="text-xs font-semibold">Tipo de Movimentação</Label>
                 <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })}>
                   <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="sale">💰 Venda</SelectItem>
-                    <SelectItem value="income">📈 Receita</SelectItem>
-                    <SelectItem value="expense_pj">🏢 Gasto PJ</SelectItem>
-                    <SelectItem value="expense_pf">🧑 Gasto PF</SelectItem>
-                    <SelectItem value="pro_labore">💼 Pro-labore</SelectItem>
-                    <SelectItem value="transfer">🔄 Transferência</SelectItem>
+                    <SelectItem value="income">📈 Receita Extra</SelectItem>
+                    <SelectItem value="expense_pj">🏢 Gasto Loja (PJ)</SelectItem>
+                    <SelectItem value="expense_pf">🧑 Gasto Pessoal (PF)</SelectItem>
+                    <SelectItem value="pro_labore">💼 Retirada Pró-labore</SelectItem>
+                    <SelectItem value="transfer">🔄 Transferência entre Contas</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Valor (R$)</Label>
+                <Label className="text-xs font-semibold">Valor (R$)</Label>
                 <Input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0.00" required className="h-10" />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Descrição</Label>
-                <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Ex: Venda iPhone 13" className="min-h-[70px]" />
-              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Categoria</Label>
-                  <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="Alimentação" className="h-10" />
+                  <Label className="text-xs font-semibold flex items-center gap-1"><Tag className="h-3 w-3" /> Categoria</Label>
+                  <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
+                    <SelectTrigger className="h-10"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      {TRANSACTION_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Loja</Label>
+                  <Label className="text-xs font-semibold">Loja Responsável</Label>
                   <Select value={form.store_id} onValueChange={(v) => setForm({ ...form, store_id: v })}>
                     <SelectTrigger className="h-10"><SelectValue placeholder="Opcional" /></SelectTrigger>
                     <SelectContent>
@@ -143,22 +154,27 @@ const Transacoes = () => {
                   </Select>
                 </div>
               </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Descrição / Detalhes</Label>
+                <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Para onde foi esse dinheiro?" className="min-h-[80px]" />
+              </div>
               
               {form.type === "transfer" ? (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3 p-3 rounded-lg bg-muted/50 border border-border">
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Conta Origem (Saiu)</Label>
+                    <Label className="text-xs font-semibold">Sai do Banco</Label>
                     <Select value={form.source_account_id} onValueChange={(v) => setForm({ ...form, source_account_id: v })}>
-                      <SelectTrigger className="h-10"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                      <SelectTrigger className="h-10 bg-background"><SelectValue placeholder="Origem" /></SelectTrigger>
                       <SelectContent>
                         {accounts.map((a) => (<SelectItem key={a.id} value={a.id}>{a.bank_name}</SelectItem>))}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Conta Destino (Entrou)</Label>
+                    <Label className="text-xs font-semibold">Entra no Banco</Label>
                     <Select value={form.destination_account_id} onValueChange={(v) => setForm({ ...form, destination_account_id: v })}>
-                      <SelectTrigger className="h-10"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                      <SelectTrigger className="h-10 bg-background"><SelectValue placeholder="Destino" /></SelectTrigger>
                       <SelectContent>
                         {accounts.map((a) => (<SelectItem key={a.id} value={a.id}>{a.bank_name}</SelectItem>))}
                       </SelectContent>
@@ -167,17 +183,17 @@ const Transacoes = () => {
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Conta Vinculada</Label>
+                  <Label className="text-xs font-semibold">Conta Bancária Afetada</Label>
                   <Select value={isIncome(form.type) ? form.destination_account_id : form.source_account_id} onValueChange={(v) => setForm({ ...form, [isIncome(form.type) ? "destination_account_id" : "source_account_id"]: v })}>
                     <SelectTrigger className="h-10"><SelectValue placeholder="Opcional" /></SelectTrigger>
                     <SelectContent>
-                      {accounts.map((a) => (<SelectItem key={a.id} value={a.id}>{a.bank_name}</SelectItem>))}
+                      {accounts.map((a) => (<SelectItem key={a.id} value={a.id}>{a.bank_name} ({a.owner_type || 'PJ'})</SelectItem>))}
                     </SelectContent>
                   </Select>
                 </div>
               )}
-              <Button type="submit" className="w-full h-11 font-semibold" disabled={loading}>
-                {loading ? "Salvando..." : "Registrar"}
+              <Button type="submit" className="w-full h-11 font-bold shadow-lg" disabled={loading}>
+                {loading ? "Processando..." : "Confirmar Lançamento"}
               </Button>
             </form>
           </DialogContent>
@@ -185,49 +201,56 @@ const Transacoes = () => {
       </div>
 
       <div className="space-y-2">
-        {transactions.length > 0 ? (
-          transactions.map((tx) => (
-            <Card key={tx.id} className="border-border/50 shadow-lg shadow-black/10">
-              <CardContent className="p-3.5 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className={`rounded-lg p-2 shrink-0 ${tx.type === "transfer" ? "bg-blue-500/15" : isIncome(tx.type) ? "bg-primary/15" : "bg-destructive/15"}`}>
-                    {tx.type === "transfer" ? <ArrowUpDown className="h-4 w-4 text-blue-500" /> : isIncome(tx.type) ? <ArrowUpRight className="h-4 w-4 text-primary" /> : <ArrowDownRight className="h-4 w-4 text-destructive" />}
+        {transactions.map((tx) => (
+          <Card key={tx.id} className="border-border/50 shadow-sm overflow-hidden group hover:border-primary/30 transition-colors">
+            <CardContent className="p-3.5 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`rounded-lg p-2.5 shrink-0 shadow-inner ${
+                  tx.type === "transfer" ? "bg-blue-500/10 text-blue-500" : 
+                  isIncome(tx.type) ? "bg-primary/10 text-primary" : 
+                  tx.type === 'expense_pf' ? "bg-destructive/10 text-destructive" :
+                  "bg-orange-500/10 text-orange-500"
+                }`}>
+                  {tx.type === "transfer" ? <ArrowUpDown className="h-4 w-4" /> : isIncome(tx.type) ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-sm truncate">{tx.description || tx.category || typeLabels[tx.type]}</p>
+                    {tx.category && <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-normal text-muted-foreground">{tx.category}</Badge>}
                   </div>
-                  <div className="min-w-0">
-                    <p className="font-medium text-sm truncate">
-                      {tx.description || typeLabels[tx.type]}
-                    </p>
-                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      <Badge className={`text-[10px] px-1.5 py-0 ${typeColors[tx.type]}`}>
-                        {typeLabels[tx.type]}
-                      </Badge>
-                      {tx.source_account_id && <span className="text-[10px] text-muted-foreground line-clamp-1 border-r pr-1.5">Origem: {accountMap.get(tx.source_account_id)}</span>}
-                      {tx.destination_account_id && <span className="text-[10px] text-muted-foreground line-clamp-1 border-r pr-1.5">Destino: {accountMap.get(tx.destination_account_id)}</span>}
-                      {tx.store_id && <span className="text-[10px] text-muted-foreground border-r pr-1.5">{storeMap.get(tx.store_id)}</span>}
-                      <span className="text-[10px] text-muted-foreground">{new Date(tx.created_at).toLocaleDateString("pt-BR")}</span>
-                    </div>
+                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                    <Badge className={`text-[10px] px-1.5 py-0 h-4 font-medium rounded-sm border-0 ${typeColors[tx.type]}`}>
+                      {typeLabels[tx.type]}
+                    </Badge>
+                    {(tx.source_account_id || tx.destination_account_id) && (
+                      <span className="text-[10px] text-muted-foreground bg-muted/50 px-1 rounded flex items-center gap-1">
+                        {tx.source_account_id ? accountMap.get(tx.source_account_id) : ""} 
+                        {tx.source_account_id && tx.destination_account_id ? " → " : ""}
+                        {tx.destination_account_id ? accountMap.get(tx.destination_account_id) : ""}
+                      </span>
+                    )}
+                    <span className="text-[10px] text-muted-foreground ml-auto">{new Date(tx.created_at).toLocaleDateString("pt-BR")}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <p className={`font-display font-bold text-sm text-right ${tx.type === "transfer" ? "text-blue-500" : isIncome(tx.type) ? "text-primary" : "text-destructive"}`}>
-                    {tx.type === "transfer" ? "" : isIncome(tx.type) ? "+" : "-"}{formatCurrency(Number(tx.amount))}
-                  </p>
-                  <Button className={`h-8 w-24 text-[11px] font-medium border ${(tx as any).reconciled ? "bg-green-600 hover:bg-green-700 text-white border-green-600" : "bg-transparent text-foreground border-input hover:bg-accent hover:text-accent-foreground"}`} onClick={() => handleReconcile(tx.id, (tx as any).reconciled)}>
-                    {(tx as any).reconciled ? "Conciliado" : "Conciliar"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        ) : (
-          <Card className="border-border/50">
-            <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-              <ArrowUpDown className="h-10 w-10 mb-3 opacity-30" />
-              <p className="font-medium text-sm">Nenhuma transação</p>
-              <p className="text-xs mt-1">Registre sua primeira transação</p>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <p className={`font-display font-bold text-sm text-right ${tx.type === "transfer" ? "text-blue-500" : isIncome(tx.type) ? "text-primary" : "text-destructive"}`}>
+                  {tx.type === "transfer" ? "" : isIncome(tx.type) ? "+" : "-"}{formatCurrency(Number(tx.amount))}
+                </p>
+                <button 
+                  onClick={() => handleReconcile(tx.id, tx.reconciled || false)}
+                  className={`h-7 px-2 rounded text-[10px] font-bold border transition-all ${
+                    tx.reconciled 
+                      ? "bg-green-500/10 text-green-600 border-green-500/20" 
+                      : "bg-transparent text-muted-foreground border-border hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  {tx.reconciled ? "CONCILIADO" : "PENDENTE"}
+                </button>
+              </div>
             </CardContent>
           </Card>
-        )}
+        ))}
       </div>
     </div>
   );
