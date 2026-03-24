@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -56,7 +56,7 @@ export function OsParts({ orderId, storeId, readonly = false }: OsPartsProps) {
         .eq("service_order_id", orderId);
 
       if (itemsError) throw itemsError;
-      setItems(itemsData || []);
+      setItems((itemsData as unknown as ServiceOrderItem[]) || []);
 
       // Fetch available parts in stock for this store
       if (!readonly && storeId) {
@@ -187,8 +187,7 @@ export function OsParts({ orderId, storeId, readonly = false }: OsPartsProps) {
             </Select>
           </div>
           <Button 
-            size="sm" 
-            className="h-8 shrink-0" 
+            className="h-8 shrink-0 px-3" 
             onClick={handleAddPart} 
             disabled={!selectedProductId || selectedProductId === "none" || adding}
           >
@@ -213,9 +212,7 @@ export function OsParts({ orderId, storeId, readonly = false }: OsPartsProps) {
               
               {!readonly && (
                 <Button 
-                  size="icon" 
-                  variant="ghost" 
-                  className="h-6 w-6 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="h-6 w-6 p-0 text-destructive bg-transparent hover:bg-destructive/10 border-0 opacity-0 group-hover:opacity-100 transition-opacity"
                   onClick={() => handleRemovePart(item.id, item.product_id)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />

@@ -87,7 +87,7 @@ const Caixa = () => {
   const fetchData = async () => {
     if (user) {
       const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).single();
-      if (profile) setUserRole(profile.role);
+      if (profile) setUserRole((profile as any).role);
     }
     const { data: storesData } = await supabase.from("stores").select("*");
     setStores(storesData ?? []);
@@ -310,7 +310,7 @@ const Caixa = () => {
         <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
           <CheckCircle className="h-4 w-4 text-primary shrink-0" />
           <p className="text-xs text-primary truncate flex-1">{file.name}</p>
-          <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => {
+          <Button className="h-6 text-[10px] bg-transparent text-foreground hover:bg-muted border-0 shadow-none px-2" onClick={() => {
             if (target === "open")    setOpenForm(f => ({ ...f, receipt: null }));
             if (target === "close")   setCloseForm(f => ({ ...f, receipt: null }));
             if (target === "confirm") setConfirmFile(null);

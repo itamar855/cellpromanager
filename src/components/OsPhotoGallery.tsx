@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -34,7 +34,7 @@ export function OsPhotoGallery({ orderId, readonly = false }: OsPhotoGalleryProp
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setPhotos(data || []);
+      setPhotos((data as unknown as Photo[]) || []);
     } catch (error) {
       console.error("Error fetching photos:", error);
     } finally {
@@ -196,9 +196,7 @@ export function OsPhotoGallery({ orderId, readonly = false }: OsPhotoGalleryProp
               {!readonly && (
                 <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <Button 
-                    size="icon" 
-                    variant="destructive" 
-                    className="h-6 w-6 rounded-full shadow-lg"
+                    className="h-6 w-6 p-0 bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-full shadow-lg"
                     onClick={(e) => { e.stopPropagation(); handleDelete(photo.id, photo.photo_url); }}
                   >
                     <Trash2 className="h-3 w-3" />

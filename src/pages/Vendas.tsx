@@ -105,7 +105,7 @@ const Vendas = () => {
       supabase.from("customers").select("*").order("name"),
       supabase.from("store_bank_accounts").select("*"),
     ]);
-    setSales((salesRes.data as Sale[]) ?? []);
+    setSales((salesRes.data as unknown as Sale[]) ?? []);
     setProducts(productsRes.data ?? []);
     setStores(storesRes.data ?? []);
     setAccessories((accRes.data as unknown as Accessory[]) ?? []);
