@@ -504,13 +504,19 @@ export type Database = {
           agency: string | null
           bank_name: string
           created_at: string
+          credit_fee_percent: number | null
+          credit_settlement_days: number | null
+          debit_fee_percent: number | null
+          debit_settlement_days: number | null
           holder_cpf_cnpj: string | null
           holder_name: string | null
           id: string
           is_cashbox: boolean | null
           is_primary: boolean | null
           owner_type: string | null
+          pix_fee_percent: number | null
           pix_key: string | null
+          pix_settlement_days: number | null
           store_id: string
           updated_at: string
         }
@@ -520,13 +526,19 @@ export type Database = {
           agency?: string | null
           bank_name: string
           created_at?: string
+          credit_fee_percent?: number | null
+          credit_settlement_days?: number | null
+          debit_fee_percent?: number | null
+          debit_settlement_days?: number | null
           holder_cpf_cnpj?: string | null
           holder_name?: string | null
           id?: string
           is_cashbox?: boolean | null
           is_primary?: boolean | null
           owner_type?: string | null
+          pix_fee_percent?: number | null
           pix_key?: string | null
+          pix_settlement_days?: number | null
           store_id: string
           updated_at?: string
         }
@@ -536,13 +548,19 @@ export type Database = {
           agency?: string | null
           bank_name?: string
           created_at?: string
+          credit_fee_percent?: number | null
+          credit_settlement_days?: number | null
+          debit_fee_percent?: number | null
+          debit_settlement_days?: number | null
           holder_cpf_cnpj?: string | null
           holder_name?: string | null
           id?: string
           is_cashbox?: boolean | null
           is_primary?: boolean | null
           owner_type?: string | null
+          pix_fee_percent?: number | null
           pix_key?: string | null
+          pix_settlement_days?: number | null
           store_id?: string
           updated_at?: string
         }
@@ -590,13 +608,15 @@ export type Database = {
           created_at: string
           created_by: string
           description: string | null
-          id: string
-          product_id: string | null
-          source_account_id: string | null
           destination_account_id: string | null
+          expected_settlement_date: string | null
+          id: string
+          net_amount: number | null
+          product_id: string | null
+          reconciled: boolean | null
+          source_account_id: string | null
           store_id: string | null
           type: string
-          reconciled: boolean | null
         }
         Insert: {
           amount: number
@@ -604,13 +624,15 @@ export type Database = {
           created_at?: string
           created_by: string
           description?: string | null
-          id?: string
-          product_id?: string | null
-          source_account_id?: string | null
           destination_account_id?: string | null
+          expected_settlement_date?: string | null
+          id?: string
+          net_amount?: number | null
+          product_id?: string | null
+          reconciled?: boolean | null
+          source_account_id?: string | null
           store_id?: string | null
           type: string
-          reconciled?: boolean | null
         }
         Update: {
           amount?: number
@@ -618,13 +640,15 @@ export type Database = {
           created_at?: string
           created_by?: string
           description?: string | null
-          id?: string
-          product_id?: string | null
-          source_account_id?: string | null
           destination_account_id?: string | null
+          expected_settlement_date?: string | null
+          id?: string
+          net_amount?: number | null
+          product_id?: string | null
+          reconciled?: boolean | null
+          source_account_id?: string | null
           store_id?: string | null
           type?: string
-          reconciled?: boolean | null
         }
         Relationships: [
           {

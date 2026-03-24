@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { logAction } from "@/utils/auditLogger";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
   Plus, Store, MapPin, Landmark, Trash2, FileText, Phone,
-  Instagram, Globe, Upload, CheckCircle, Building2, Camera,
+  Upload, CheckCircle, Building, Camera,
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -35,6 +36,9 @@ type BankAccount = {
   id: string; store_id: string; bank_name: string; account_type: string;
   agency: string | null; account_number: string | null; pix_key: string | null;
   holder_name: string | null; holder_cpf_cnpj: string | null; is_primary: boolean;
+  credit_fee_percent?: number | null; credit_settlement_days?: number | null;
+  debit_fee_percent?: number | null; debit_settlement_days?: number | null;
+  pix_fee_percent?: number | null; pix_settlement_days?: number | null;
 };
 
 type StoreDetails = {
@@ -61,6 +65,10 @@ const Lojas = () => {
   const [bankForm, setBankForm] = useState({
     bank_name: "", account_type: "corrente", agency: "", account_number: "",
     pix_key: "", holder_name: "", holder_cpf_cnpj: "", is_primary: false,
+    owner_type: "PJ",
+    credit_fee_percent: "0", credit_settlement_days: "30",
+    debit_fee_percent: "0", debit_settlement_days: "1",
+    pix_fee_percent: "0", pix_settlement_days: "0"
   });
   const [detailsForm, setDetailsForm] = useState<StoreDetails>(emptyDetails);
 
@@ -89,6 +97,7 @@ const Lojas = () => {
     if (error) toast.error(error.message);
     else {
       toast.success("Loja cadastrada!");
+      logAction("CREATE_RECORD", "stores", null, null, { name: form.name, address: form.address, status: form.status });
       setDialogOpen(false);
       setForm({ name: "", address: "", status: "active" });
       fetchData();
@@ -106,13 +115,21 @@ const Lojas = () => {
       account_type: bankForm.account_type, agency: bankForm.agency || null,
       account_number: bankForm.account_number || null, pix_key: bankForm.pix_key || null,
       holder_name: bankForm.holder_name || null, holder_cpf_cnpj: bankForm.holder_cpf_cnpj || null,
+      owner_type: bankForm.owner_type,
       is_primary: bankForm.is_primary,
+      credit_fee_percent: parseFloat(bankForm.credit_fee_percent) || 0,
+      credit_settlement_days: parseInt(bankForm.credit_settlement_days) || 30,
+      debit_fee_percent: parseFloat(bankForm.debit_fee_percent) || 0,
+      debit_settlement_days: parseInt(bankForm.debit_settlement_days) || 1,
+      pix_fee_percent: parseFloat(bankForm.pix_fee_percent) || 0,
+      pix_settlement_days: parseInt(bankForm.pix_settlement_days) || 0,
     } as any);
     if (error) toast.error(error.message);
     else {
       toast.success("Conta cadastrada!");
+      logAction("CREATE_RECORD", "store_bank_accounts", null, null, { ...bankForm, store_id: selectedStoreId });
       setBankDialogOpen(false);
-      setBankForm({ bank_name: "", account_type: "corrente", agency: "", account_number: "", pix_key: "", holder_name: "", holder_cpf_cnpj: "", is_primary: false });
+      setBankForm({ bank_name: "", account_type: "corrente", agency: "", account_number: "", pix_key: "", holder_name: "", holder_cpf_cnpj: "", is_primary: false, owner_type: "PJ", credit_fee_percent: "0", credit_settlement_days: "30", debit_fee_percent: "0", debit_settlement_days: "1", pix_fee_percent: "0", pix_settlement_days: "0" });
       fetchData();
     }
     setLoading(false);
@@ -120,8 +137,12 @@ const Lojas = () => {
 
   const deleteBankAccount = async (id: string) => {
     const { error } = await supabase.from("store_bank_accounts").delete().eq("id", id);
-    if (error) toast.error(error.message);
-    else { toast.success("Conta removida!"); fetchData(); }
+    if (error) toast.error("Erro: " + error.message);
+    else {
+      toast.success("Conta removida!");
+      logAction("DELETE_RECORD", "store_bank_accounts", id, { id }, null);
+      fetchData();
+    }
   };
 
   // ── Detalhes da loja ──────────────────────────────────────────────────────
@@ -250,11 +271,11 @@ const Lojas = () => {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    <Badge variant="outline" className={`text-[10px] ${statusColors[store.status]}`}>
+                    <Badge className={`text-[10px] ${statusColors[store.status]}`}>
                       {statusLabels[store.status]}
                     </Badge>
                     {hasDetails && (
-                      <Badge variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/20 gap-1">
+                      <Badge className="text-[9px] bg-primary/10 text-primary border-primary/20 gap-1">
                         <CheckCircle className="h-2.5 w-2.5" /> PDF configurado
                       </Badge>
                     )}
@@ -267,16 +288,6 @@ const Lojas = () => {
                     {store.phone && (
                       <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
                         <Phone className="h-3 w-3" /> {store.phone}
-                      </span>
-                    )}
-                    {store.instagram && (
-                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <Instagram className="h-3 w-3" /> {store.instagram}
-                      </span>
-                    )}
-                    {store.website && (
-                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <Globe className="h-3 w-3" /> {store.website}
                       </span>
                     )}
                   </div>
@@ -298,7 +309,7 @@ const Lojas = () => {
                     <div className="flex items-center justify-between">
                       <p className="text-[10px] text-muted-foreground">{accounts.length} conta(s) cadastrada(s)</p>
                       {isAdmin && (
-                        <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2"
+                        <Button className="h-6 text-[10px] px-2 bg-transparent text-primary hover:bg-primary/10"
                           onClick={() => { setSelectedStoreId(store.id); setBankDialogOpen(true); }}>
                           <Plus className="h-3 w-3 mr-1" /> Adicionar
                         </Button>
@@ -309,14 +320,19 @@ const Lojas = () => {
                         <div className="flex items-center justify-between">
                           <p className="font-medium">{acc.bank_name} ({acc.account_type})</p>
                           {isAdmin && (
-                            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => deleteBankAccount(acc.id)}>
-                              <Trash2 className="h-3 w-3 text-destructive" />
+                            <Button className="h-5 w-5 bg-transparent p-0 hover:bg-destructive/10" onClick={() => deleteBankAccount(acc.id)}>
+                               <Trash2 className="h-3 w-3 text-destructive" />
                             </Button>
                           )}
                         </div>
                         {acc.agency && <p className="text-muted-foreground">Ag: {acc.agency} · CC: {acc.account_number}</p>}
                         {acc.pix_key && <p className="text-muted-foreground">PIX: {acc.pix_key}</p>}
                         {acc.holder_name && <p className="text-muted-foreground">{acc.holder_name}</p>}
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">Crédito: {acc.credit_fee_percent}% em {acc.credit_settlement_days}d</span>
+                          <span className="text-[10px] bg-accent/10 text-accent px-1.5 py-0.5 rounded">Débito: {acc.debit_fee_percent}% em {acc.debit_settlement_days}d</span>
+                          <span className="text-[10px] bg-blue-500/10 text-blue-500 px-1.5 py-0.5 rounded">Pix: {acc.pix_fee_percent}% em {acc.pix_settlement_days}d</span>
+                        </div>
                       </div>
                     )) : (
                       <p className="text-[11px] text-muted-foreground">Nenhuma conta cadastrada</p>
@@ -338,9 +354,9 @@ const Lojas = () => {
                       <p className="text-[11px] text-muted-foreground">Nenhum detalhe configurado</p>
                     )}
                     {isAdmin && (
-                      <Button variant="outline" size="sm" className="w-full mt-2 h-8 text-xs gap-1.5"
+                      <Button className="w-full mt-2 h-8 text-xs gap-1.5 bg-transparent border border-primary/20 text-primary hover:bg-primary/10"
                         onClick={() => openDetailsDialog(store)}>
-                        <Building2 className="h-3.5 w-3.5" />
+                        <Building className="h-3.5 w-3.5" />
                         {store.cnpj || store.phone ? "Editar Detalhes" : "Configurar Detalhes do PDF"}
                       </Button>
                     )}
@@ -362,18 +378,31 @@ const Lojas = () => {
 
       {/* ── Dialog Conta Bancária ─────────────────────────────────────────── */}
       <Dialog open={bankDialogOpen} onOpenChange={setBankDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-display">Cadastrar Conta Bancária</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleBankSubmit} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Tipo de Conta</Label>
+              <Select value={bankForm.owner_type} onValueChange={(v) => setBankForm({ ...bankForm, owner_type: v })}>
+                <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PJ">🏢 Empresarial (PJ) — vinculada à loja</SelectItem>
+                  <SelectItem value="PF">👤 Pessoal (PF) — minha conta particular</SelectItem>
+                </SelectContent>
+              </Select>
+              {bankForm.owner_type === "PF" && (
+                <p className="text-[10px] text-muted-foreground">Contas PF aparecem apenas na aba Pessoal do painel Contas.</p>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">Banco</Label>
                 <Input value={bankForm.bank_name} onChange={(e) => setBankForm({ ...bankForm, bank_name: e.target.value })} placeholder="Nubank, Itaú..." required className="h-10" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Tipo</Label>
+                <Label className="text-xs">Tipo de Conta</Label>
                 <Select value={bankForm.account_type} onValueChange={(v) => setBankForm({ ...bankForm, account_type: v })}>
                   <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -401,11 +430,43 @@ const Lojas = () => {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">Titular</Label>
-                <Input value={bankForm.holder_name} onChange={(e) => setBankForm({ ...bankForm, holder_name: e.target.value })} placeholder="Nome do titular" className="h-10" />
+                <Input value={bankForm.holder_name} onChange={(e) => setBankForm({ ...bankForm, holder_name: e.target.value })} placeholder="Nome do titular" className="h-9" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">CPF/CNPJ</Label>
-                <Input value={bankForm.holder_cpf_cnpj} onChange={(e) => setBankForm({ ...bankForm, holder_cpf_cnpj: e.target.value })} placeholder="000.000.000-00" className="h-10" />
+                <Input value={bankForm.holder_cpf_cnpj} onChange={(e) => setBankForm({ ...bankForm, holder_cpf_cnpj: e.target.value })} placeholder="000.000.000-00" className="h-9" />
+              </div>
+            </div>
+            
+            <p className="text-xs font-semibold text-primary mt-4 pt-2 border-t border-border">Configuração da Maquininha / Taxas</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Crédito - Taxa (%)</Label>
+                <Input type="number" step="0.01" value={bankForm.credit_fee_percent} onChange={(e) => setBankForm({ ...bankForm, credit_fee_percent: e.target.value })} className="h-9" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Crédito - Recebimento (Dias)</Label>
+                <Input type="number" value={bankForm.credit_settlement_days} onChange={(e) => setBankForm({ ...bankForm, credit_settlement_days: e.target.value })} className="h-9" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Débito - Taxa (%)</Label>
+                <Input type="number" step="0.01" value={bankForm.debit_fee_percent} onChange={(e) => setBankForm({ ...bankForm, debit_fee_percent: e.target.value })} className="h-9" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Débito - Recebimento (Dias)</Label>
+                <Input type="number" value={bankForm.debit_settlement_days} onChange={(e) => setBankForm({ ...bankForm, debit_settlement_days: e.target.value })} className="h-9" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Pix - Taxa (%)</Label>
+                <Input type="number" step="0.01" value={bankForm.pix_fee_percent} onChange={(e) => setBankForm({ ...bankForm, pix_fee_percent: e.target.value })} className="h-9" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Pix - Recebimento (Dias)</Label>
+                <Input type="number" value={bankForm.pix_settlement_days} onChange={(e) => setBankForm({ ...bankForm, pix_settlement_days: e.target.value })} className="h-9" />
               </div>
             </div>
             <Button type="submit" className="w-full h-11 font-semibold" disabled={loading}>
@@ -441,11 +502,11 @@ const Lojas = () => {
                     <p className="text-xs text-primary font-medium">Logo carregada</p>
                     <p className="text-[10px] text-muted-foreground truncate">{detailsForm.logo_url}</p>
                   </div>
-                  <Button variant="ghost" size="sm" className="h-7 text-[10px]"
+                  <Button className="h-7 text-[10px] bg-transparent text-primary hover:bg-primary/10"
                     onClick={() => setDetailsForm(f => ({ ...f, logo_url: "" }))}>Remover</Button>
                 </div>
               ) : (
-                <Button variant="outline" className="w-full h-10 gap-2 text-xs" onClick={() => logoInputRef.current?.click()} disabled={logoUploading}>
+                <Button className="w-full h-10 gap-2 text-xs bg-transparent border border-border hover:bg-muted" onClick={() => logoInputRef.current?.click()} disabled={logoUploading}>
                   {logoUploading ? (
                     <><div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" /> Enviando...</>
                   ) : (
@@ -458,7 +519,7 @@ const Lojas = () => {
             {/* Dados da empresa */}
             <div className="space-y-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                <Building2 className="h-3 w-3" /> Dados da Empresa
+                <Building className="h-3 w-3" /> Dados da Empresa
               </p>
               <div className="space-y-1.5">
                 <Label className="text-xs">CNPJ</Label>
@@ -479,12 +540,12 @@ const Lojas = () => {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs flex items-center gap-1"><Instagram className="h-3 w-3" /> Instagram</Label>
+                  <Label className="text-xs flex items-center gap-1">Instagram</Label>
                   <Input value={detailsForm.instagram} onChange={e => setDetailsForm(f => ({ ...f, instagram: e.target.value }))}
                     placeholder="@suaassistencia" className="h-10" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs flex items-center gap-1"><Globe className="h-3 w-3" /> Site</Label>
+                  <Label className="text-xs flex items-center gap-1">Site</Label>
                   <Input value={detailsForm.website} onChange={e => setDetailsForm(f => ({ ...f, website: e.target.value }))}
                     placeholder="www.suaassistencia.com.br" className="h-10" />
                 </div>

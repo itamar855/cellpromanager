@@ -27,6 +27,7 @@ import { OsPhotoGallery } from "@/components/OsPhotoGallery";
 import { OsParts } from "@/components/OsParts";
 import { Printer } from "lucide-react";
 import { triggerWebhook } from "@/utils/webhookSender";
+import { logAction } from "@/utils/auditLogger";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -390,6 +391,7 @@ const OrdensServico = () => {
         old_status: oldStatus,
         new_status: newStatus,
       });
+      logAction("UPDATE_OS_STATUS", "service_orders", orderId, { status: oldStatus }, { status: newStatus });
     }
 
     await supabase.from("service_order_history").insert({
@@ -697,11 +699,11 @@ const OrdensServico = () => {
 
       {/* Status chips */}
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-        <Button variant={filterStatus === "all" ? "default" : "outline"} size="sm" className="h-7 text-xs shrink-0" onClick={() => setFilterStatus("all")}>
+        <Button className={`h-7 px-3 text-xs shrink-0 ${filterStatus === "all" ? "bg-primary text-primary-foreground" : "bg-transparent border border-border text-foreground hover:bg-muted"}`} onClick={() => setFilterStatus("all")}>
           Todas ({orders.length})
         </Button>
         {allStatuses.filter((s) => statusCounts[s]).map((s) => (
-          <Button key={s} variant={filterStatus === s ? "default" : "outline"} size="sm" className="h-7 text-xs shrink-0" onClick={() => setFilterStatus(s)}>
+          <Button key={s} className={`h-7 px-3 text-xs shrink-0 ${filterStatus === s ? "bg-primary text-primary-foreground" : "bg-transparent border border-border text-foreground hover:bg-muted"}`} onClick={() => setFilterStatus(s)}>
             {statusConfig[s].label} ({statusCounts[s]})
           </Button>
         ))}
@@ -713,7 +715,7 @@ const OrdensServico = () => {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nome, IMEI, modelo ou nº da OS..." className="pl-9 h-10" />
         </div>
-        <Button variant="outline" className="h-10 px-4 shrink-0 transition-colors" onClick={() => setViewMode(v => v === "list" ? "kanban" : "list")}>
+        <Button className={`px-4 h-10 border text-xs gap-2 ${viewMode === "list" ? "bg-primary text-primary-foreground" : "bg-transparent text-foreground hover:bg-muted"}`} onClick={() => setViewMode(v => v === "list" ? "kanban" : "list")}>
           {viewMode === "list" ? "Ver Kanban" : "Ver Lista"}
         </Button>
       </div>
@@ -731,7 +733,7 @@ const OrdensServico = () => {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs text-muted-foreground font-mono">#{order.order_number}</span>
                       <p className="font-medium text-sm truncate">{order.customer_name}</p>
-                      <Badge variant="outline" className={`text-[10px] ${sc.color}`}>{sc.label}</Badge>
+                      <Badge className={`text-[10px] border ${sc.color}`}>{sc.label}</Badge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {order.device_brand} {order.device_model}{order.device_imei && ` · ${order.device_imei}`}
@@ -788,21 +790,23 @@ const OrdensServico = () => {
                 {/* Status + ações */}
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="outline" className={statusConfig[detailOrder.status]?.color}>
+                    <Badge className={`text-[10px] border ${statusConfig[detailOrder.status]?.color}`}>
                       {statusConfig[detailOrder.status]?.label}
                     </Badge>
                     <span className="text-xs text-muted-foreground">{new Date(detailOrder.created_at).toLocaleString("pt-BR")}</span>
                   </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs font-semibold hover:border-blue-500/50 hover:text-blue-500" onClick={() => handleExportThermal(detailOrder)} disabled={pdfLoading}>
-                      <Printer className="h-3.5 w-3.5" /> 80mm
+                  <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+                    <Button className="h-8 px-3 text-[10px] gap-1 border bg-transparent text-foreground hover:bg-muted"
+                      onClick={() => handleExportPdf(detailOrder)} disabled={pdfLoading}>
+                      <FileText className="h-3 w-3" /> PDF A4
                     </Button>
-                    <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => handleExportPdf(detailOrder)} disabled={pdfLoading}>
-                      <FileText className="h-3.5 w-3.5" /> A4
+                    <Button className="h-8 px-3 text-[10px] gap-1 border bg-transparent text-foreground hover:bg-muted"
+                      onClick={() => handleExportThermal(detailOrder)} disabled={pdfLoading}>
+                      <Printer className="h-3 w-3" /> Cupom 80mm
                     </Button>
-                    <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs text-green-500 border-green-500/30 hover:bg-green-500/10"
+                    <Button className="h-8 px-3 text-[10px] gap-1 border bg-transparent text-green-500 border-green-500/30 hover:bg-green-500/10"
                       onClick={() => handleSendWhatsApp(detailOrder)} disabled={pdfLoading}>
-                      <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+                      <MessageCircle className="h-3 w-3" /> WhatsApp
                     </Button>
                   </div>
                 </div>
@@ -810,7 +814,7 @@ const OrdensServico = () => {
                 {/* Link público */}
                 <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2">
                   <span className="text-[10px] text-muted-foreground flex-1 truncate">{getPublicUrl(detailOrder.id)}</span>
-                  <Button size="sm" variant="ghost" className="h-6 text-[10px]"
+                  <Button className="h-6 text-[10px] bg-transparent hover:bg-muted"
                     onClick={() => { navigator.clipboard.writeText(getPublicUrl(detailOrder.id)); toast.success("Link copiado!"); }}>
                     Copiar
                   </Button>
@@ -983,7 +987,7 @@ const OrdensServico = () => {
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Atualizar Status</p>
                     <div className="flex flex-wrap gap-2">
                       {allStatuses.filter((s) => s !== detailOrder.status).map((s) => (
-                        <Button key={s} variant="outline" size="sm" className="text-xs h-8"
+                        <Button key={s} className="text-xs h-8 bg-transparent border border-border text-foreground hover:bg-muted"
                           onClick={() => updateStatus(detailOrder.id, s, detailOrder.status)}>
                           {statusConfig[s].label}
                         </Button>

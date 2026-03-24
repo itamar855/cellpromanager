@@ -65,6 +65,8 @@ const Transacoes = () => {
       store_id: form.store_id || null, created_by: user.id,
       source_account_id: form.source_account_id || null,
       destination_account_id: form.destination_account_id || null,
+      net_amount: parseFloat(form.amount),
+      expected_settlement_date: new Date().toISOString(),
       reconciled: false,
     } as any);
     if (error) { toast.error(error.message); }

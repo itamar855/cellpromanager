@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Webhook, Trash2, Plus } from "lucide-react";
+import { Webhook, Trash2, Plus, Send, ExternalLink, Info } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 const eventLabels: Record<string, string> = {
@@ -63,6 +63,29 @@ const Configuracoes = () => {
     const { error } = await supabase.from("webhooks" as any).delete().eq("id", id);
     if (error) toast.error("Erro ao excluir!");
     else { toast.success("Excluído!"); fetchData(); }
+  };
+
+  const handleTestWebhook = async (webhook: Tables<"webhooks">) => {
+    toast.info("Enviando teste...");
+    try {
+      const resp = await fetch(webhook.url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        mode: "no-cors",
+        body: JSON.stringify({
+          event: "test_event",
+          timestamp: new Date().toISOString(),
+          data: {
+            message: "Teste de integração CellManager Pro",
+            webhook_id: webhook.id,
+            store: storeMap.get(webhook.store_id)
+          },
+        }),
+      });
+      toast.success("Teste disparado!");
+    } catch (err) {
+      toast.error("Falha ao disparar teste.");
+    }
   };
 
   const storeMap = new Map(stores.map(s => [s.id, s.name]));
@@ -139,14 +162,41 @@ const Configuracoes = () => {
                   <Label className="text-[10px] uppercase font-bold text-muted-foreground">Ativo</Label>
                   <Switch checked={w.is_active} onCheckedChange={() => handleToggle(w.id, w.is_active)} />
                 </div>
-                <Button className="h-8 w-8 p-0 bg-transparent text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDelete(w.id)}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button className="h-8 px-2 text-[10px] gap-1.5 bg-transparent border border-border text-foreground hover:bg-muted" onClick={() => handleTestWebhook(w)}>
+                    <Send className="h-3 w-3" /> Testar
+                  </Button>
+                  <Button className="h-8 w-8 p-0 bg-transparent text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDelete(w.id)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      <Card className="border-blue-500/20 bg-blue-500/5 shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Info className="h-4 w-4 text-blue-500" />
+            Como usar com N8N (WhatsApp)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            1. No N8N, crie um nó <strong>Webhook (Webhook Cloud)</strong> com método <strong>POST</strong>.<br/>
+            2. Copie a <strong>Production URL</strong> gerada e cole no campo acima.<br/>
+            3. Use o botão <strong>"Testar"</strong> para enviar um JSON de exemplo ao N8N.<br/>
+            4. No N8N, adicione um nó de <strong>WhatsApp (Baileys ou API Oficial)</strong> para enviar a mensagem usando os dados recebidos.
+          </p>
+          <div className="flex gap-2">
+            <Button className="text-xs h-auto p-0 gap-1 bg-transparent text-primary hover:underline shadow-none border-0" asChild>
+              <a href="https://n8n.io" target="_blank" rel="noreferrer">Site do N8N <ExternalLink className="h-3 w-3" /></a>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

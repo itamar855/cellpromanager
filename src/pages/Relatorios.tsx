@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { gerarNotaFiscalInterna, type NotaFiscalData } from "@/utils/notaFiscalInterna";
+import { logAction } from "@/utils/auditLogger";
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -48,6 +49,7 @@ const exportCSV = (rows: Record<string, any>[], filename: string) => {
   const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
   toast.success("CSV exportado!");
+  logAction("DOWNLOAD_REPORT" as any, "reports", filename);
 };
 
 const RankBadge = ({ pos }: { pos: number }) => {
@@ -342,7 +344,7 @@ const Relatorios = () => {
         <TabsContent value="dre" className="space-y-4 mt-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <Filters {...filterProps} />
-            <Button size="sm" variant="outline" className="gap-1.5 h-9" onClick={() => exportCSV(dreLines.map(l => ({ item: l.label, valor: formatCurrency(Math.abs(l.value)) })), "dre.csv")}>
+            <Button className="gap-1.5 h-9 bg-transparent border border-border text-foreground hover:bg-muted text-xs" onClick={() => exportCSV(dreLines.map(l => ({ item: l.label, valor: formatCurrency(Math.abs(l.value)) })), "dre.csv")}>
               <Download className="h-3.5 w-3.5" /> CSV
             </Button>
           </div>
@@ -421,7 +423,7 @@ const Relatorios = () => {
         <TabsContent value="vendas" className="space-y-4 mt-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <Filters {...filterProps} />
-            <Button size="sm" variant="outline" className="gap-1.5 h-9" onClick={() => exportCSV(salesDetail.map(r => ({ data: r.data, produto: r.produto, marca: r.marca, loja: r.loja, cliente: r.cliente, valor: formatCurrency(r.valor), custo: formatCurrency(r.custo), lucro: formatCurrency(r.lucro), margem: formatPct(r.margem), troca: r.troca })), "vendas.csv")}>
+            <Button className="gap-1.5 h-9 bg-transparent border border-border text-foreground hover:bg-muted text-xs" onClick={() => exportCSV(salesDetail.map(r => ({ data: r.data, produto: r.produto, marca: r.marca, loja: r.loja, cliente: r.cliente, valor: formatCurrency(r.valor), custo: formatCurrency(r.custo), lucro: formatCurrency(r.lucro), margem: formatPct(r.margem), troca: r.troca })), "vendas.csv")}>
               <Download className="h-3.5 w-3.5" /> CSV
             </Button>
           </div>
@@ -481,12 +483,12 @@ const Relatorios = () => {
                           <td className="py-2 px-2 whitespace-nowrap">{formatPct(r.margem)}</td>
                           <td className="py-2 px-2">
                             <div className="flex gap-1">
-                              <Button size="sm" variant="outline" className="h-6 text-[9px] px-1.5 gap-1"
+                              <Button className="h-7 text-[9px] px-2 bg-transparent border border-border text-foreground hover:bg-muted"
                                 onClick={() => handleGerarNota(r, false)} disabled={notaLoading === r._raw?.id}>
                                 <FileText className="h-2.5 w-2.5" /> PDF
                               </Button>
                               {r._raw?.customer_phone && (
-                                <Button size="sm" variant="outline" className="h-6 text-[9px] px-1.5 gap-1 text-green-500 border-green-500/30"
+                                <Button className="h-7 text-[9px] px-2 bg-transparent border border-green-500/30 text-green-500 hover:bg-green-500/10"
                                   onClick={() => handleGerarNota(r, true)} disabled={notaLoading === r._raw?.id}>
                                   <MessageCircle className="h-2.5 w-2.5" /> WA
                                 </Button>
@@ -577,7 +579,7 @@ const Relatorios = () => {
                           <td className="py-2 px-2 whitespace-nowrap">{o.device_brand} {o.device_model}</td>
                           <td className="py-2 px-2">{o.requested_service}</td>
                           <td className="py-2 px-2">{profileMap.get(o.technician_id) ?? "—"}</td>
-                          <td className="py-2 px-2"><Badge variant="outline" className="text-[9px]">{o.status}</Badge></td>
+                          <td className="py-2 px-2"><Badge className="text-[9px] border border-border bg-transparent text-foreground">{o.status}</Badge></td>
                           <td className="py-2 px-2 whitespace-nowrap">{formatCurrency(Number(o.estimated_price || 0))}</td>
                           <td className="py-2 px-2 text-primary font-bold whitespace-nowrap">{formatCurrency(Number(o.final_price || 0))}</td>
                           <td className="py-2 px-2 whitespace-nowrap">{new Date(o.created_at).toLocaleDateString("pt-BR")}</td>

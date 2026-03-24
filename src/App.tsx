@@ -18,9 +18,11 @@ import Clientes from "./pages/Clientes";
 import Relatorios from "./pages/Relatorios";
 import Instalar from "./pages/Instalar";
 import ResetPassword from "./pages/ResetPassword";
+import Auditoria from "./pages/Auditoria";
 import AIAssistant from "./pages/AIAssistant";
 import NotFound from "./pages/NotFound";
 import Caixa from "./pages/Caixa";
+import Contas from "./pages/Contas";
 import OSPublica from "./pages/OSPublica";
 import Configuracoes from "./pages/Configuracoes";
 
@@ -59,6 +61,7 @@ const App = () => (
               <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
               <Route path="/estoque" element={<ProtectedRoute><Estoque /></ProtectedRoute>} />
               <Route path="/transacoes" element={<ProtectedRoute><Transacoes /></ProtectedRoute>} />
+              <Route path="/contas" element={<ProtectedRoute><Contas /></ProtectedRoute>} />
               <Route path="/vendas" element={<ProtectedRoute><Vendas /></ProtectedRoute>} />
               <Route path="/lojas" element={<ProtectedRoute><Lojas /></ProtectedRoute>} />
               <Route path="/ordens-servico" element={<ProtectedRoute><OrdensServico /></ProtectedRoute>} />
@@ -72,6 +75,7 @@ const App = () => (
               <Route path="/reset-password" element={<ResetPassword />} />
               {/* Rota pública para o cliente acompanhar a OS */}
               <Route path="/os/:id" element={<OSPublica />} />
+              <Route path="/auditoria" element={<ProtectedRoute><Auditoria /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>

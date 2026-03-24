@@ -3,8 +3,8 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
-  LayoutDashboard, Package, ArrowUpDown, ShoppingBag, Store, Landmark,
-  LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle, FileText, Download, Brain, Settings
+  LayoutDashboard, Package, ArrowUpDown, ShoppingBag, Store, Landmark, PiggyBank,
+  LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle, FileText, Download, Brain, Settings, Activity
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,9 @@ const navItems = [
   { label: "Relatórios", icon: FileText, path: "/relatorios" },
   { label: "Lojas", icon: Store, path: "/lojas" },
   { label: "Equipe", icon: Users, path: "/equipe" },
-  { label: "Caixa", icon: Landmark, path: "/caixa" },
+  { label: "Contas", icon: Landmark, path: "/contas" },
+  { label: "Caixa", icon: PiggyBank, path: "/caixa" },
+  { label: "Auditoria", icon: Activity, path: "/auditoria" },
   { label: "Config.", icon: Settings, path: "/configuracoes" },
   { label: "IA", icon: Brain, path: "/assistente-ia" },
 ];
@@ -45,21 +47,24 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         </div>
 
         <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
-          {navItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                location.pathname === item.path
-                  ? "bg-primary/15 text-primary shadow-sm"
-                  : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-              )}
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </Link>
-          ))}
+          {navItems.map((item) => {
+            const Icon = item.icon || Smartphone;
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                  location.pathname === item.path
+                    ? "bg-primary/15 text-primary shadow-sm"
+                    : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
 
         <div className="p-4 border-t border-sidebar-border">
@@ -127,6 +132,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
           <div className="flex overflow-x-auto scrollbar-none py-1.5 px-1">
             {navItems.map((item) => {
               const isActive = location.pathname === item.path;
+              const Icon = item.icon || Smartphone;
               return (
                 <Link
                   key={item.path}
@@ -142,7 +148,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                     "rounded-lg p-1 transition-colors",
                     isActive && "bg-primary/15"
                   )}>
-                    <item.icon className="h-4 w-4" />
+                    <Icon className="h-4 w-4" />
                   </div>
                   <span className="text-[9px] font-medium">{item.label}</span>
                 </Link>

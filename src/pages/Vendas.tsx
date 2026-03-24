@@ -18,11 +18,12 @@ import { toast } from "sonner";
 import {
   Plus, ShoppingBag, Smartphone, CreditCard, Banknote, QrCode,
   Zap, Trash2, Search, FileText, MessageCircle, User, UserPlus,
-  ChevronDown, ChevronUp, History, Tag, Shield,
+  ChevronDown, ChevronUp, History, Tag, Shield, Landmark,
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { gerarNotaFiscalInterna, type NotaFiscalData } from "@/utils/notaFiscalInterna";
 import { triggerWebhook } from "@/utils/webhookSender";
+import { logAction } from "@/utils/auditLogger";
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -62,6 +63,7 @@ const Vendas = () => {
   const [stores, setStores] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [pdvSales, setPdvSales] = useState<any[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pdvOpen, setPdvOpen] = useState(false);
@@ -89,10 +91,11 @@ const Vendas = () => {
     trade_in_value: "", payment_cash: "", payment_card: "",
     payment_pix: "", notes: "", commission_percent: "10",
     discount: "0", warranty_days: "90", installments: "1",
+    destination_account_id: "",
   });
 
   const fetchData = async () => {
-    const [salesRes, productsRes, storesRes, accRes, pdvRes, profilesRes, customersRes] = await Promise.all([
+    const [salesRes, productsRes, storesRes, accRes, pdvRes, profilesRes, customersRes, accountsRes] = await Promise.all([
       supabase.from("sales").select("*").order("created_at", { ascending: false }),
       supabase.from("products").select("*"),
       supabase.from("stores").select("*"),
@@ -100,6 +103,7 @@ const Vendas = () => {
       supabase.from("transactions").select("*").eq("type", "income").eq("category", "acessorio").order("created_at", { ascending: false }),
       supabase.from("profiles").select("*"),
       supabase.from("customers").select("*").order("name"),
+      supabase.from("store_bank_accounts").select("*"),
     ]);
     setSales((salesRes.data as Sale[]) ?? []);
     setProducts(productsRes.data ?? []);
@@ -108,6 +112,7 @@ const Vendas = () => {
     setPdvSales(pdvRes.data ?? []);
     setProfiles(profilesRes.data ?? []);
     setCustomers(customersRes.data ?? []);
+    setBankAccounts(accountsRes.data ?? []);
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -203,7 +208,7 @@ const Vendas = () => {
   const filteredAcc = accessories.filter(a => a.name.toLowerCase().includes(accSearch.toLowerCase()) || (a.brand && a.brand.toLowerCase().includes(accSearch.toLowerCase())));
 
   const resetForm = () => {
-    setForm({ product_id: "", sale_price: "", has_trade_in: false, trade_in_device_name: "", trade_in_device_brand: "iPhone", trade_in_device_model: "", trade_in_device_imei: "", trade_in_value: "", payment_cash: "", payment_card: "", payment_pix: "", notes: "", commission_percent: "10", discount: "0", warranty_days: "90", installments: "1" });
+    setForm({ product_id: "", sale_price: "", has_trade_in: false, trade_in_device_name: "", trade_in_device_brand: "iPhone", trade_in_device_model: "", trade_in_device_imei: "", trade_in_value: "", payment_cash: "", payment_card: "", payment_pix: "", notes: "", commission_percent: "10", discount: "0", warranty_days: "90", installments: "1", destination_account_id: "" });
     clearCustomer();
   };
   const resetPdv = () => { setCart([]); setPdvPayment({ cash: "", card: "", pix: "", customer: "", store_id: "" }); setAccSearch(""); };
@@ -258,12 +263,41 @@ const Vendas = () => {
     if (saleError) { toast.error(saleError.message); setLoading(false); return; }
 
     triggerWebhook("sale_completed", selectedProduct.store_id, saleData);
+    logAction("CREATE_SALE", "sales", (saleData as any).id, null, saleData);
 
     await supabase.from("products").update({ status: "sold", sale_price: salePriceAfterDiscount }).eq("id", form.product_id);
     const desc = `Venda: ${selectedProduct.name}${selectedCustomer?.name ? ` → ${selectedCustomer.name}` : ""}`;
-    await supabase.from("transactions").insert({ type: "sale", amount: salePriceAfterDiscount, description: desc, store_id: selectedProduct.store_id, product_id: form.product_id, created_by: user.id });
+    
+    // Calcula taxas e liquidez se conta destino informada
+    let netAmount = salePriceAfterDiscount;
+    let expectedDate = new Date();
+    
+    if (form.destination_account_id && (cardVal > 0 || pixVal > 0)) {
+      const acc = bankAccounts.find(a => a.id === form.destination_account_id);
+      if (acc) {
+        if (cardVal > 0) {
+          const fee = Number(acc.credit_fee_percent) || 0;
+          const days = Number(acc.credit_settlement_days) || 30;
+          netAmount -= (cardVal * (fee / 100));
+          expectedDate.setDate(expectedDate.getDate() + days); // simples adicionamento de dias
+        } else if (pixVal > 0) {
+          const fee = Number(acc.pix_fee_percent) || 0;
+          const days = Number(acc.pix_settlement_days) || 0;
+          netAmount -= (pixVal * (fee / 100));
+          expectedDate.setDate(expectedDate.getDate() + days);
+        }
+      }
+    }
+
+    await supabase.from("transactions").insert({
+      type: "sale", amount: salePriceAfterDiscount, net_amount: netAmount,
+      description: desc, store_id: selectedProduct.store_id, product_id: form.product_id,
+      created_by: user.id, destination_account_id: form.destination_account_id || null,
+      expected_settlement_date: expectedDate.toISOString(),
+    });
+    
     const mainPayment = cashVal > 0 ? "dinheiro" : cardVal > 0 ? "cartao_credito" : pixVal > 0 ? "pix" : "dinheiro";
-    await createPendingCashEntry(selectedProduct.store_id, user.id, salePriceAfterDiscount, desc, mainPayment);
+    await createPendingCashEntry(selectedProduct.store_id, user.id, cashVal > 0 ? cashVal : salePriceAfterDiscount, desc, mainPayment);
 
     toast.success("Venda registrada! Confirme o recebimento no caixa.");
     setDialogOpen(false); resetForm(); fetchData();
@@ -351,7 +385,7 @@ const Vendas = () => {
                 </div>
               </div>
             </div>
-            <Button className="h-7 px-2 bg-transparent text-foreground hover:bg-muted text-[10px]" onClick={clearCustomer}>Trocar</Button>
+            <Button className="h-7 px-2 bg-transparent border border-border text-foreground hover:bg-muted text-[10px]" onClick={clearCustomer}>Trocar</Button>
           </div>
           {selectedCustomer.address && <p className="text-[10px] text-muted-foreground">📍 {selectedCustomer.address}</p>}
 
@@ -485,7 +519,7 @@ const Vendas = () => {
                         <div key={item.acc.id} className="rounded-lg border border-border/50 p-2.5 space-y-2">
                           <div className="flex items-center justify-between">
                             <p className="text-sm font-medium truncate flex-1">{item.acc.name}</p>
-                            <Button className="h-6 w-6 p-0 bg-transparent text-destructive hover:bg-destructive/10 shrink-0" onClick={() => updateCartQty(item.acc.id, 0)}><Trash2 className="h-3 w-3" /></Button>
+                            <Button className="h-6 w-6 p-0 bg-transparent text-destructive hover:bg-destructive/10 border-0 shadow-none shrink-0" onClick={() => updateCartQty(item.acc.id, 0)}><Trash2 className="h-3 w-3" /></Button>
                           </div>
                           <div className="flex items-center gap-2">
                             <div className="flex items-center gap-1">
@@ -643,6 +677,21 @@ const Vendas = () => {
                     </div>
                   )}
 
+                  {(cardVal > 0 || pixVal > 0) && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs flex items-center gap-1"><Landmark className="h-3 w-3" /> Conta / Maquininha Destino</Label>
+                      <Select value={form.destination_account_id} onValueChange={v => setForm({ ...form, destination_account_id: v })}>
+                        <SelectTrigger className="h-10"><SelectValue placeholder="Selecione onde vai cair..." /></SelectTrigger>
+                        <SelectContent>
+                          {bankAccounts.filter(a => a.store_id === selectedProduct.store_id).map(acc => (
+                            <SelectItem key={acc.id} value={acc.id}>{acc.bank_name} ({acc.account_type})</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-muted-foreground">As taxas configuradas serão aplicadas automaticamente e refletirão no saldo disponível.</p>
+                    </div>
+                  )}
+
                   <div className="rounded-lg bg-muted/50 p-3 text-xs space-y-1">
                     <div className="flex justify-between"><span className="text-muted-foreground">Valor de venda</span><span className="font-semibold">{formatCurrency(salePrice)}</span></div>
                     {discount > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Desconto</span><span className="font-semibold text-yellow-500">-{formatCurrency(discount)}</span></div>}
@@ -732,12 +781,12 @@ const Vendas = () => {
                       {(storeMap.get(sale.store_id) as any)?.name || ""} · {new Date(sale.created_at).toLocaleDateString("pt-BR")}
                     </p>
                     <div className="flex gap-2 mt-2">
-                      <Button className="h-7 px-2 text-[10px] gap-1 border bg-transparent text-foreground hover:bg-muted"
+                      <Button className="h-7 px-2 text-[10px] gap-1 border border-border bg-transparent text-foreground hover:bg-muted shadow-none"
                         onClick={() => handleGerarNota(sale, false)} disabled={isLoading}>
                         <FileText className="h-3 w-3" />{isLoading ? "Gerando..." : "Comprovante"}
                       </Button>
                       {sale.customer_phone && (
-                        <Button className="h-7 px-2 text-[10px] gap-1 text-green-500 border border-green-500/30 bg-transparent hover:bg-green-500/10"
+                        <Button className="h-7 px-2 text-[10px] gap-1 text-green-500 border border-green-500/30 bg-transparent hover:bg-green-500/10 shadow-none"
                           onClick={() => handleGerarNota(sale, true)} disabled={isLoading}>
                           <MessageCircle className="h-3 w-3" />WhatsApp
                         </Button>

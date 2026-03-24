@@ -14,6 +14,7 @@ import {
   Wallet, Plus, Minus, ArrowDownUp, Lock, Unlock, Camera,
   Upload, AlertTriangle, CheckCircle, Receipt, TrendingUp, TrendingDown, Clock,
 } from "lucide-react";
+import { logAction } from "@/utils/auditLogger";
 import type { Tables } from "@/integrations/supabase/types";
 
 const formatCurrency = (v: number) =>
@@ -210,6 +211,7 @@ const Caixa = () => {
       .neq("cash_register_id", (reg as any).id);
 
     toast.success("Caixa aberto!");
+    logAction("LOGIN" as any, "cash_registers", (reg as any).id, null, { store_id: selectedStore, opening_amount: openForm.amount });
     setOpenDialog(false);
     setOpenForm({ amount: "", note: "", receipt: null });
     fetchRegister(selectedStore);
@@ -249,6 +251,7 @@ const Caixa = () => {
     });
 
     toast.success("Caixa fechado!");
+    logAction("DELETE_RECORD" as any, "cash_registers", currentRegister.id, { status: "open" }, { status: "closed", difference });
     setCloseDialog(false);
     setCloseForm({ amount: "", note: "", reason: "", receipt: null });
     fetchRegister(selectedStore);
@@ -315,11 +318,11 @@ const Caixa = () => {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-2">
-          <Button type="button" variant="outline" className="h-10 gap-2 text-xs"
+          <Button type="button" className="h-10 gap-2 text-xs bg-transparent border border-border text-foreground hover:bg-muted"
             onClick={() => { setActiveTarget(target); cameraInputRef.current?.click(); }}>
             <Camera className="h-4 w-4" /> Tirar Foto
           </Button>
-          <Button type="button" variant="outline" className="h-10 gap-2 text-xs"
+          <Button type="button" className="h-10 gap-2 text-xs bg-transparent border border-border text-foreground hover:bg-muted"
             onClick={() => { setActiveTarget(target); fileInputRef.current?.click(); }}>
             <Upload className="h-4 w-4" /> Galeria
           </Button>
@@ -371,14 +374,14 @@ const Caixa = () => {
                   </div>
                 </div>
                 <div className="flex gap-2 flex-wrap">
-                  <Button variant="outline" size="sm" className="gap-1.5 h-9 text-yellow-500 border-yellow-500/30 hover:bg-yellow-500/10"
+                  <Button className="gap-1.5 h-9 text-[11px] bg-transparent border border-yellow-500/30 text-yellow-500 hover:bg-yellow-500/10 px-3"
                     onClick={() => setSangriaDialog(true)}>
                     <Minus className="h-3.5 w-3.5" /> Sangria
                   </Button>
-                  <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={() => setEntryDialog(true)}>
+                  <Button className="gap-1.5 h-9 text-[11px] bg-transparent border border-border text-foreground hover:bg-muted px-3" onClick={() => setEntryDialog(true)}>
                     <Plus className="h-3.5 w-3.5" /> Lançamento
                   </Button>
-                  <Button size="sm" className="gap-1.5 h-9 bg-destructive hover:bg-destructive/90" onClick={() => setCloseDialog(true)}>
+                  <Button className="gap-1.5 h-9 text-[11px] bg-destructive hover:bg-destructive/90 text-white px-3" onClick={() => setCloseDialog(true)}>
                     <Lock className="h-3.5 w-3.5" /> Fechar Caixa
                   </Button>
                 </div>
@@ -466,7 +469,7 @@ const Caixa = () => {
                           <div className="min-w-0">
                             <p className={`text-sm font-medium truncate ${isPending ? "opacity-70" : ""}`}>{entry.description}</p>
                             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                              <Badge variant="outline" className={`text-[9px] ${cfg.color}`}>{cfg.label}</Badge>
+                              <Badge className={`text-[9px] border bg-transparent ${cfg.color}`}>{cfg.label}</Badge>
                               {entry.payment_method && <span className="text-[10px] text-muted-foreground">{paymentLabels[entry.payment_method] ?? entry.payment_method}</span>}
                               {isPending ? (
                                 <Badge className="text-[9px] bg-orange-500/15 text-orange-500 border-orange-500/30 gap-1">
@@ -490,8 +493,8 @@ const Caixa = () => {
                           </p>
                           <p className="text-[10px] text-muted-foreground">{new Date(entry.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</p>
                           {isPending && (
-                            <Button size="sm" variant="outline"
-                              className="h-6 text-[10px] border-orange-500/40 text-orange-500 hover:bg-orange-500/10 px-2"
+                            <Button
+                              className="h-6 text-[9px] border border-orange-500/40 text-orange-500 bg-transparent hover:bg-orange-500/10 px-2"
                               onClick={e => { e.stopPropagation(); openConfirmDialog(entry); }}>
                               Confirmar
                             </Button>
@@ -655,11 +658,11 @@ const Caixa = () => {
               O lançamento ficará pendente até você confirmar com o comprovante.
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Button variant={entryForm.type === "entrada" ? "default" : "outline"} className="gap-2"
+              <Button className={`gap-2 h-10 border ${entryForm.type === "entrada" ? "bg-primary text-primary-foreground" : "bg-transparent text-foreground hover:bg-muted"}`}
                 onClick={() => setEntryForm(f => ({ ...f, type: "entrada" }))}>
                 <TrendingUp className="h-4 w-4" /> Entrada
               </Button>
-              <Button variant={entryForm.type === "saida" ? "destructive" : "outline"} className="gap-2"
+              <Button className={`gap-2 h-10 border ${entryForm.type === "saida" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : "bg-transparent text-foreground hover:bg-muted"}`}
                 onClick={() => setEntryForm(f => ({ ...f, type: "saida" }))}>
                 <TrendingDown className="h-4 w-4" /> Saída
               </Button>
