@@ -311,10 +311,14 @@ export type Database = {
           device_imei: string | null
           device_model: string
           device_password: string | null
+          entry_checklist: Json | null
+          entry_signature: string | null
           estimated_completion: string | null
           estimated_price: number | null
           final_price: number | null
           id: string
+          exit_checklist: Json | null
+          exit_signature: string | null
           internal_notes: string | null
           order_number: number
           reported_defect: string
@@ -326,6 +330,7 @@ export type Database = {
           terms_accepted: boolean | null
           terms_text: string | null
           updated_at: string
+          warranty_end_date: string | null
         }
         Insert: {
           completed_at?: string | null
@@ -343,6 +348,8 @@ export type Database = {
           device_imei?: string | null
           device_model: string
           device_password?: string | null
+          entry_checklist?: Json | null
+          entry_signature?: string | null
           estimated_completion?: string | null
           estimated_price?: number | null
           final_price?: number | null
@@ -358,6 +365,7 @@ export type Database = {
           terms_accepted?: boolean | null
           terms_text?: string | null
           updated_at?: string
+          warranty_end_date?: string | null
         }
         Update: {
           completed_at?: string | null
@@ -375,10 +383,14 @@ export type Database = {
           device_imei?: string | null
           device_model?: string
           device_password?: string | null
+          entry_checklist?: Json | null
+          entry_signature?: string | null
           estimated_completion?: string | null
           estimated_price?: number | null
           final_price?: number | null
           id?: string
+          exit_checklist?: Json | null
+          exit_signature?: string | null
           internal_notes?: string | null
           order_number?: number
           reported_defect?: string
@@ -390,6 +402,7 @@ export type Database = {
           terms_accepted?: boolean | null
           terms_text?: string | null
           updated_at?: string
+          warranty_end_date?: string | null
         }
         Relationships: [
           {
@@ -418,7 +431,9 @@ export type Database = {
           holder_cpf_cnpj: string | null
           holder_name: string | null
           id: string
+          is_cashbox: boolean | null
           is_primary: boolean | null
+          owner_type: string | null
           pix_key: string | null
           store_id: string
           updated_at: string
@@ -432,7 +447,9 @@ export type Database = {
           holder_cpf_cnpj?: string | null
           holder_name?: string | null
           id?: string
+          is_cashbox?: boolean | null
           is_primary?: boolean | null
+          owner_type?: string | null
           pix_key?: string | null
           store_id: string
           updated_at?: string
@@ -446,7 +463,9 @@ export type Database = {
           holder_cpf_cnpj?: string | null
           holder_name?: string | null
           id?: string
+          is_cashbox?: boolean | null
           is_primary?: boolean | null
+          owner_type?: string | null
           pix_key?: string | null
           store_id?: string
           updated_at?: string
@@ -497,8 +516,11 @@ export type Database = {
           description: string | null
           id: string
           product_id: string | null
+          source_account_id: string | null
+          destination_account_id: string | null
           store_id: string | null
           type: string
+          reconciled: boolean | null
         }
         Insert: {
           amount: number
@@ -508,8 +530,11 @@ export type Database = {
           description?: string | null
           id?: string
           product_id?: string | null
+          source_account_id?: string | null
+          destination_account_id?: string | null
           store_id?: string | null
           type: string
+          reconciled?: boolean | null
         }
         Update: {
           amount?: number
@@ -519,8 +544,11 @@ export type Database = {
           description?: string | null
           id?: string
           product_id?: string | null
+          source_account_id?: string | null
+          destination_account_id?: string | null
           store_id?: string | null
           type?: string
+          reconciled?: boolean | null
         }
         Relationships: [
           {
@@ -557,6 +585,220 @@ export type Database = {
         }
         Relationships: []
       }
+      cash_registers: {
+        Row: {
+          id: string
+          store_id: string
+          user_id: string | null
+          status: string
+          opened_at: string | null
+          closed_at: string | null
+          current_balance: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          store_id: string
+          user_id?: string | null
+          status?: string
+          opened_at?: string | null
+          closed_at?: string | null
+          current_balance?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          store_id?: string
+          user_id?: string | null
+          status?: string
+          opened_at?: string | null
+          closed_at?: string | null
+          current_balance?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_registers_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      cash_closures: {
+        Row: {
+          id: string
+          cash_register_id: string
+          store_id: string
+          user_id: string
+          opened_at: string
+          closed_at: string
+          reported_cash: number
+          system_cash: number
+          difference: number
+          status: string
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          cash_register_id: string
+          store_id: string
+          user_id: string
+          opened_at: string
+          closed_at?: string
+          reported_cash: number
+          system_cash: number
+          difference: number
+          status?: string
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          cash_register_id?: string
+          store_id?: string
+          user_id?: string
+          opened_at?: string
+          closed_at?: string
+          reported_cash?: number
+          system_cash?: number
+          difference?: number
+          status?: string
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_closures_cash_register_id_fkey"
+            columns: ["cash_register_id"]
+            isOneToOne: false
+            referencedRelation: "cash_registers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_closures_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      audit_logs: {
+        Row: {
+          id: string
+          user_id: string | null
+          action: string
+          entity_type: string
+          entity_id: string | null
+          before_state: Json | null
+          after_state: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          action: string
+          entity_type: string
+          entity_id?: string | null
+          before_state?: Json | null
+          after_state?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          action?: string
+          entity_type?: string
+          entity_id?: string | null
+          before_state?: Json | null
+          after_state?: Json | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      service_order_photos: {
+        Row: {
+          id: string
+          service_order_id: string
+          photo_url: string
+          stage: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          service_order_id: string
+          photo_url: string
+          stage: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          service_order_id?: string
+          photo_url?: string
+          stage?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_order_photos_service_order_id_fkey"
+            columns: ["service_order_id"]
+            isOneToOne: false
+            referencedRelation: "service_orders"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      service_order_items: {
+        Row: {
+          id: string
+          service_order_id: string
+          product_id: string
+          quantity: number
+          unit_price: number
+          unit_cost: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          service_order_id: string
+          product_id: string
+          quantity?: number
+          unit_price: number
+          unit_cost: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          service_order_id?: string
+          product_id?: string
+          quantity?: number
+          unit_price?: number
+          unit_cost?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_order_items_service_order_id_fkey"
+            columns: ["service_order_id"]
+            isOneToOne: false
+            referencedRelation: "service_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -571,7 +813,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "gerente" | "vendedor"
+      app_role: "admin" | "gerente" | "vendedor" | "tecnico"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -699,7 +941,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "gerente", "vendedor"],
+      app_role: ["admin", "gerente", "vendedor", "tecnico"],
     },
   },
 } as const

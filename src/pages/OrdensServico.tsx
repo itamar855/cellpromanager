@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import SignatureCanvas from "@/components/SignatureCanvas";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,6 +21,11 @@ import {
   Phone, User, FileText, MessageCircle, Banknote, CreditCard, QrCode, DollarSign,
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
+import { KanbanBoard } from "@/components/KanbanBoard";
+import { OsChecklist, ChecklistData } from "@/components/OsChecklist";
+import { OsPhotoGallery } from "@/components/OsPhotoGallery";
+import { OsParts } from "@/components/OsParts";
+import { Printer } from "lucide-react";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -210,6 +215,55 @@ const generateOSPdf = async (order: any, store: any, techName: string, publicUrl
   return doc;
 };
 
+// ── Gera Cupom 80mm ──────────────────────────
+const generateThermalPdf = async (order: any, store: any, techName: string, publicUrl: string) => {
+  const { default: jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ unit: "mm", format: [80, 200] }); // Formato contínuo 80mm
+  let y = 10;
+  const W = 80;
+  
+  const textC = (t: string, size=10, bold=false) => {
+    doc.setFontSize(size); doc.setFont("helvetica", bold ? "bold" : "normal");
+    const arr = doc.splitTextToSize(t, W - 10);
+    doc.text(arr, W / 2, y, { align: "center" });
+    y += arr.length * (size/2.5) + 3;
+  };
+  
+  const textL = (l: string, v: string) => {
+    doc.setFontSize(8); doc.setFont("helvetica", "bold");
+    doc.text(l + ":", 5, y);
+    doc.setFont("helvetica", "normal");
+    const arr = doc.splitTextToSize(v, W - 10 - doc.getTextWidth(l + ": "));
+    doc.text(arr, 5 + doc.getTextWidth(l + ": "), y);
+    y += arr.length * 3 + 3;
+  };
+  
+  const line = () => { doc.line(5, y, W-5, y); y += 4; };
+
+  textC(store?.name || "Assistência Técnica", 12, true);
+  if (store?.cnpj) textC(`CNPJ: ${store.cnpj}`, 8);
+  if (store?.phone) textC(`Tel: ${store.phone}`, 8);
+  line();
+  textC(`ORDEM DE SERVIÇO #${order.order_number}`, 10, true);
+  textC(new Date(order.created_at).toLocaleString("pt-BR"), 8);
+  line();
+  textL("Cliente", order.customer_name);
+  if (order.customer_phone) textL("Tel", order.customer_phone);
+  line();
+  textL("Aparelho", `${order.device_brand} ${order.device_model}`);
+  textL("Defeito", order.reported_defect);
+  textL("Serviço", order.requested_service);
+  if (order.final_price) textL("Valor", formatCurrency(Number(order.final_price)));
+  else textL("Orçamento", formatCurrency(Number(order.estimated_price || 0)));
+  line();
+  textC("Acompanhe online:", 8);
+  textC(publicUrl, 7);
+  y += 10;
+  textC("-----------------------------", 8);
+  textC("Assinatura do Cliente", 8);
+  return doc;
+};
+
 const OrdensServico = () => {
   const { user } = useAuth();
   const [orders, setOrders] = useState<Tables<"service_orders">[]>([]);
@@ -222,11 +276,14 @@ const OrdensServico = () => {
   const [loading, setLoading] = useState(false);
   const [signatureData, setSignatureData] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "kanban">("kanban");
 
   // Update service form (shown in detail dialog)
   const [updateForm, setUpdateForm] = useState({
     final_price: "", technician_id: "",
     payment_cash: "", payment_card: "", payment_pix: "", payment_other: "", payment_notes: "",
+    exit_checklist: {} as ChecklistData,
+    warranty_end_date: "",
   });
 
   const [form, setForm] = useState({
@@ -236,6 +293,7 @@ const OrdensServico = () => {
     reported_defect: "", requested_service: "",
     store_id: "", estimated_price: "", estimated_completion: "",
     technician_id: "", terms_accepted: false, internal_notes: "",
+    entry_checklist: {} as ChecklistData,
   });
 
   const fetchData = async () => {
@@ -258,8 +316,8 @@ const OrdensServico = () => {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const storeMap = new Map(stores.map((s) => [s.id, s.name]));
-  const profileMap = new Map(profiles.map((p) => [p.user_id, p.display_name ?? ""]));
+  const storeMap = new Map<string, string>(stores.map((s) => [s.id, s.name]));
+  const profileMap = new Map<string, string>(profiles.map((p) => [p.user_id, p.display_name ?? ""]));
 
   const getPublicUrl = (orderId: string) => `${window.location.origin}/os/${orderId}`;
 
@@ -271,6 +329,7 @@ const OrdensServico = () => {
       reported_defect: "", requested_service: "",
       store_id: "", estimated_price: "", estimated_completion: "",
       technician_id: "", terms_accepted: false, internal_notes: "",
+      entry_checklist: {} as ChecklistData,
     });
     setSignatureData("");
   };
@@ -297,6 +356,7 @@ const OrdensServico = () => {
       technician_id: form.technician_id || null,
       estimated_price: form.estimated_price ? parseFloat(form.estimated_price) : 0,
       estimated_completion: form.estimated_completion || null,
+      entry_checklist: form.entry_checklist,
       terms_accepted: form.terms_accepted,
       terms_text: TERMS_TEXT,
       signature_data: signatureData || null,
@@ -351,6 +411,8 @@ const OrdensServico = () => {
     if (updateForm.payment_pix !== "") updates.payment_pix = parseFloat(updateForm.payment_pix) || 0;
     if (updateForm.payment_other !== "") updates.payment_other = parseFloat(updateForm.payment_other) || 0;
     if (updateForm.payment_notes) updates.payment_notes = updateForm.payment_notes;
+    updates.exit_checklist = updateForm.exit_checklist;
+    if (updateForm.warranty_end_date) updates.warranty_end_date = new Date(updateForm.warranty_end_date).toISOString();
 
     const { error } = await supabase.from("service_orders").update(updates).eq("id", detailOrder.id);
     if (error) { toast.error(error.message); }
@@ -375,6 +437,19 @@ const OrdensServico = () => {
     } catch (err) {
       toast.error("Erro ao gerar PDF. Instale: npm install jspdf");
     }
+    setPdfLoading(false);
+  };
+
+  const handleExportThermal = async (order: any) => {
+    setPdfLoading(true);
+    try {
+      const storeObj = stores.find(s => s.id === order.store_id) ?? { name: "Assistência Técnica" };
+      const techName = profileMap.get(order.technician_id) ?? "";
+      const publicUrl = getPublicUrl(order.id);
+      const doc = await generateThermalPdf(order, storeObj, techName, publicUrl);
+      doc.save(`OS-Cupom-${order.order_number}.pdf`);
+      toast.success("Cupom gerado (80mm)!");
+    } catch (err) { toast.error("Erro ao gerar cupom termal."); }
     setPdfLoading(false);
   };
 
@@ -435,6 +510,8 @@ const OrdensServico = () => {
       payment_pix: order.payment_pix ? String(order.payment_pix) : "",
       payment_other: order.payment_other ? String(order.payment_other) : "",
       payment_notes: order.payment_notes ?? "",
+      exit_checklist: (order.exit_checklist as ChecklistData) || {},
+      warranty_end_date: order.warranty_end_date ? new Date(order.warranty_end_date).toISOString().split('T')[0] : "",
     });
   };
 
@@ -571,6 +648,13 @@ const OrdensServico = () => {
                 </div>
               </div>
 
+              {/* Checklist de Entrada */}
+              <OsChecklist
+                title="Checklist de Entrada"
+                data={form.entry_checklist}
+                onChange={(d) => setForm({ ...form, entry_checklist: d })}
+              />
+
               {/* Termos */}
               <div className="space-y-3 rounded-lg border border-border p-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Termos e Condições</p>
@@ -611,12 +695,18 @@ const OrdensServico = () => {
       </div>
 
       {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nome, IMEI, modelo ou nº da OS..." className="pl-9 h-10" />
+      <div className="flex gap-2 w-full">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nome, IMEI, modelo ou nº da OS..." className="pl-9 h-10" />
+        </div>
+        <Button variant="outline" className="h-10 px-4 shrink-0 transition-colors" onClick={() => setViewMode(v => v === "list" ? "kanban" : "list")}>
+          {viewMode === "list" ? "Ver Kanban" : "Ver Lista"}
+        </Button>
       </div>
 
-      {/* List */}
+      {/* List or Kanban */}
+      {viewMode === "list" ? (
       <div className="space-y-2">
         {filtered.length > 0 ? filtered.map((order: any) => {
           const sc = statusConfig[order.status] || statusConfig.open;
@@ -656,6 +746,18 @@ const OrdensServico = () => {
           </Card>
         )}
       </div>
+      ) : (
+        <KanbanBoard 
+          orders={filtered} 
+          statusConfig={statusConfig as any} 
+          allStatuses={allStatuses} 
+          storeMap={storeMap} 
+          profileMap={profileMap} 
+          formatCurrency={formatCurrency} 
+          onOrderClick={openDetail} 
+          onStatusChange={updateStatus} 
+        />
+      )}
 
       {/* Detail Dialog */}
       <Dialog open={!!detailOrder} onOpenChange={(open) => !open && setDetailOrder(null)}>
@@ -679,8 +781,11 @@ const OrdensServico = () => {
                     <span className="text-xs text-muted-foreground">{new Date(detailOrder.created_at).toLocaleString("pt-BR")}</span>
                   </div>
                   <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs font-semibold hover:border-blue-500/50 hover:text-blue-500" onClick={() => handleExportThermal(detailOrder)} disabled={pdfLoading}>
+                      <Printer className="h-3.5 w-3.5" /> 80mm
+                    </Button>
                     <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => handleExportPdf(detailOrder)} disabled={pdfLoading}>
-                      <FileText className="h-3.5 w-3.5" /> PDF
+                      <FileText className="h-3.5 w-3.5" /> A4
                     </Button>
                     <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs text-green-500 border-green-500/30 hover:bg-green-500/10"
                       onClick={() => handleSendWhatsApp(detailOrder)} disabled={pdfLoading}>
@@ -725,7 +830,24 @@ const OrdensServico = () => {
                   <p><span className="text-muted-foreground">Estimado:</span> {formatCurrency(Number(detailOrder.estimated_price || 0))}</p>
                   {detailOrder.final_price && <p><span className="text-muted-foreground">Final:</span> <span className="font-bold text-primary">{formatCurrency(Number(detailOrder.final_price))}</span></p>}
                   {detailOrder.estimated_completion && <p><span className="text-muted-foreground">Previsão:</span> {new Date(detailOrder.estimated_completion).toLocaleString("pt-BR")}</p>}
+                  {detailOrder.warranty_end_date && <p><span className="text-muted-foreground">Garantia até:</span> <span className="font-bold text-green-500">{new Date(detailOrder.warranty_end_date).toLocaleDateString("pt-BR")}</span></p>}
                 </div>
+
+                {/* Entry Checklist Viewer */}
+                {detailOrder.entry_checklist && Object.keys(detailOrder.entry_checklist).length > 0 && (
+                  <OsChecklist
+                    title="Checklist de Entrada (Registrado na abertura)"
+                    data={detailOrder.entry_checklist as ChecklistData}
+                    onChange={() => {}}
+                    readonly={true}
+                  />
+                )}
+
+                {/* Galeria de Fotos */}
+                <OsPhotoGallery orderId={detailOrder.id} />
+
+                {/* Peças da OS */}
+                <OsParts orderId={detailOrder.id} storeId={detailOrder.store_id} />
 
                 {/* Pagamento atual */}
                 {totalPaid(detailOrder) > 0 && (
@@ -776,7 +898,12 @@ const OrdensServico = () => {
                           placeholder="0.00" className="h-9" />
                       </div>
                       <div className="space-y-1.5">
-                        <Label className="text-xs">Técnico</Label>
+                        <Label className="text-xs">Fim da Garantia (Opcional)</Label>
+                        <Input type="date" value={updateForm.warranty_end_date} 
+                               onChange={e => setUpdateForm(f => ({ ...f, warranty_end_date: e.target.value }))} className="h-9 text-xs" />
+                      </div>
+                      <div className="space-y-1.5 col-span-2">
+                        <Label className="text-xs">Técnico Responsável</Label>
                         <Select value={updateForm.technician_id} onValueChange={v => setUpdateForm(f => ({ ...f, technician_id: v }))}>
                           <SelectTrigger className="h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
                           <SelectContent>
@@ -784,6 +911,14 @@ const OrdensServico = () => {
                           </SelectContent>
                         </Select>
                       </div>
+                    </div>
+
+                    <div className="pt-2">
+                       <OsChecklist
+                         title="Checklist de Saída (Testes Pós-Reparo)"
+                         data={updateForm.exit_checklist}
+                         onChange={(d) => setUpdateForm({ ...updateForm, exit_checklist: d })}
+                       />
                     </div>
 
                     <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Formas de Pagamento Recebidas</p>

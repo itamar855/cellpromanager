@@ -21,29 +21,32 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
 const typeLabels: Record<string, string> = {
-  sale: "Venda", expense_pj: "PJ", expense_pf: "PF", income: "Receita", pro_labore: "Pro-labore",
+  sale: "Venda", expense_pj: "PJ", expense_pf: "PF", income: "Receita", pro_labore: "Pro-labore", transfer: "Transferência",
 };
 const typeColors: Record<string, string> = {
   sale: "bg-primary/15 text-primary", income: "bg-primary/15 text-primary",
   expense_pj: "bg-accent/15 text-accent", expense_pf: "bg-destructive/15 text-destructive",
-  pro_labore: "bg-destructive/15 text-destructive",
+  pro_labore: "bg-destructive/15 text-destructive", transfer: "bg-blue-500/15 text-blue-500",
 };
 
 const Transacoes = () => {
   const { user } = useAuth();
   const [transactions, setTransactions] = useState<Tables<"transactions">[]>([]);
   const [stores, setStores] = useState<Tables<"stores">[]>([]);
+  const [accounts, setAccounts] = useState<Tables<"store_bank_accounts">[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ type: "sale", amount: "", description: "", category: "", store_id: "" });
+  const [form, setForm] = useState({ type: "sale", amount: "", description: "", category: "", store_id: "", source_account_id: "", destination_account_id: "" });
 
   const fetchData = async () => {
-    const [txRes, storesRes] = await Promise.all([
+    const [txRes, storesRes, accountsRes] = await Promise.all([
       supabase.from("transactions").select("*").order("created_at", { ascending: false }),
       supabase.from("stores").select("*"),
+      supabase.from("store_bank_accounts").select("*"),
     ]);
     setTransactions(txRes.data ?? []);
     setStores(storesRes.data ?? []);
+    setAccounts(accountsRes.data ?? []);
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -51,23 +54,38 @@ const Transacoes = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    if (form.type === "transfer" && (!form.source_account_id || !form.destination_account_id)) {
+      toast.error("Para transferências, selecione a conta de origem e destino.");
+      return;
+    }
     setLoading(true);
     const { error } = await supabase.from("transactions").insert({
       type: form.type, amount: parseFloat(form.amount),
       description: form.description || null, category: form.category || null,
       store_id: form.store_id || null, created_by: user.id,
-    });
+      source_account_id: form.source_account_id || null,
+      destination_account_id: form.destination_account_id || null,
+      reconciled: false,
+    } as any);
     if (error) { toast.error(error.message); }
     else {
       toast.success("Transação registrada!");
       setDialogOpen(false);
-      setForm({ type: "sale", amount: "", description: "", category: "", store_id: "" });
+      setForm({ type: "sale", amount: "", description: "", category: "", store_id: "", source_account_id: "", destination_account_id: "" });
       fetchData();
     }
     setLoading(false);
   };
 
+  const handleReconcile = async (id: string, current: boolean) => {
+    const { error } = await supabase.from("transactions" as any).update({ reconciled: !current }).eq("id", id);
+    if (error) toast.error("Erro ao conciliar");
+    else toast.success(current ? "Conciliação removida" : "Transação conciliada com sucesso!");
+    fetchData();
+  };
+
   const storeMap = new Map(stores.map((s) => [s.id, s.name]));
+  const accountMap = new Map(accounts.map((a) => [a.id, a.bank_name]));
   const isIncome = (type: string) => type === "sale" || type === "income";
 
   return (
@@ -96,6 +114,7 @@ const Transacoes = () => {
                     <SelectItem value="expense_pj">🏢 Gasto PJ</SelectItem>
                     <SelectItem value="expense_pf">🧑 Gasto PF</SelectItem>
                     <SelectItem value="pro_labore">💼 Pro-labore</SelectItem>
+                    <SelectItem value="transfer">🔄 Transferência</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -122,6 +141,39 @@ const Transacoes = () => {
                   </Select>
                 </div>
               </div>
+              
+              {form.type === "transfer" ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Conta Origem (Saiu)</Label>
+                    <Select value={form.source_account_id} onValueChange={(v) => setForm({ ...form, source_account_id: v })}>
+                      <SelectTrigger className="h-10"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                      <SelectContent>
+                        {accounts.map((a) => (<SelectItem key={a.id} value={a.id}>{a.bank_name}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Conta Destino (Entrou)</Label>
+                    <Select value={form.destination_account_id} onValueChange={(v) => setForm({ ...form, destination_account_id: v })}>
+                      <SelectTrigger className="h-10"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                      <SelectContent>
+                        {accounts.map((a) => (<SelectItem key={a.id} value={a.id}>{a.bank_name}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Conta Vinculada</Label>
+                  <Select value={isIncome(form.type) ? form.destination_account_id : form.source_account_id} onValueChange={(v) => setForm({ ...form, [isIncome(form.type) ? "destination_account_id" : "source_account_id"]: v })}>
+                    <SelectTrigger className="h-10"><SelectValue placeholder="Opcional" /></SelectTrigger>
+                    <SelectContent>
+                      {accounts.map((a) => (<SelectItem key={a.id} value={a.id}>{a.bank_name}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <Button type="submit" className="w-full h-11 font-semibold" disabled={loading}>
                 {loading ? "Salvando..." : "Registrar"}
               </Button>
@@ -136,23 +188,32 @@ const Transacoes = () => {
             <Card key={tx.id} className="border-border/50 shadow-lg shadow-black/10">
               <CardContent className="p-3.5 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className={`rounded-lg p-2 shrink-0 ${isIncome(tx.type) ? "bg-primary/15" : "bg-destructive/15"}`}>
-                    {isIncome(tx.type) ? <ArrowUpRight className="h-4 w-4 text-primary" /> : <ArrowDownRight className="h-4 w-4 text-destructive" />}
+                  <div className={`rounded-lg p-2 shrink-0 ${tx.type === "transfer" ? "bg-blue-500/15" : isIncome(tx.type) ? "bg-primary/15" : "bg-destructive/15"}`}>
+                    {tx.type === "transfer" ? <ArrowUpDown className="h-4 w-4 text-blue-500" /> : isIncome(tx.type) ? <ArrowUpRight className="h-4 w-4 text-primary" /> : <ArrowDownRight className="h-4 w-4 text-destructive" />}
                   </div>
                   <div className="min-w-0">
-                    <p className="font-medium text-sm truncate">{tx.description || typeLabels[tx.type]}</p>
+                    <p className="font-medium text-sm truncate">
+                      {tx.description || typeLabels[tx.type]}
+                    </p>
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${typeColors[tx.type]}`}>
+                      <Badge className={`text-[10px] px-1.5 py-0 ${typeColors[tx.type]}`}>
                         {typeLabels[tx.type]}
                       </Badge>
-                      {tx.store_id && <span className="text-[10px] text-muted-foreground">{storeMap.get(tx.store_id)}</span>}
+                      {tx.source_account_id && <span className="text-[10px] text-muted-foreground line-clamp-1 border-r pr-1.5">Origem: {accountMap.get(tx.source_account_id)}</span>}
+                      {tx.destination_account_id && <span className="text-[10px] text-muted-foreground line-clamp-1 border-r pr-1.5">Destino: {accountMap.get(tx.destination_account_id)}</span>}
+                      {tx.store_id && <span className="text-[10px] text-muted-foreground border-r pr-1.5">{storeMap.get(tx.store_id)}</span>}
                       <span className="text-[10px] text-muted-foreground">{new Date(tx.created_at).toLocaleDateString("pt-BR")}</span>
                     </div>
                   </div>
                 </div>
-                <p className={`font-display font-bold text-sm shrink-0 ${isIncome(tx.type) ? "text-primary" : "text-destructive"}`}>
-                  {isIncome(tx.type) ? "+" : "-"}{formatCurrency(Number(tx.amount))}
-                </p>
+                <div className="flex items-center gap-3 shrink-0">
+                  <p className={`font-display font-bold text-sm text-right ${tx.type === "transfer" ? "text-blue-500" : isIncome(tx.type) ? "text-primary" : "text-destructive"}`}>
+                    {tx.type === "transfer" ? "" : isIncome(tx.type) ? "+" : "-"}{formatCurrency(Number(tx.amount))}
+                  </p>
+                  <Button className={`h-8 w-24 text-[11px] font-medium border ${(tx as any).reconciled ? "bg-green-600 hover:bg-green-700 text-white border-green-600" : "bg-transparent text-foreground border-input hover:bg-accent hover:text-accent-foreground"}`} onClick={() => handleReconcile(tx.id, (tx as any).reconciled)}>
+                    {(tx as any).reconciled ? "Conciliado" : "Conciliar"}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))

@@ -56,6 +56,7 @@ const Caixa = () => {
   const [currentRegister, setCurrentRegister] = useState<CashRegister | null>(null);
   const [entries, setEntries] = useState<CashEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [userRole, setUserRole] = useState<string>("vendedor");
 
   // Dialogs
   const [openDialog, setOpenDialog] = useState(false);
@@ -83,6 +84,10 @@ const Caixa = () => {
   const [activeTarget, setActiveTarget] = useState<"open" | "close" | "confirm" | null>(null);
 
   const fetchData = async () => {
+    if (user) {
+      const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).single();
+      if (profile) setUserRole(profile.role);
+    }
     const { data: storesData } = await supabase.from("stores").select("*");
     setStores(storesData ?? []);
     if (storesData && storesData.length > 0 && !selectedStore) {
@@ -142,6 +147,7 @@ const Caixa = () => {
   const closingAmount = parseFloat(closeForm.amount) || 0;
   const difference = closingAmount - expectedAmount;
   const pendingCount = entries.filter(e => !e.confirmed).length;
+  const isBlind = userRole === "vendedor";
 
   // ── Confirmar lançamento ──────────────────────────────────────────────────
   const openConfirmDialog = (entry: CashEntry) => {
@@ -217,7 +223,7 @@ const Caixa = () => {
       toast.error(`Confirme os ${pendingCount} lançamento(s) pendente(s) antes de fechar o caixa!`);
       return;
     }
-    if (Math.abs(difference) > 5 && !closeForm.reason) {
+    if (!isBlind && Math.abs(difference) > 5 && !closeForm.reason) {
       toast.error("Diferença maior que R$ 5,00 — informe o motivo!");
       return;
     }
@@ -382,20 +388,23 @@ const Caixa = () => {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { label: "Fundo Inicial",  value: Number(currentRegister.opening_amount), color: "text-blue-500" },
-              { label: "Total Entradas", value: totalEntradas,  color: "text-primary"   },
-              { label: "Total Saídas",   value: totalSaidas,    color: "text-destructive" },
-              { label: "Saldo Esperado", value: expectedAmount, color: expectedAmount >= 0 ? "text-primary" : "text-destructive" },
+              { label: "Fundo Inicial",  value: Number(currentRegister.opening_amount), color: "text-blue-500", visible: true },
+              { label: "Total Entradas", value: totalEntradas,  color: "text-primary", visible: !isBlind },
+              { label: "Total Saídas",   value: totalSaidas,    color: "text-destructive", visible: !isBlind },
+              { label: "Saldo Esperado", value: expectedAmount, color: expectedAmount >= 0 ? "text-primary" : "text-destructive", visible: !isBlind },
             ].map(card => (
               <Card key={card.label} className="border-border/50">
                 <CardContent className="p-4">
                   <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{card.label}</p>
-                  <p className={`font-display text-lg font-bold mt-1 ${card.color}`}>{formatCurrency(card.value)}</p>
+                  <p className={`font-display text-lg font-bold mt-1 ${card.visible ? card.color : "text-muted-foreground"}`}>
+                    {card.visible ? formatCurrency(card.value) : "******"}
+                  </p>
                 </CardContent>
               </Card>
             ))}
           </div>
 
+          {!isBlind && (
           <Card className="border-border/50">
             <CardHeader className="pb-2">
               <CardTitle className="font-display text-sm flex items-center gap-2">
@@ -423,6 +432,7 @@ const Caixa = () => {
               </div>
             </CardContent>
           </Card>
+          )}
 
           <Card className="border-border/50">
             <CardHeader className="pb-2">
@@ -595,13 +605,19 @@ const Caixa = () => {
                 {pendingCount} lançamento{pendingCount > 1 ? "s" : ""} pendente{pendingCount > 1 ? "s" : ""}. Confirme todos antes de fechar.
               </div>
             )}
-            <div className="rounded-lg bg-muted/50 p-3 text-xs">
-              <div className="flex justify-between"><span className="text-muted-foreground">Saldo esperado pelo sistema</span><span className="font-bold">{formatCurrency(expectedAmount)}</span></div>
-            </div>
+            {!isBlind ? (
+              <div className="rounded-lg bg-muted/50 p-3 text-xs">
+                <div className="flex justify-between"><span className="text-muted-foreground">Saldo esperado pelo sistema</span><span className="font-bold">{formatCurrency(expectedAmount)}</span></div>
+              </div>
+            ) : (
+              <div className="rounded-lg bg-muted/50 p-3 text-xs text-center text-muted-foreground font-medium">
+                Fechamento de Caixa Cego: Informe o valor exato contado fisicamente nas gavetas.
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label className="text-xs">Valor Contado (R$)</Label>
               <Input type="number" step="0.01" value={closeForm.amount} onChange={e => setCloseForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" className="h-10" />
-              {closeForm.amount && (
+              {closeForm.amount && !isBlind && (
                 <div className={`flex items-center gap-2 text-xs font-semibold mt-1 ${Math.abs(difference) <= 5 ? "text-primary" : "text-destructive"}`}>
                   {Math.abs(difference) <= 5 ? <CheckCircle className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
                   Diferença: {difference >= 0 ? "+" : ""}{formatCurrency(difference)}
@@ -609,7 +625,7 @@ const Caixa = () => {
                 </div>
               )}
             </div>
-            {Math.abs(difference) > 5 && closeForm.amount && (
+            {!isBlind && Math.abs(difference) > 5 && closeForm.amount && (
               <div className="space-y-1.5">
                 <Label className="text-xs text-destructive">Motivo da diferença *</Label>
                 <Textarea value={closeForm.reason} onChange={e => setCloseForm(f => ({ ...f, reason: e.target.value }))} placeholder="Explique a diferença..." className="min-h-[60px]" />
