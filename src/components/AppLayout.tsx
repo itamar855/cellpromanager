@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutDashboard, Package, ArrowUpDown, ShoppingBag, Store, Landmark,
-  LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle, FileText, Download, Brain,
+  LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle, FileText, Download, Brain, Settings
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ const navItems = [
   { label: "Lojas", icon: Store, path: "/lojas" },
   { label: "Equipe", icon: Users, path: "/equipe" },
   { label: "Caixa", icon: Landmark, path: "/caixa" },
+  { label: "Config.", icon: Settings, path: "/configuracoes" },
   { label: "IA", icon: Brain, path: "/assistente-ia" },
 ];
 
@@ -74,25 +75,21 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
           </div>
           <div className="flex gap-1">
             <Button
-              variant="ghost"
-              size="sm"
+              className="h-9 px-3 justify-start bg-transparent text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent"
               onClick={toggleTheme}
-              className="justify-start text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent"
             >
               {theme === "dark" ? <Sun className="h-4 w-4 mr-2" /> : <Moon className="h-4 w-4 mr-2" />}
               {theme === "dark" ? "Claro" : "Escuro"}
             </Button>
             <Link to="/instalar">
-              <Button variant="ghost" size="sm" className="text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent">
+              <Button className="h-9 px-3 bg-transparent text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent">
                 <Download className="h-4 w-4 mr-2" /> App
               </Button>
             </Link>
           </div>
           <Button
-            variant="ghost"
-            size="sm"
+            className="h-9 px-3 w-full justify-start bg-transparent text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent"
             onClick={signOut}
-            className="w-full justify-start text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent"
           >
             <LogOut className="h-4 w-4 mr-2" />
             Sair
@@ -111,10 +108,10 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
             <span className="font-display font-bold text-sm">CellManager</span>
           </div>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8">
+            <Button className="h-8 w-8 p-0 bg-transparent hover:bg-muted" onClick={toggleTheme}>
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
-            <Button variant="ghost" size="icon" onClick={signOut} className="h-8 w-8">
+            <Button className="h-8 w-8 p-0 bg-transparent hover:bg-muted" onClick={signOut}>
               <LogOut className="h-4 w-4" />
             </Button>
           </div>

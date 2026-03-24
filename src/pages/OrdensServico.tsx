@@ -26,6 +26,7 @@ import { OsChecklist, ChecklistData } from "@/components/OsChecklist";
 import { OsPhotoGallery } from "@/components/OsPhotoGallery";
 import { OsParts } from "@/components/OsParts";
 import { Printer } from "lucide-react";
+import { triggerWebhook } from "@/utils/webhookSender";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -378,6 +379,18 @@ const OrdensServico = () => {
 
     const { error } = await supabase.from("service_orders").update(updates).eq("id", orderId);
     if (error) { toast.error("Erro ao atualizar status"); return; }
+
+    const order = orders.find(o => o.id === orderId);
+    if (order && (order as any).store_id) {
+      triggerWebhook("os_status_changed", (order as any).store_id, {
+        order_id: orderId,
+        order_number: (order as any).order_number,
+        customer: (order as any).customer_name,
+        device: `${(order as any).device_brand} ${(order as any).device_model}`,
+        old_status: oldStatus,
+        new_status: newStatus,
+      });
+    }
 
     await supabase.from("service_order_history").insert({
       service_order_id: orderId, old_status: oldStatus,

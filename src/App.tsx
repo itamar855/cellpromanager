@@ -22,6 +22,7 @@ import AIAssistant from "./pages/AIAssistant";
 import NotFound from "./pages/NotFound";
 import Caixa from "./pages/Caixa";
 import OSPublica from "./pages/OSPublica";
+import Configuracoes from "./pages/Configuracoes";
 
 const queryClient = new QueryClient();
 
@@ -65,6 +66,7 @@ const App = () => (
               <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
               <Route path="/relatorios" element={<ProtectedRoute><Relatorios /></ProtectedRoute>} />
               <Route path="/caixa" element={<ProtectedRoute><Caixa /></ProtectedRoute>} />
+              <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
               <Route path="/assistente-ia" element={<ProtectedRoute><AIAssistant /></ProtectedRoute>} />
               <Route path="/instalar" element={<Instalar />} />
               <Route path="/reset-password" element={<ResetPassword />} />

@@ -57,6 +57,9 @@ const Estoque = () => {
   const [loading, setLoading] = useState(false);
   const [transferProduct, setTransferProduct] = useState<Tables<"products"> | null>(null);
   const [transferStoreId, setTransferStoreId] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyProduct, setHistoryProduct] = useState<Tables<"products"> | null>(null);
+  const [productHistory, setProductHistory] = useState<any[]>([]);
 
   const [form, setForm] = useState({
     name: "", brand: "iPhone" as string, model: "", imei: "",
@@ -86,7 +89,7 @@ const Estoque = () => {
     e.preventDefault();
     if (!user) return;
     setLoading(true);
-    const { error } = await supabase.from("products").insert({
+    const { data, error } = await supabase.from("products").insert({
       name: form.name, brand: form.brand, model: form.model,
       imei: form.imei || null, serial_number: form.serial_number || null,
       cost_price: parseFloat(form.cost_price),
@@ -94,16 +97,27 @@ const Estoque = () => {
       store_id: form.store_id, created_by: user.id,
       product_type: form.product_type, condition: form.condition,
       color: form.color || null, capacity: form.capacity || null,
-    });
+    }).select().single();
+    
     if (error) {
       toast.error(error.message.includes("imei") ? "IMEI já cadastrado!" : error.message);
-    } else {
+    } else if (data) {
+      await supabase.from("product_history" as any).insert({
+        product_id: data.id, action: "Entrada inicial", new_cost: data.cost_price, created_by: user.id,
+      });
       toast.success("Aparelho cadastrado!");
       setDialogOpen(false);
       setForm({ name: "", brand: "iPhone", model: "", imei: "", serial_number: "", cost_price: "", sale_price: "", store_id: "", product_type: "celular", condition: "used", color: "", capacity: "" });
       fetchData();
     }
     setLoading(false);
+  };
+
+  const loadHistory = async (p: Tables<"products">) => {
+    setHistoryProduct(p);
+    const { data } = await supabase.from("product_history" as any).select(`*, created_by_profile:profiles!product_history_created_by_fkey(display_name)`).eq("product_id", p.id).order("created_at", { ascending: false });
+    setProductHistory(data ?? []);
+    setHistoryOpen(true);
   };
 
   const handleAccSubmit = async (e: React.FormEvent) => {
@@ -157,6 +171,11 @@ const Estoque = () => {
         type: "income", amount: 0,
         description: `Transferência: ${transferProduct.name} de ${storeMap.get(transferProduct.store_id)} → ${storeMap.get(transferStoreId)}`,
         store_id: transferStoreId, product_id: transferProduct.id, created_by: user.id,
+      });
+      await supabase.from("product_history" as any).insert({
+        product_id: transferProduct.id, action: "Transferência de Loja", 
+        notes: `De: ${storeMap.get(transferProduct.store_id)} → Para: ${storeMap.get(transferStoreId)}`,
+        created_by: user.id,
       });
       toast.success("Produto transferido!");
       setTransferDialogOpen(false);
@@ -363,7 +382,7 @@ const Estoque = () => {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-medium text-sm truncate">{p.name}</p>
-                            <Badge variant="outline" className={`text-[10px] ${statusColors[p.status]}`}>
+                            <Badge className={`text-[10px] ${statusColors[p.status]}`}>
                               {statusLabels[p.status] || p.status}
                             </Badge>
                           </div>
@@ -384,11 +403,14 @@ const Estoque = () => {
                             )}
                           </div>
                           {p.status === "in_stock" && stores.length > 1 && (
-                            <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1 text-muted-foreground"
+                            <Button className="h-7 text-[10px] gap-1 bg-transparent text-muted-foreground hover:bg-muted"
                               onClick={() => { setTransferProduct(p); setTransferDialogOpen(true); }}>
                               <ArrowRightLeft className="h-3 w-3" /> Transferir
                             </Button>
                           )}
+                          <Button className="h-7 text-[10px] gap-1 bg-transparent text-muted-foreground hover:bg-muted" onClick={() => loadHistory(p)}>
+                            Ver Histórico
+                          </Button>
                         </div>
                       </div>
                     </CardContent>
@@ -426,11 +448,11 @@ const Estoque = () => {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-medium text-sm">{a.name}</p>
-                            <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20">
+                            <Badge className="text-[10px] bg-primary/10 text-primary border-primary/20">
                               {categoryLabels[a.category] || a.category}
                             </Badge>
                             {isLow && (
-                              <Badge variant="outline" className="text-[10px] bg-yellow-500/15 text-yellow-500 border-yellow-500/20">
+                              <Badge className="text-[10px] bg-yellow-500/15 text-yellow-500 border-yellow-500/20">
                                 Estoque baixo
                               </Badge>
                             )}
@@ -452,10 +474,10 @@ const Estoque = () => {
                             )}
                           </div>
                           <div className="flex gap-1">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openAccDialog(a)}>
+                            <Button className="h-7 w-7 p-0 bg-transparent text-foreground hover:bg-muted" onClick={() => openAccDialog(a)}>
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDeleteAcc(a.id)}>
+                            <Button className="h-7 w-7 p-0 bg-transparent text-destructive hover:bg-destructive/10" onClick={() => handleDeleteAcc(a.id)}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </div>
@@ -582,6 +604,50 @@ const Estoque = () => {
               <Button onClick={handleTransfer} className="w-full h-11 font-semibold" disabled={loading || !transferStoreId}>
                 {loading ? "Transferindo..." : "Confirmar Transferência"}
               </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      
+      {/* Product History Dialog */}
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="max-w-md max-h-[85dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display">Histórico do Aparelho</DialogTitle>
+          </DialogHeader>
+          {historyProduct && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-muted/50 p-3 text-xs space-y-1">
+                <p className="font-semibold">{historyProduct.name}</p>
+                <p className="text-muted-foreground">{historyProduct.imei && `IMEI: ${historyProduct.imei}`} · Custo: {formatCurrency(Number(historyProduct.cost_price))}</p>
+              </div>
+              <div className="space-y-3 relative before:absolute before:inset-0 before:ml-2 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-border before:to-transparent">
+                {productHistory.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center">Nenhum registro encontrado.</p>
+                ) : productHistory.map((h, i) => (
+                  <div key={h.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                    <div className="flex items-center justify-center w-5 h-5 rounded-full border border-primary bg-background shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow"></div>
+                    <div className="w-[calc(100%-2rem)] md:w-[calc(50%-1.25rem)] bg-card p-3 rounded border shadow-sm text-xs">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-semibold text-primary">{h.action}</span>
+                        <span className="text-muted-foreground text-[10px]">{new Date(h.created_at).toLocaleDateString()}</span>
+                      </div>
+                      <div className="text-muted-foreground">
+                        {h.notes && <p className="mb-0.5">{h.notes}</p>}
+                        {h.old_cost !== null && h.new_cost !== null && (
+                          <p>Custo: <span className="line-through">{formatCurrency(h.old_cost)}</span> → <span className="font-medium text-foreground">{formatCurrency(h.new_cost)}</span></p>
+                        )}
+                        {(h.old_cost === null && h.new_cost !== null) && (
+                          <p>Custo: <span className="font-medium text-foreground">{formatCurrency(h.new_cost)}</span></p>
+                        )}
+                      </div>
+                      <div className="text-[10px] font-medium text-muted-foreground mt-2 border-t pt-1 border-border/50">
+                        {h.created_by_profile?.display_name || "Sistema"}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </DialogContent>

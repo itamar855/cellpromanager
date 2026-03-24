@@ -14,6 +14,82 @@ export type Database = {
   }
   public: {
     Tables: {
+      product_history: {
+        Row: {
+          action: string
+          created_at: string
+          created_by: string
+          id: string
+          new_cost: number | null
+          notes: string | null
+          old_cost: number | null
+          product_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          created_by: string
+          id?: string
+          new_cost?: number | null
+          notes?: string | null
+          old_cost?: number | null
+          product_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          new_cost?: number | null
+          notes?: string | null
+          old_cost?: number | null
+          product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_history_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      webhooks: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          is_active: boolean
+          store_id: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          is_active?: boolean
+          store_id: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          is_active?: boolean
+          store_id?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhooks_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           address: string | null

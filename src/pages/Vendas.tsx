@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { gerarNotaFiscalInterna, type NotaFiscalData } from "@/utils/notaFiscalInterna";
+import { triggerWebhook } from "@/utils/webhookSender";
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -233,7 +234,7 @@ const Vendas = () => {
       tradeInProductId = tip.id;
     }
 
-    const { error: saleError } = await supabase.from("sales").insert({
+    const { data: saleData, error: saleError } = await supabase.from("sales").insert({
       product_id: form.product_id, store_id: selectedProduct.store_id,
       sale_price: salePriceAfterDiscount, has_trade_in: form.has_trade_in,
       trade_in_device_name: form.has_trade_in ? form.trade_in_device_name || null : null,
@@ -243,7 +244,7 @@ const Vendas = () => {
       trade_in_value: form.has_trade_in ? tradeInVal : 0, trade_in_product_id: tradeInProductId,
       payment_cash: cashVal, payment_card: cardVal, payment_pix: pixVal,
       customer_id: customerId,
-      customer_name: selectedCustomer?.name ?? customerSearch || null,
+      customer_name: (selectedCustomer?.name || customerSearch) || null,
       customer_phone: selectedCustomer?.phone ?? null,
       customer_cpf: selectedCustomer?.cpf ?? null,
       customer_address: selectedCustomer?.address ?? null,
@@ -252,9 +253,11 @@ const Vendas = () => {
       seller_id: user.id, discount: discount,
       warranty_days: parseInt(form.warranty_days) || 90,
       installments: parseInt(form.installments) || 1,
-    } as any);
+    } as any).select().single();
 
     if (saleError) { toast.error(saleError.message); setLoading(false); return; }
+
+    triggerWebhook("sale_completed", selectedProduct.store_id, saleData);
 
     await supabase.from("products").update({ status: "sold", sale_price: salePriceAfterDiscount }).eq("id", form.product_id);
     const desc = `Venda: ${selectedProduct.name}${selectedCustomer?.name ? ` → ${selectedCustomer.name}` : ""}`;
@@ -348,7 +351,7 @@ const Vendas = () => {
                 </div>
               </div>
             </div>
-            <Button variant="ghost" size="sm" className="h-7 text-[10px]" onClick={clearCustomer}>Trocar</Button>
+            <Button className="h-7 px-2 bg-transparent text-foreground hover:bg-muted text-[10px]" onClick={clearCustomer}>Trocar</Button>
           </div>
           {selectedCustomer.address && <p className="text-[10px] text-muted-foreground">📍 {selectedCustomer.address}</p>}
 
@@ -397,7 +400,7 @@ const Vendas = () => {
               ))}
             </div>
           )}
-          <Button variant="outline" size="sm" className="w-full gap-2 h-9 text-xs border-dashed"
+          <Button className="w-full gap-2 h-9 text-xs border border-dashed bg-transparent text-foreground hover:bg-muted"
             onClick={() => setShowNewCustomerForm(v => !v)}>
             <UserPlus className="h-3.5 w-3.5" /> Cadastrar novo cliente
           </Button>
@@ -432,7 +435,7 @@ const Vendas = () => {
                   <Input type="date" value={newCustomerForm.birth} onChange={e => setNewCustomerForm(f => ({ ...f, birth: e.target.value }))} className="h-9" />
                 </div>
               </div>
-              <Button size="sm" className="w-full h-9" onClick={handleCreateCustomer} disabled={loading || !newCustomerForm.name}>
+              <Button className="w-full h-9" onClick={handleCreateCustomer} disabled={loading || !newCustomerForm.name}>
                 {loading ? "Salvando..." : "Salvar e Selecionar"}
               </Button>
             </div>
@@ -453,7 +456,7 @@ const Vendas = () => {
           {/* PDV */}
           <Dialog open={pdvOpen} onOpenChange={o => { setPdvOpen(o); if (!o) resetPdv(); }}>
             <DialogTrigger asChild>
-              <Button variant="outline" className="gap-2 h-10"><Zap className="h-4 w-4 text-yellow-500" /> PDV Rápido</Button>
+              <Button className="gap-2 h-10 border bg-transparent text-foreground hover:bg-muted"><Zap className="h-4 w-4 text-yellow-500" /> PDV Rápido</Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90dvh] overflow-y-auto">
               <DialogHeader><DialogTitle className="font-display flex items-center gap-2"><Zap className="h-4 w-4 text-yellow-500" /> PDV — Venda Rápida</DialogTitle></DialogHeader>
@@ -482,13 +485,13 @@ const Vendas = () => {
                         <div key={item.acc.id} className="rounded-lg border border-border/50 p-2.5 space-y-2">
                           <div className="flex items-center justify-between">
                             <p className="text-sm font-medium truncate flex-1">{item.acc.name}</p>
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive shrink-0" onClick={() => updateCartQty(item.acc.id, 0)}><Trash2 className="h-3 w-3" /></Button>
+                            <Button className="h-6 w-6 p-0 bg-transparent text-destructive hover:bg-destructive/10 shrink-0" onClick={() => updateCartQty(item.acc.id, 0)}><Trash2 className="h-3 w-3" /></Button>
                           </div>
                           <div className="flex items-center gap-2">
                             <div className="flex items-center gap-1">
-                              <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateCartQty(item.acc.id, item.qty - 1)}>-</Button>
+                              <Button className="h-7 w-7 p-0 border bg-transparent text-foreground hover:bg-muted" onClick={() => updateCartQty(item.acc.id, item.qty - 1)}>-</Button>
                               <span className="text-sm font-bold w-6 text-center">{item.qty}</span>
-                              <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateCartQty(item.acc.id, item.qty + 1)}>+</Button>
+                              <Button className="h-7 w-7 p-0 border bg-transparent text-foreground hover:bg-muted" onClick={() => updateCartQty(item.acc.id, item.qty + 1)}>+</Button>
                             </div>
                             <Input type="number" step="0.01" value={item.price} onChange={e => updateCartPrice(item.acc.id, parseFloat(e.target.value) || 0)} className="h-7 text-xs w-24" />
                             <span className="text-sm font-bold text-primary ml-auto">{formatCurrency(item.price * item.qty)}</span>
@@ -697,7 +700,7 @@ const Vendas = () => {
             <CardContent className="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2"><p className="font-medium text-sm truncate">{tx.description}</p><Badge variant="outline" className="text-[10px] bg-yellow-500/15 text-yellow-500 border-yellow-500/20 shrink-0">PDV</Badge></div>
+                  <div className="flex items-center gap-2"><p className="font-medium text-sm truncate">{tx.description}</p><Badge className="text-[10px] bg-yellow-500/15 text-yellow-500 border border-yellow-500/20 shrink-0">PDV</Badge></div>
                   <p className="text-[10px] text-muted-foreground mt-1">{(storeMap.get(tx.store_id) as any)?.name || ""} · {new Date(tx.created_at).toLocaleDateString("pt-BR")}</p>
                 </div>
                 <p className="font-display font-bold text-sm text-primary shrink-0">{formatCurrency(Number(tx.amount))}</p>
@@ -716,12 +719,12 @@ const Vendas = () => {
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-sm truncate">{product?.name || "Produto removido"}</p>
                     <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                      {sale.has_trade_in && <Badge variant="outline" className="text-[10px] bg-primary/15 text-primary border-primary/20">Troca: {sale.trade_in_device_name}</Badge>}
-                      {Number(sale.payment_cash) > 0 && <Badge variant="outline" className="text-[10px]">💵 {formatCurrency(Number(sale.payment_cash))}</Badge>}
-                      {Number(sale.payment_card) > 0 && <Badge variant="outline" className="text-[10px]">💳 {formatCurrency(Number(sale.payment_card))}{sale.installments && sale.installments > 1 ? ` (${sale.installments}x)` : ""}</Badge>}
-                      {Number(sale.payment_pix) > 0 && <Badge variant="outline" className="text-[10px]">📱 {formatCurrency(Number(sale.payment_pix))}</Badge>}
-                      {Number(sale.discount) > 0 && <Badge variant="outline" className="text-[10px] text-yellow-500 border-yellow-500/30">🏷️ -{formatCurrency(Number(sale.discount))}</Badge>}
-                      {sale.warranty_days && sale.warranty_days !== 90 && <Badge variant="outline" className="text-[10px] text-blue-500 border-blue-500/30">🛡️ {sale.warranty_days}d</Badge>}
+                      {sale.has_trade_in && <Badge className="text-[10px] bg-primary/15 text-primary border border-primary/20">Troca: {sale.trade_in_device_name}</Badge>}
+                      {Number(sale.payment_cash) > 0 && <Badge className="text-[10px] border border-border bg-transparent text-foreground">💵 {formatCurrency(Number(sale.payment_cash))}</Badge>}
+                      {Number(sale.payment_card) > 0 && <Badge className="text-[10px] border border-border bg-transparent text-foreground">💳 {formatCurrency(Number(sale.payment_card))}{sale.installments && sale.installments > 1 ? ` (${sale.installments}x)` : ""}</Badge>}
+                      {Number(sale.payment_pix) > 0 && <Badge className="text-[10px] border border-border bg-transparent text-foreground">📱 {formatCurrency(Number(sale.payment_pix))}</Badge>}
+                      {Number(sale.discount) > 0 && <Badge className="text-[10px] text-yellow-500 border border-yellow-500/30 bg-transparent">🏷️ -{formatCurrency(Number(sale.discount))}</Badge>}
+                      {sale.warranty_days && sale.warranty_days !== 90 && <Badge className="text-[10px] text-blue-500 border border-blue-500/30 bg-transparent">🛡️ {sale.warranty_days}d</Badge>}
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-1">
                       {sale.customer_name && `${sale.customer_name} · `}
@@ -729,12 +732,12 @@ const Vendas = () => {
                       {(storeMap.get(sale.store_id) as any)?.name || ""} · {new Date(sale.created_at).toLocaleDateString("pt-BR")}
                     </p>
                     <div className="flex gap-2 mt-2">
-                      <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1 px-2"
+                      <Button className="h-7 px-2 text-[10px] gap-1 border bg-transparent text-foreground hover:bg-muted"
                         onClick={() => handleGerarNota(sale, false)} disabled={isLoading}>
                         <FileText className="h-3 w-3" />{isLoading ? "Gerando..." : "Comprovante"}
                       </Button>
                       {sale.customer_phone && (
-                        <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1 px-2 text-green-500 border-green-500/30 hover:bg-green-500/10"
+                        <Button className="h-7 px-2 text-[10px] gap-1 text-green-500 border border-green-500/30 bg-transparent hover:bg-green-500/10"
                           onClick={() => handleGerarNota(sale, true)} disabled={isLoading}>
                           <MessageCircle className="h-3 w-3" />WhatsApp
                         </Button>
