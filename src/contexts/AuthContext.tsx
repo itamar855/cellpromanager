@@ -38,8 +38,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       .maybeSingle();
     
     if (data) {
-      setUserRole(data.role);
-      setUserPermissions(data.permissions as Record<string, boolean>);
+      setUserRole((data as any).role);
+      setUserPermissions((data as any).permissions as Record<string, boolean>);
     } else {
       setUserRole(null);
       setUserPermissions(null);

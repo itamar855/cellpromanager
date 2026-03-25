@@ -84,15 +84,15 @@ const Equipe = () => {
 
     const profiles = profilesRes.data ?? [];
     const roles = rolesRes.data ?? [];
-    const roleMap = new Map(roles.map((r) => [r.user_id, { role: r.role, permissions: r.permissions }]));
+    const roleMap = new Map((roles as any[]).map((r) => [r.user_id, { role: r.role, permissions: r.permissions }]));
 
     setMembers(
       profiles.map((p: any) => {
         const roleData = roleMap.get(p.user_id);
         return {
           ...p,
-          role: roleData?.role ?? null,
-          permissions: roleData?.permissions as Permissions ?? null,
+          role: (roleData as any)?.role ?? null,
+          permissions: ((roleData as any)?.permissions as Permissions) ?? null,
         };
       })
     );
