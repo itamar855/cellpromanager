@@ -36,7 +36,7 @@ const AGENTS = [
 ];
 
 const AIAssistant = () => {
-  const { user, userRole } = useAuth();
+  const { user, userRole, userPermissions } = useAuth();
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
@@ -183,6 +183,7 @@ const AIAssistant = () => {
     setExportLoading(null);
   };
 
+  const canUseIA = userRole === "admin" || (userRole === "gerente" && userPermissions?.ia);
   const isAdmin = userRole === "admin";
 
   return (

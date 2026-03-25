@@ -7,6 +7,7 @@ type AuthContextType = {
   session: Session | null;
   user: User | null;
   userRole: Enums<"app_role"> | null;
+  userPermissions: Record<string, boolean> | null;
   loading: boolean;
   signOut: () => Promise<void>;
 };
@@ -15,6 +16,7 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   user: null,
   userRole: null,
+  userPermissions: null,
   loading: true,
   signOut: async () => {},
 });
@@ -25,15 +27,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<Enums<"app_role"> | null>(null);
+  const [userPermissions, setUserPermissions] = useState<Record<string, boolean> | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchUserRole = async (userId: string) => {
     const { data } = await supabase
       .from("user_roles")
-      .select("role")
+      .select("role, permissions")
       .eq("user_id", userId)
       .maybeSingle();
-    setUserRole(data?.role ?? null);
+    
+    if (data) {
+      setUserRole(data.role);
+      setUserPermissions(data.permissions as Record<string, boolean>);
+    } else {
+      setUserRole(null);
+      setUserPermissions(null);
+    }
   };
 
   useEffect(() => {
@@ -45,6 +55,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setTimeout(() => fetchUserRole(session.user.id), 0);
         } else {
           setUserRole(null);
+          setUserPermissions(null);
         }
         setLoading(false);
       }
@@ -67,7 +78,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, userRole, loading, signOut }}>
+    <AuthContext.Provider value={{ session, user, userRole, userPermissions, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );

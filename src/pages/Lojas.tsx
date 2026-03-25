@@ -51,7 +51,7 @@ const emptyDetails: StoreDetails = {
 };
 
 const Lojas = () => {
-  const { userRole } = useAuth();
+  const { userRole, userPermissions } = useAuth();
   const [stores, setStores] = useState<any[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -85,7 +85,7 @@ const Lojas = () => {
 
   useEffect(() => { fetchData(); }, []);
 
-  const isAdmin = userRole === "admin" || userRole === "gerente";
+  const isAdmin = userRole === "admin" || (userRole === "gerente" && userPermissions?.lojas);
 
   // ── Loja ──────────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {

@@ -14,7 +14,11 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, ArrowUpDown, ArrowUpRight, ArrowDownRight, Tag } from "lucide-react";
+import { Plus, ArrowUpDown, ArrowUpRight, ArrowDownRight, Tag, Trash2, Edit2 } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { Tables } from "@/integrations/supabase/types";
 
 const formatCurrency = (value: number) =>
@@ -38,13 +42,23 @@ const TRANSACTION_CATEGORIES = [
 ];
 
 const Transacoes = () => {
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
   const [transactions, setTransactions] = useState<Tables<"transactions">[]>([]);
   const [stores, setStores] = useState<Tables<"stores">[]>([]);
   const [accounts, setAccounts] = useState<Tables<"store_bank_accounts">[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ type: "sale", amount: "", description: "", category: "", store_id: "", source_account_id: "", destination_account_id: "" });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+  const [form, setForm] = useState({ 
+    type: "sale", 
+    amount: "", 
+    description: "", 
+    category: "", 
+    store_id: "", 
+    source_account_id: "", 
+    destination_account_id: "" 
+  });
 
   const fetchData = async () => {
     const [txRes, storesRes, accountsRes] = await Promise.all([
@@ -67,22 +81,78 @@ const Transacoes = () => {
       return;
     }
     setLoading(true);
-    const { error } = await supabase.from("transactions").insert({
-      type: form.type, amount: parseFloat(form.amount),
-      description: form.description || null, category: form.category || null,
-      store_id: form.store_id || null, created_by: user.id,
+
+    const payload = {
+      type: form.type, 
+      amount: parseFloat(form.amount),
+      description: form.description || null, 
+      category: form.category || null,
+      store_id: form.store_id || null, 
       source_account_id: form.source_account_id || null,
       destination_account_id: form.destination_account_id || null,
       net_amount: parseFloat(form.amount),
-      expected_settlement_date: new Date().toISOString(),
-      reconciled: false,
-    } as any);
-    
-    if (error) { toast.error(error.message); }
-    else {
-      toast.success("Transação registrada!");
-      setDialogOpen(false);
-      setForm({ type: "sale", amount: "", description: "", category: "", store_id: "", source_account_id: "", destination_account_id: "" });
+    };
+
+    if (editingId) {
+      const { error } = await supabase
+        .from("transactions")
+        .update(payload)
+        .eq("id", editingId);
+      
+      if (error) { toast.error(error.message); }
+      else {
+        toast.success("Transação atualizada!");
+        setDialogOpen(false);
+        setEditingId(null);
+        setForm({ type: "sale", amount: "", description: "", category: "", store_id: "", source_account_id: "", destination_account_id: "" });
+        fetchData();
+      }
+    } else {
+      const { error } = await supabase.from("transactions").insert({
+        ...payload,
+        created_by: user.id,
+        expected_settlement_date: new Date().toISOString(),
+        reconciled: false,
+      } as any);
+      
+      if (error) { toast.error(error.message); }
+      else {
+        toast.success("Transação registrada!");
+        setDialogOpen(false);
+        setForm({ type: "sale", amount: "", description: "", category: "", store_id: "", source_account_id: "", destination_account_id: "" });
+        fetchData();
+      }
+    }
+    setLoading(false);
+  };
+
+  const handleEdit = (tx: Tables<"transactions">) => {
+    setEditingId(tx.id);
+    setForm({
+      type: tx.type,
+      amount: tx.amount.toString(),
+      description: tx.description || "",
+      category: tx.category || "",
+      store_id: tx.store_id || "",
+      source_account_id: tx.source_account_id || "",
+      destination_account_id: tx.destination_account_id || "",
+    });
+    setDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!transactionToDelete) return;
+    setLoading(true);
+    const { error } = await supabase
+      .from("transactions")
+      .delete()
+      .eq("id", transactionToDelete);
+
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Transação excluída!");
+      setTransactionToDelete(null);
       fetchData();
     }
     setLoading(false);
@@ -204,7 +274,7 @@ const Transacoes = () => {
         {transactions.map((tx) => (
           <Card key={tx.id} className="border-border/50 shadow-sm overflow-hidden group hover:border-primary/30 transition-colors">
             <CardContent className="p-3.5 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
                 <div className={`rounded-lg p-2.5 shrink-0 shadow-inner ${
                   tx.type === "transfer" ? "bg-blue-500/10 text-blue-500" : 
                   isIncome(tx.type) ? "bg-primary/10 text-primary" : 
@@ -213,7 +283,7 @@ const Transacoes = () => {
                 }`}>
                   {tx.type === "transfer" ? <ArrowUpDown className="h-4 w-4" /> : isIncome(tx.type) ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-sm truncate">{tx.description || tx.category || typeLabels[tx.type]}</p>
                     {tx.category && <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-normal text-muted-foreground">{tx.category}</Badge>}
@@ -234,24 +304,68 @@ const Transacoes = () => {
                 </div>
               </div>
               <div className="flex items-center gap-3 shrink-0">
-                <p className={`font-display font-bold text-sm text-right ${tx.type === "transfer" ? "text-blue-500" : isIncome(tx.type) ? "text-primary" : "text-destructive"}`}>
-                  {tx.type === "transfer" ? "" : isIncome(tx.type) ? "+" : "-"}{formatCurrency(Number(tx.amount))}
-                </p>
-                <button 
-                  onClick={() => handleReconcile(tx.id, tx.reconciled || false)}
-                  className={`h-7 px-2 rounded text-[10px] font-bold border transition-all ${
-                    tx.reconciled 
-                      ? "bg-green-500/10 text-green-600 border-green-500/20" 
-                      : "bg-transparent text-muted-foreground border-border hover:border-primary hover:text-primary"
-                  }`}
-                >
-                  {tx.reconciled ? "CONCILIADO" : "PENDENTE"}
-                </button>
+                <div className="text-right">
+                  <p className={`font-display font-bold text-sm ${tx.type === "transfer" ? "text-blue-500" : isIncome(tx.type) ? "text-primary" : "text-destructive"}`}>
+                    {tx.type === "transfer" ? "" : isIncome(tx.type) ? "+" : "-"}{formatCurrency(Number(tx.amount))}
+                  </p>
+                  <button 
+                    onClick={() => handleReconcile(tx.id, tx.reconciled || false)}
+                    className={`mt-1 h-5 px-1.5 rounded text-[9px] font-bold border transition-all ${
+                      tx.reconciled 
+                        ? "bg-green-500/10 text-green-600 border-green-500/20" 
+                        : "bg-transparent text-muted-foreground border-border hover:border-primary hover:text-primary"
+                    }`}
+                  >
+                    {tx.reconciled ? "CONCILIADO" : "PENDENTE"}
+                  </button>
+                </div>
+
+                {userRole === "admin" && (
+                  <div className="flex flex-col gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-primary"
+                      onClick={() => handleEdit(tx)}
+                    >
+                      <Edit2 className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => setTransactionToDelete(tx.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      <AlertDialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Transação</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita e afetará os relatórios financeiros.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={handleDelete}
+              disabled={loading}
+            >
+              {loading ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

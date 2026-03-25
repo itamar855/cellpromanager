@@ -11,25 +11,36 @@ import { Button } from "@/components/ui/button";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/" },
-  { label: "Vendas", icon: ShoppingBag, path: "/vendas" },
-  { label: "Estoque", icon: Package, path: "/estoque" },
-  { label: "OS", icon: Wrench, path: "/ordens-servico" },
-  { label: "Clientes", icon: UserCircle, path: "/clientes" },
-  { label: "Transações", icon: ArrowUpDown, path: "/transacoes" },
-  { label: "Relatórios", icon: FileText, path: "/relatorios" },
-  { label: "Lojas", icon: Store, path: "/lojas" },
-  { label: "Equipe", icon: Users, path: "/equipe" },
-  { label: "Contas", icon: Landmark, path: "/contas" },
-  { label: "Caixa", icon: PiggyBank, path: "/caixa" },
-  { label: "Auditoria", icon: Activity, path: "/auditoria" },
-  { label: "Config.", icon: Settings, path: "/configuracoes" },
-  { label: "IA", icon: Brain, path: "/assistente-ia" },
+  { label: "Vendas", icon: ShoppingBag, path: "/vendas", permission: "vendas" },
+  { label: "Estoque", icon: Package, path: "/estoque", permission: "estoque" },
+  { label: "OS", icon: Wrench, path: "/ordens-servico", permission: "os" },
+  { label: "Clientes", icon: UserCircle, path: "/clientes", permission: "clientes" },
+  { label: "Transações", icon: ArrowUpDown, path: "/transacoes", permission: "transacoes" },
+  { label: "Relatórios", icon: FileText, path: "/relatorios", permission: "relatorios" },
+  { label: "Lojas", icon: Store, path: "/lojas", permission: "lojas" },
+  { label: "Equipe", icon: Users, path: "/equipe", permission: "equipe" },
+  { label: "Contas", icon: Landmark, path: "/contas", permission: "contas" },
+  { label: "Caixa", icon: PiggyBank, path: "/caixa", permission: "caixa" },
+  { label: "Auditoria", icon: Activity, path: "/auditoria", permission: "auditoria" },
+  { label: "Config.", icon: Settings, path: "/configuracoes", permission: "configuracoes" },
+  { label: "IA", icon: Brain, path: "/assistente-ia", permission: "ia" },
 ];
 
 const AppLayout = ({ children }: { children: ReactNode }) => {
-  const { user, signOut } = useAuth();
+  const { user, userRole, userPermissions, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
+
+  const filteredNavItems = navItems.filter((item) => {
+    // Admins see everything
+    if (userRole === "admin") return true;
+    
+    // If item has no specific permission required, it's public (for logged in users)
+    if (!item.permission) return true;
+    
+    // Check granular permission
+    return userPermissions?.[item.permission] === true;
+  });
 
   return (
     <div className="flex h-[100dvh] overflow-hidden">
@@ -47,7 +58,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         </div>
 
         <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
-          {navItems.map((item) => {
+          {filteredNavItems.map((item) => {
             const Icon = item.icon || Smartphone;
             return (
               <Link

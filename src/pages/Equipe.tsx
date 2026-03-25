@@ -55,7 +55,7 @@ type ProfileWithRole = Tables<"profiles"> & {
 };
 
 const Equipe = () => {
-  const { userRole, user } = useAuth();
+  const { userRole, user, userPermissions } = useAuth();
   const [members, setMembers] = useState<ProfileWithRole[]>([]);
   const [stores, setStores] = useState<Tables<"stores">[]>([]);
   const [selectedMember, setSelectedMember] = useState<ProfileWithRole | null>(null);
@@ -79,20 +79,24 @@ const Equipe = () => {
 
     const profiles = profilesRes.data ?? [];
     const roles = rolesRes.data ?? [];
-    const roleMap = new Map(roles.map((r) => [r.user_id, r.role]));
+    const roleMap = new Map(roles.map((r) => [r.user_id, { role: r.role, permissions: r.permissions }]));
 
     setMembers(
-      profiles.map((p: any) => ({
-        ...p,
-        role: roleMap.get(p.user_id) ?? null,
-      }))
+      profiles.map((p: any) => {
+        const roleData = roleMap.get(p.user_id);
+        return {
+          ...p,
+          role: roleData?.role ?? null,
+          permissions: roleData?.permissions as Permissions ?? null,
+        };
+      })
     );
     setStores(storesRes.data ?? []);
   };
 
   useEffect(() => { fetchData(); }, []);
 
-  const isAdmin = userRole === "admin";
+  const isAdmin = userRole === "admin" || (userRole === "gerente" && userPermissions?.equipe);
   const storeMap = new Map(stores.map((s) => [s.id, s.name]));
 
   const openEditDialog = (member: ProfileWithRole) => {
@@ -117,13 +121,20 @@ const Equipe = () => {
     if (existing) {
       const { error } = await supabase
         .from("user_roles")
-        .update({ role: newRole as any })
+        .update({ 
+          role: newRole as any,
+          permissions: permissions
+        })
         .eq("user_id", selectedMember.user_id);
       if (error) { toast.error(error.message); setLoading(false); return; }
     } else {
       const { error } = await supabase
         .from("user_roles")
-        .insert({ user_id: selectedMember.user_id, role: newRole as any });
+        .insert({ 
+          user_id: selectedMember.user_id, 
+          role: newRole as any,
+          permissions: permissions
+        });
       if (error) { toast.error(error.message); setLoading(false); return; }
     }
 
