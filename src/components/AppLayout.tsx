@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/" },
+  { label: "Dashboard", icon: LayoutDashboard, path: "/", permission: "dashboard" },
   { label: "Vendas", icon: ShoppingBag, path: "/vendas", permission: "vendas" },
   { label: "Estoque", icon: Package, path: "/estoque", permission: "estoque" },
   { label: "OS", icon: Wrench, path: "/ordens-servico", permission: "os" },

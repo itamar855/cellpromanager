@@ -28,6 +28,7 @@ const roleConfig: Record<string, { label: string; color: string; icon: typeof Sh
 };
 
 const MODULES = [
+  { key: "dashboard", label: "Dashboard" },
   { key: "vendas", label: "Vendas" },
   { key: "estoque", label: "Estoque" },
   { key: "os", label: "Ordens de Serviço" },
@@ -36,6 +37,10 @@ const MODULES = [
   { key: "relatorios", label: "Relatórios" },
   { key: "lojas", label: "Lojas" },
   { key: "equipe", label: "Equipe" },
+  { key: "contas", label: "Contas" },
+  { key: "caixa", label: "Caixa" },
+  { key: "auditoria", label: "Auditoria" },
+  { key: "configuracoes", label: "Configurações" },
   { key: "ia", label: "IA" },
 ];
 
@@ -43,8 +48,8 @@ type Permissions = Record<string, boolean>;
 
 const defaultPermissions = (role: string): Permissions => {
   if (role === "admin") return Object.fromEntries(MODULES.map((m) => [m.key, true]));
-  if (role === "gerente") return Object.fromEntries(MODULES.map((m) => [m.key, !["lojas", "equipe"].includes(m.key)]));
-  return Object.fromEntries(MODULES.map((m) => [m.key, ["vendas", "estoque", "os", "clientes"].includes(m.key)]));
+  if (role === "gerente") return Object.fromEntries(MODULES.map((m) => [m.key, !["lojas", "equipe", "auditoria", "configuracoes"].includes(m.key)]));
+  return Object.fromEntries(MODULES.map((m) => [m.key, ["dashboard", "vendas", "estoque", "os", "clientes", "caixa"].includes(m.key)]));
 };
 
 type ProfileWithRole = Tables<"profiles"> & {
