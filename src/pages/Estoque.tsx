@@ -58,6 +58,9 @@ const Estoque = () => {
   const [transferProduct, setTransferProduct] = useState<Tables<"products"> | null>(null);
   const [transferStoreId, setTransferStoreId] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [editProductOpen, setEditProductOpen] = useState(false);
+  const [editProduct, setEditProduct] = useState<Tables<"products"> | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", brand: "iPhone", model: "", imei: "", serial_number: "", cost_price: "", sale_price: "", store_id: "", condition: "used", color: "", capacity: "" });
   const [historyProduct, setHistoryProduct] = useState<Tables<"products"> | null>(null);
   const [productHistory, setProductHistory] = useState<any[]>([]);
 
@@ -609,6 +612,35 @@ const Estoque = () => {
         </DialogContent>
       </Dialog>
       
+      <Dialog open={editProductOpen} onOpenChange={setEditProductOpen}>
+        <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display">Editar Aparelho</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleUpdateProduct} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5"><Label className="text-xs">Nome</Label><Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} required className="h-10" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">Marca</Label><Select value={editForm.brand} onValueChange={v => setEditForm(f => ({ ...f, brand: v }))}><SelectTrigger className="h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="iPhone">iPhone</SelectItem><SelectItem value="Xiaomi">Xiaomi</SelectItem><SelectItem value="Samsung">Samsung</SelectItem><SelectItem value="Motorola">Motorola</SelectItem><SelectItem value="Outro">Outro</SelectItem></SelectContent></Select></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5"><Label className="text-xs">Modelo</Label><Input value={editForm.model} onChange={e => setEditForm(f => ({ ...f, model: e.target.value }))} required className="h-10" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">Condição</Label><Select value={editForm.condition} onValueChange={v => setEditForm(f => ({ ...f, condition: v }))}><SelectTrigger className="h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="new">Novo</SelectItem><SelectItem value="used">Usado</SelectItem><SelectItem value="refurbished">Recondicionado</SelectItem></SelectContent></Select></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5"><Label className="text-xs">Capacidade</Label><Input value={editForm.capacity} onChange={e => setEditForm(f => ({ ...f, capacity: e.target.value }))} placeholder="128GB" className="h-10" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">Cor</Label><Input value={editForm.color} onChange={e => setEditForm(f => ({ ...f, color: e.target.value }))} placeholder="Preto" className="h-10" /></div>
+            </div>
+            <div className="space-y-1.5"><Label className="text-xs">IMEI</Label><Input value={editForm.imei} onChange={e => setEditForm(f => ({ ...f, imei: e.target.value }))} className="h-10" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5"><Label className="text-xs">Custo (R$)</Label><Input type="number" step="0.01" value={editForm.cost_price} onChange={e => setEditForm(f => ({ ...f, cost_price: e.target.value }))} required className="h-10" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">Venda (R$)</Label><Input type="number" step="0.01" value={editForm.sale_price} onChange={e => setEditForm(f => ({ ...f, sale_price: e.target.value }))} className="h-10" /></div>
+            </div>
+            <div className="space-y-1.5"><Label className="text-xs">Loja</Label><Select value={editForm.store_id} onValueChange={v => setEditForm(f => ({ ...f, store_id: v }))}><SelectTrigger className="h-10"><SelectValue /></SelectTrigger><SelectContent>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+            <Button type="submit" className="w-full h-11 font-semibold" disabled={loading}>{loading ? "Salvando..." : "Salvar Alterações"}</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Product History Dialog */}
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
         <DialogContent className="max-w-md max-h-[85dvh] overflow-y-auto">
