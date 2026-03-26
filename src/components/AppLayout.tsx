@@ -1,13 +1,17 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { supabase } from "@/integrations/supabase/client";
 import {
   LayoutDashboard, Package, ArrowUpDown, ShoppingBag, Store, Landmark, PiggyBank,
-  LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle, FileText, Download, Brain, Settings, Activity
+  LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle, FileText, Download, Brain, Settings, Activity, ChevronDown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/", permission: "dashboard" },
@@ -30,6 +34,39 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
   const { user, userRole, userPermissions, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
+  const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
+  const [activeStoreName, setActiveStoreName] = useState<string>(() =>
+    localStorage.getItem("cellmanager-active-store-name") || ""
+  );
+
+  useEffect(() => {
+    supabase.from("stores").select("id, name").then(({ data }) => {
+      if (data) {
+        setStores(data);
+        const savedId = localStorage.getItem("cellmanager-active-store-id");
+        if (savedId) {
+          const found = data.find(s => s.id === savedId);
+          if (found) setActiveStoreName(found.name);
+          else if (data.length > 0) {
+            setActiveStoreName(data[0].name);
+            localStorage.setItem("cellmanager-active-store-id", data[0].id);
+            localStorage.setItem("cellmanager-active-store-name", data[0].name);
+          }
+        } else if (data.length > 0) {
+          setActiveStoreName(data[0].name);
+          localStorage.setItem("cellmanager-active-store-id", data[0].id);
+          localStorage.setItem("cellmanager-active-store-name", data[0].name);
+        }
+      }
+    });
+  }, []);
+
+  const handleStoreChange = (store: { id: string; name: string }) => {
+    localStorage.setItem("cellmanager-active-store-id", store.id);
+    localStorage.setItem("cellmanager-active-store-name", store.name);
+    setActiveStoreName(store.name);
+    window.dispatchEvent(new CustomEvent("store-changed", { detail: store }));
+  };
 
   const filteredNavItems = navItems.filter((item) => {
     // Admins see everything
@@ -124,6 +161,28 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
             <span className="font-display font-bold text-sm">CellManager</span>
           </div>
           <div className="flex items-center gap-1">
+            {stores.length > 1 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button className="h-8 px-2 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold gap-1 rounded-lg">
+                    <Store className="h-3.5 w-3.5" />
+                    <span className="max-w-[80px] truncate">{activeStoreName || "Loja"}</span>
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {stores.map(s => (
+                    <DropdownMenuItem
+                      key={s.id}
+                      onClick={() => handleStoreChange(s)}
+                      className={activeStoreName === s.name ? "font-bold text-primary" : ""}
+                    >
+                      {s.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             <Button className="h-8 w-8 p-0 bg-transparent hover:bg-muted" onClick={toggleTheme}>
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
@@ -140,7 +199,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
 
         {/* Mobile bottom nav */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-lg border-t border-border safe-bottom z-50">
-          <div className="flex overflow-x-auto scrollbar-none py-2 px-2">
+          <div className="flex overflow-x-auto scrollbar-none py-1 px-1">
             {navItems.map((item) => {
               const isActive = location.pathname === item.path;
               const Icon = item.icon || Smartphone;
@@ -149,19 +208,19 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                   key={item.path}
                   to={item.path}
                   className={cn(
-                    "flex flex-col items-center gap-1 px-2 py-3 rounded-lg transition-all duration-200 min-w-[60px] shrink-0",
+                    "flex flex-col items-center gap-1 px-3 py-3 rounded-xl transition-all duration-200 min-w-[72px] shrink-0",
                     isActive
                       ? "text-primary"
                       : "text-muted-foreground active:scale-95"
                   )}
                 >
                   <div className={cn(
-                    "rounded-lg p-1 transition-colors",
+                    "rounded-xl p-1.5 transition-colors",
                     isActive && "bg-primary/15"
                   )}>
-                    <Icon className="h-5 w-5" />
+                    <Icon className="h-6 w-6" />
                   </div>
-                  <span className="text-[10px] font-medium">{item.label}</span>
+                  <span className="text-[11px] font-semibold leading-none">{item.label}</span>
                 </Link>
               );
             })}
