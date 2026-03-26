@@ -214,6 +214,72 @@ const Estoque = () => {
   const lowStockStores = stores.filter(s => (storeStockCounts[s.id] || 0) <= LOW_STOCK_THRESHOLD);
   const lowStockAcc = accessories.filter(a => a.quantity <= a.min_quantity);
 
+  const openEditProduct = (p: Tables<"products">) => {
+    setEditProduct(p);
+    setEditForm({
+      name: p.name,
+      brand: p.brand,
+      model: p.model,
+      imei: p.imei || "",
+      serial_number: p.serial_number || "",
+      cost_price: String(p.cost_price),
+      sale_price: p.sale_price ? String(p.sale_price) : "",
+      store_id: p.store_id,
+      condition: p.condition || "used",
+      color: p.color || "",
+      capacity: p.capacity || "",
+    });
+    setEditProductOpen(true);
+  };
+
+  const handleUpdateProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editProduct || !user) return;
+    setLoading(true);
+    const oldCost = Number(editProduct.cost_price);
+    const newCost = parseFloat(editForm.cost_price);
+    const { error } = await supabase.from("products").update({
+      name: editForm.name,
+      brand: editForm.brand,
+      model: editForm.model,
+      imei: editForm.imei || null,
+      serial_number: editForm.serial_number || null,
+      cost_price: newCost,
+      sale_price: editForm.sale_price ? parseFloat(editForm.sale_price) : null,
+      store_id: editForm.store_id,
+      condition: editForm.condition,
+      color: editForm.color || null,
+      capacity: editForm.capacity || null,
+    } as any).eq("id", editProduct.id);
+
+    if (error) {
+      toast.error(error.message);
+    } else {
+      if (oldCost !== newCost) {
+        await supabase.from("product_history" as any).insert({
+          product_id: editProduct.id,
+          action: "Edição",
+          old_cost: oldCost,
+          new_cost: newCost,
+          notes: "Dados do aparelho atualizados",
+          created_by: user.id,
+        });
+      }
+      toast.success("Aparelho atualizado!");
+      setEditProductOpen(false);
+      setEditProduct(null);
+      fetchData();
+    }
+    setLoading(false);
+  };
+
+  const handleDeleteProduct = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir este aparelho? Esta ação não pode ser desfeita.")) return;
+    const { error } = await supabase.from("products").delete().eq("id", id);
+    if (error) toast.error(error.message);
+    else { toast.success("Aparelho removido!"); fetchData(); }
+  };
+
   const openAccDialog = (acc?: Accessory) => {
     if (acc) {
       setEditAcc(acc);
@@ -414,6 +480,14 @@ const Estoque = () => {
                           <Button className="h-7 text-[10px] gap-1 bg-transparent text-muted-foreground hover:bg-muted" onClick={() => loadHistory(p)}>
                             Ver Histórico
                           </Button>
+                          <div className="flex gap-1 mt-1">
+                            <Button className="h-7 w-7 p-0 bg-transparent text-foreground hover:bg-muted" onClick={() => openEditProduct(p)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button className="h-7 w-7 p-0 bg-transparent text-destructive hover:bg-destructive/10" onClick={() => handleDeleteProduct(p.id)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </CardContent>
