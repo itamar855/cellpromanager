@@ -15,7 +15,7 @@ import type { Tables } from "@/integrations/supabase/types";
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
-const emptyForm = { name: "", phone: "", email: "", cpf: "", address: "", notes: "" };
+const emptyForm = { name: "", phone: "", email: "", cpf: "", address: "", notes: "", birth_date: "" };
 
 const Clientes = () => {
   const { user } = useAuth();
@@ -79,7 +79,7 @@ const Clientes = () => {
     setForm({
       name: customer.name, phone: customer.phone || "",
       email: customer.email || "", cpf: customer.cpf || "",
-      address: customer.address || "", notes: customer.notes || "",
+      address: customer.address || "", notes: customer.notes || "", birth_date: (customer as any).birth_date || "",
     });
     setSelected(null);
     setDialogOpen(true);
@@ -92,7 +92,7 @@ const Clientes = () => {
 
     const payload = {
       name: form.name, phone: form.phone || null, email: form.email || null,
-      cpf: form.cpf || null, address: form.address || null, notes: form.notes || null,
+      cpf: form.cpf || null, address: form.address || null, notes: form.notes || null, birth_date: form.birth_date || null,
       created_by: user.id,
     };
 
