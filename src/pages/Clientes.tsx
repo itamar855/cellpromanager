@@ -195,13 +195,15 @@ const Clientes = () => {
                 <Input value={form.cpf} onChange={e => setForm(f => ({ ...f, cpf: e.target.value }))} placeholder="000.000.000-00" className="h-10" />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">E-mail</Label>
-              <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="email@exemplo.com" className="h-10" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Endereço</Label>
-              <Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Rua, número, bairro..." className="h-10" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">E-mail</Label>
+                <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="email@exemplo.com" className="h-10" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Data de Nascimento</Label>
+                <Input type="date" value={form.birth_date} onChange={e => setForm(f => ({ ...f, birth_date: e.target.value }))} className="h-10" />
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Observações</Label>
@@ -240,6 +242,11 @@ const Clientes = () => {
                     {selected.email && <p className="text-sm flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-muted-foreground" /> {selected.email}</p>}
                     {selected.address && <p className="text-sm flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-muted-foreground" /> {selected.address}</p>}
                     {selected.cpf && <p className="text-sm text-muted-foreground">CPF: {selected.cpf}</p>}
+                    {(selected as any).birth_date && (
+                      <p className="text-sm text-muted-foreground">
+                        Nascimento: {new Date((selected as any).birth_date + "T00:00:00").toLocaleDateString("pt-BR")}
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
