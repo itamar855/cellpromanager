@@ -25,6 +25,7 @@ import Caixa from "./pages/Caixa";
 import Contas from "./pages/Contas";
 import OSPublica from "./pages/OSPublica";
 import Configuracoes from "./pages/Configuracoes";
+import FinancasPF from "./pages/FinancasPF";
 
 const queryClient = new QueryClient();
 
@@ -70,6 +71,7 @@ const App = () => (
               <Route path="/relatorios" element={<ProtectedRoute><Relatorios /></ProtectedRoute>} />
               <Route path="/caixa" element={<ProtectedRoute><Caixa /></ProtectedRoute>} />
               <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+              <Route path="/financas-pf" element={<ProtectedRoute><FinancasPF /></ProtectedRoute>} />
               <Route path="/assistente-ia" element={<ProtectedRoute><AIAssistant /></ProtectedRoute>} />
               <Route path="/instalar" element={<Instalar />} />
               <Route path="/reset-password" element={<ResetPassword />} />

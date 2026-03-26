@@ -5,7 +5,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
   LayoutDashboard, Package, ArrowUpDown, ShoppingBag, Store, Landmark, PiggyBank,
-  LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle, FileText, Download, Brain, Settings, Activity, ChevronDown
+  LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle, FileText, Download, Brain, Settings, Activity, ChevronDown, Wallet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ const navItems = [
   { label: "Equipe", icon: Users, path: "/equipe", permission: "equipe" },
   { label: "Contas", icon: Landmark, path: "/contas", permission: "contas" },
   { label: "Caixa", icon: PiggyBank, path: "/caixa", permission: "caixa" },
+  { label: "Meu PF", icon: Wallet, path: "/financas-pf", permission: "financas_pf" },
   { label: "Auditoria", icon: Activity, path: "/auditoria", permission: "auditoria" },
   { label: "Config.", icon: Settings, path: "/configuracoes", permission: "configuracoes" },
   { label: "IA", icon: Brain, path: "/assistente-ia", permission: "ia" },
