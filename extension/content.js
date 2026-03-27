@@ -1,4 +1,4 @@
-// Robust Content Script for CellManager Extension (v1.1)
+// Surgical Content Script for CellManager Extension (v1.2) - "The Clean One"
 console.log("CellManager CRM Extension Activity");
 
 // CSS Injection
@@ -21,7 +21,6 @@ style.textContent = `
     justify-content: center !important;
     white-space: nowrap !important;
     z-index: 99999 !important;
-    position: relative !important;
   }
   .crm-capture-btn:hover { transform: scale(1.05); filter: brightness(1.1); box-shadow: 0 4px 10px rgba(0,0,0,0.2) !important; }
   .crm-capture-btn-instagram {
@@ -35,51 +34,37 @@ function findTarget() {
   const isInstagram = window.location.host.includes("instagram");
 
   if (isWhatsApp) {
-    // Look for the main chat area header
-    const waHeader = document.querySelector("#main header") || 
-                   document.querySelector('header[role="toolbar"]')?.parentElement ||
-                   document.querySelector('div[data-testid="conversation-panel-header"]');
-                   
+    const waHeader = document.querySelector("#main header");
     if (waHeader && !waHeader.querySelector(".crm-capture-btn")) {
       injectButton(waHeader, "WhatsApp");
     }
   } else if (isInstagram) {
-    // Ultra-aggressive Instagram DM header detection
-    const headers = [
-      ...document.querySelectorAll('div[role="main"] header'),
-      ...document.querySelectorAll('div[role="presentation"] header'),
-      ...document.querySelectorAll('.x1qjc9v5.x972fbf'), 
-      ...document.querySelectorAll('div[style*="height: 75px"]'),
-      ...document.querySelectorAll('div[role="dialog"] header'),
-      ...document.querySelectorAll('div[style*="flex-direction: column"] > div[style*="height: 60px"]')
-    ];
+    // Only search in the main content area, avoiding sidebars and stories
+    const mainArea = document.querySelector('div[role="main"]');
+    if (!mainArea) return;
 
-    // Find by icons
-    document.querySelectorAll('svg[aria-label="Informações"], svg[aria-label="Expandir"], svg[aria-label="Back"], svg[aria-label="Video Call"]').forEach(icon => {
-      let current = icon.parentElement;
-      for (let i = 0; i < 5; i++) {
-        if (current && current.offsetHeight > 40 && current.offsetHeight < 150) {
-          headers.push(current);
-          break;
-        }
-        current = current?.parentElement;
-      }
-    });
+    // Look for the specific header of the active conversation
+    const igHeader = mainArea.querySelector('header') || 
+                     mainArea.querySelector('div[style*="height: 75px"]') ||
+                     mainArea.querySelector('div[style*="height: 60px"]');
 
-    for (const h of headers) {
-      if (h && h.offsetHeight > 30 && h.offsetHeight < 150 && !h.querySelector(".crm-capture-btn")) {
-        const hasText = h.innerText.length > 2;
-        if (hasText) {
-          console.log("IG Header Candidate Found");
-          injectButton(h, "Instagram");
-          break;
-        }
+    // Extra precision: check if it contains the "Video Call" or "Informações" icons
+    const conversationIcons = mainArea.querySelector('svg[aria-label="Direct"], svg[aria-label="Informações"], svg[aria-label="Expandir"]');
+    const target = conversationIcons ? conversationIcons.closest('header') || conversationIcons.closest('div').parentElement : igHeader;
+
+    if (target && !target.querySelector(".crm-capture-btn") && target.offsetHeight < 120) {
+      // Final guard: Ensure it's not a sidebar item or a story
+      const isSidebar = target.closest('div[role="navigation"]') || target.closest('div._aacz'); // common sidebar class
+      if (!isSidebar) {
+        injectButton(target, "Instagram");
       }
     }
   }
 }
 
 function injectButton(parent, platform) {
+  if (parent.querySelector(".crm-capture-btn")) return;
+
   const btn = document.createElement("button");
   btn.className = platform === "Instagram" ? "crm-capture-btn crm-capture-btn-instagram" : "crm-capture-btn";
   btn.innerText = "Enviar p/ CRM";
@@ -87,7 +72,6 @@ function injectButton(parent, platform) {
   btn.onclick = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log(`Click CRM on ${platform}`);
     if (platform === "WhatsApp") {
        captureLeadWhatsApp(parent);
     } else {
@@ -95,12 +79,11 @@ function injectButton(parent, platform) {
     }
   };
 
-  // Improved injection strategy
   if (platform === "Instagram") {
-    // For Instagram, we prepend to the leftmost container
+    // Inject at the beginning of the header
     parent.prepend(btn);
   } else {
-    // For WhatsApp, append to the main header or inside the button group
+    // Append to the WhatsApp header (usually right-aligned)
     const secondary = parent.querySelector('div[role="button"]') || parent;
     secondary.appendChild(btn);
   }
@@ -109,35 +92,32 @@ function injectButton(parent, platform) {
 async function captureLeadWhatsApp(header) {
   try {
     const nameEl = header.querySelector('span[dir="auto"]') || header.querySelector('span');
-    const name = nameEl ? nameEl.innerText.trim() : "Lead WhatsApp " + Date.now();
+    const name = nameEl ? nameEl.innerText.trim() : "Lead WhatsApp";
     const phone = name.replace(/\D/g, "").length >= 8 ? name : "";
     
     await sendToERP({ name, phone, source: "whatsapp", notes: "Via WhatsApp Web" });
   } catch (err) {
-    alert("Erro ao extrair dados (WhatsApp): " + err.message);
+    alert("Erro ao extrair dados: " + err.message);
   }
 }
 
 async function captureLeadInstagram(header) {
   try {
-    // Get the name from the title or link in the header
     const nameEl = header.querySelector('span[role="link"]') || 
                   header.querySelector('span._ap32') ||
-                  header.querySelector('span') ||
-                  header.querySelector('div[role="button"] span');
+                  header.querySelector('span');
                   
-    const name = nameEl ? nameEl.innerText.trim() : "Lead Instagram " + Date.now();
+    const name = nameEl ? nameEl.innerText.trim() : "Lead Instagram";
     await sendToERP({ name, source: "instagram", notes: "Via Instagram Web" });
   } catch (err) {
-    alert("Erro ao extrair dados (Instagram): " + err.message);
+    alert("Erro ao extrair dados: " + err.message);
   }
 }
 
 async function sendToERP(leadData) {
-  console.log("Sending Lead Data:", leadData);
   try {
     if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.sync) {
-      alert("⚠️ Erro de Extensão: Por favor, atualize esta página (F5) para restaurar a conexão da extensão.");
+      alert("⚠️ Erro de Extensão: Por favor, atualize esta página (F5).");
       return;
     }
 
@@ -146,7 +126,6 @@ async function sendToERP(leadData) {
       alert("⚠️ ERRO: Configure a URL e Chave do Supabase na extensão primeiro!");
       return;
     }
-// ...
 
     const response = await fetch(`${settings.supabaseUrl.trim()}/rest/v1/leads`, {
       method: "POST",
@@ -170,12 +149,9 @@ async function sendToERP(leadData) {
   }
 }
 
-// Global Observer to handle dynamic content
 const observer = new MutationObserver(() => {
   findTarget();
 });
 
 observer.observe(document.body, { childList: true, subtree: true });
-
-// Initial call
 setTimeout(findTarget, 2000);
