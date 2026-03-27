@@ -1,5 +1,5 @@
-// CellManager CRM Extension (v3.0) - "The Ghost Sender"
-console.log("%c CRM: Extension v3.0 Ghost-Mode Loaded ", "background: #25d366; color: white; font-weight: bold;");
+// CellManager CRM Extension (v4.0) - "The Number Sniper"
+console.log("%c CRM: Extension v4.0 Sniper-Mode Loaded ", "background: #128C7E; color: white; font-weight: bold;");
 
 const CONFIG = {
   supabaseUrl: "https://hzrqtolfbwnmmeliazmh.supabase.co",
@@ -8,14 +8,12 @@ const CONFIG = {
 
 let activeLead = { id: null, name: "" };
 let lastSyncedText = "";
-let autoSyncObserver = null;
-let responsePolling = null;
 let isSwitching = false;
 
 const style = document.createElement('style');
 style.textContent = `
-  .crm-capture-btn { background: #25d366 !important; color: white !important; border: none !important; padding: 6px 14px !important; border-radius: 20px !important; cursor: pointer !important; font-size: 11px !important; font-weight: bold !important; margin: 5px 10px !important; z-index: 99999 !important; }
-  .crm-sync-indicator { position: fixed; top: 10px; right: 80px; background: rgba(37, 211, 102, 0.9); color: white; padding: 4px 12px; border-radius: 20px; font-size: 10px; font-weight: bold; z-index: 10000; display: none; }
+  .crm-capture-btn { background: #128C7E !important; color: white !important; border: none !important; padding: 6px 14px !important; border-radius: 20px !important; cursor: pointer !important; font-size: 11px !important; font-weight: bold !important; margin: 5px 10px !important; }
+  .crm-sync-indicator { position: fixed; top: 10px; right: 80px; background: rgba(18, 140, 126, 0.9); color: white; padding: 4px 12px; border-radius: 20px; font-size: 10px; z-index: 10000; display: none; }
 `;
 document.head.appendChild(style);
 
@@ -45,24 +43,15 @@ async function initSession() {
 }
 
 function findTarget() {
-  if (window.location.host.includes("whatsapp")) {
-    const waHeader = document.querySelector("#main header");
-    if (waHeader) {
-      const currentName = (waHeader.querySelector('span[title]') || waHeader.querySelector('span[dir="auto"]') || waHeader.querySelector('span'))?.innerText.trim();
-      if (currentName) {
-        if (!waHeader.querySelector(".crm-capture-btn")) injectButton(waHeader, "WhatsApp");
-        setupAutoSyncWhatsApp();
-      }
-    }
+  const waHeader = document.querySelector("#main header");
+  if (waHeader && !waHeader.querySelector(".crm-capture-btn")) {
+      const btn = document.createElement("button");
+      btn.className = "crm-capture-btn";
+      btn.innerText = "Enviar p/ CRM";
+      btn.onclick = (e) => { e.preventDefault(); captureLeadWhatsApp(waHeader); };
+      (waHeader.querySelector('div[role="button"]') || waHeader).appendChild(btn);
   }
-}
-
-function injectButton(parent, platform) {
-  const btn = document.createElement("button");
-  btn.className = "crm-capture-btn";
-  btn.innerText = "Enviar p/ CRM";
-  btn.onclick = (e) => { e.preventDefault(); captureLeadWhatsApp(parent); };
-  (parent.querySelector('div[role="button"]') || parent).appendChild(btn);
+  if (waHeader) setupAutoSyncWhatsApp();
 }
 
 async function captureLeadWhatsApp(header) {
@@ -124,10 +113,11 @@ async function sendToERP(leadData, messages = []) {
 }
 
 function setupAutoSyncWhatsApp() {
-  if (autoSyncObserver) autoSyncObserver.disconnect();
   const main = document.querySelector('#main');
-  if (!main) return;
-  autoSyncObserver = new MutationObserver(mutations => {
+  if (!main || main.dataset.crmObserved) return;
+  main.dataset.crmObserved = "true";
+  
+  new MutationObserver(mutations => {
     for (const m of mutations) {
       for (const node of m.addedNodes) {
         if (node.nodeType === 1) {
@@ -136,8 +126,7 @@ function setupAutoSyncWhatsApp() {
         }
       }
     }
-  });
-  autoSyncObserver.observe(main, { childList: true, subtree: true });
+  }).observe(main, { childList: true, subtree: true });
 }
 
 async function syncSingle(el) {
@@ -172,33 +161,31 @@ function startResponsePolling() {
       const pending = await res.json();
       if (pending && pending.length > 0) {
         const msg = pending[0];
-        const leadRes = await fetch(`${CONFIG.supabaseUrl}/rest/v1/leads?id=eq.${msg.lead_id}&select=name`, {
+        const leadRes = await fetch(`${CONFIG.supabaseUrl}/rest/v1/leads?id=eq.${msg.lead_id}&select=name,phone`, {
           headers: { "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` }
         });
-        const targetName = (await leadRes.json())[0]?.name;
-        if (!targetName) return;
+        const leadInfo = (await leadRes.json())[0];
+        if (!leadInfo) return;
 
-        if (await checkIfLeadIsOpenStrict(msg.lead_id, targetName)) {
+        if (await checkIfLeadIsOpenStrict(msg.lead_id, leadInfo.name)) {
            if (await injectAndSendWhatsApp(msg.content)) {
              await markAsSent(msg.id);
              await updateLeadStatus(msg.lead_id, { has_unread: false });
            }
         } else {
-           console.log("CRM: Not in target chat. Attempting ghost-search for", targetName);
-           await robustGhostSwitch(msg.lead_id, targetName);
+           console.log("CRM: Auto-Switching to target...");
+           await sniperSwitch(leadInfo);
         }
       }
-    } catch (e) { console.error("Poll Error", e); }
-  }, 5000);
+    } catch (e) { console.error(e); }
+  }, 4000);
 }
 
 async function checkIfLeadIsOpenStrict(id, name) {
   const header = document.querySelector("#main header");
   if (!header) return false;
   const current = (header.querySelector('span[title]') || header.querySelector('span[dir="auto"]'))?.innerText.trim();
-  const cleanCurrent = sanitizeName(current);
-  const cleanTarget = sanitizeName(name);
-  return cleanCurrent === cleanTarget || cleanCurrent.includes(cleanTarget);
+  return sanitizeName(current) === sanitizeName(name) || current?.includes(name);
 }
 
 async function markAsSent(id) {
@@ -208,35 +195,35 @@ async function markAsSent(id) {
   });
 }
 
-// v3.0 Ghost Switch: Use search bar to switch chats reliably
-async function robustGhostSwitch(id, name) {
+// v4.0 Sniper Switch: Uses phone number for precision searching
+async function sniperSwitch(lead) {
   if (isSwitching) return;
   isSwitching = true;
   try {
-    // 1. Click Search Bar
-    const searchBar = document.querySelector('div[contenteditable="true"][data-tab="3"]');
+    const searchKey = lead.phone || lead.name;
+    const searchBar = document.querySelector('div[contenteditable="true"][data-tab="3"]') || document.querySelector('div.lexical-rich-text-input div[contenteditable="true"]');
     if (!searchBar) { isSwitching = false; return; }
     
     searchBar.focus();
     document.execCommand('selectAll', false, null);
     document.execCommand('delete', false, null);
-    document.execCommand('insertText', false, name);
+    document.execCommand('insertText', false, searchKey);
     searchBar.dispatchEvent(new Event('input', { bubbles: true }));
 
-    // 2. Wait for results and click
-    await new Promise(r => setTimeout(r, 2000));
-    const results = document.querySelector('#pane-side');
-    const row = results?.querySelector(`span[title="${name}"], span[title*="${name}"]`);
+    await new Promise(r => setTimeout(r, 2500));
+    
+    // Look for the exact phone number in side results if possible
+    const sidebar = document.querySelector('#pane-side');
+    const row = sidebar?.querySelector(`span[title*="${searchKey}"], span[title*="${lead.name}"]`);
+    
     if (row) {
       row.closest('div[role="row"]')?.click();
-      console.log("CRM: Found and clicked contact!");
-      activeLead = { id, name };
-      chrome.storage.local.set({ activeLeadId: id, activeLeadName: name });
+      console.log("CRM: Sniper matched and clicked!");
+      activeLead = { id: lead.id, name: lead.name };
+      chrome.storage.local.set({ activeLeadId: lead.id, activeLeadName: lead.name });
       // Clear search
       const clearBtn = document.querySelector('span[data-icon="x-alt"]');
       if (clearBtn) clearBtn.click();
-    } else {
-      console.log("CRM: Lead not found in search results.");
     }
   } catch (e) { console.error(e); }
   isSwitching = false;
@@ -252,13 +239,13 @@ async function injectAndSendWhatsApp(text) {
   input.dispatchEvent(new Event('input', { bubbles: true }));
   return new Promise(resolve => {
     setTimeout(() => {
-      const sendBtn = footer.querySelector('[data-testid="send"]') || footer.querySelector('button span[data-icon="send"]')?.closest('button');
+      const sendBtn = footer.querySelector('[data-testid="send"]') || footer.querySelector('span[data-icon="send"]')?.closest('button');
       if (sendBtn) { sendBtn.click(); resolve(true); }
       else { 
         const ev = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true });
         input.dispatchEvent(ev); resolve(true); 
       }
-    }, 1000); // 1s delay for ghost mode safety
+    }, 1200); 
   });
 }
 
