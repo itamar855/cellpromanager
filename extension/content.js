@@ -162,12 +162,15 @@ async function sendToERP(leadData, messages = []) {
 
     // 2. Save Messages
     if (messages.length > 0) {
+      console.log("Syncing messages for lead ID:", savedLead.id);
       const msgData = messages.map(m => ({ ...m, lead_id: savedLead.id }));
-      await fetch(`${url}/rest/v1/lead_messages`, {
+      const msgRes = await fetch(`${url}/rest/v1/lead_messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "apikey": key, "Authorization": `Bearer ${key}` },
         body: JSON.stringify(msgData)
       });
+      if (!msgRes.ok) console.error("Failed to sync messages:", await msgRes.text());
+      else console.log("Messages synced successfully!");
     }
 
     alert(`✅ Lead "${leadData.name}" e conversa sincronizados!`);

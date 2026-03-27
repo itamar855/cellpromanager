@@ -70,17 +70,25 @@ const Leads = () => {
   useEffect(() => {
     fetchData();
 
+    console.log("Subscribing to realtime...");
     const leadsChannel = supabase
       .channel('leads-all')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, (p) => {
+        console.log("Lead change detected!", p);
+        fetchData();
+      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lead_messages' }, (payload) => {
+        console.log("Message change detected!", payload);
         if (selectedLead && payload.new.lead_id === selectedLead.id) {
           fetchMessages(selectedLead.id);
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log("Realtime subscription status:", status);
+      });
 
     return () => {
+      console.log("Unsubscribing from realtime...");
       supabase.removeChannel(leadsChannel);
     };
   }, [selectedLead]);
@@ -160,10 +168,12 @@ const Leads = () => {
 
   return (
     <div className="space-y-4 h-full flex flex-col">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b pb-4 mb-2">
-        <div>
+      <div className="flex flex-col gap-4 border-b pb-4 mb-4">
+        <div className="flex items-center justify-between">
           <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight text-white">CRM de Leads</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">{leads.length} leads no funil</p>
+          <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">
+            {leads.length} leads
+          </Badge>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button 
