@@ -1,5 +1,5 @@
-// CellManager CRM Extension (v5.0) - "The Command Center"
-console.log("%c CRM: Extension v5.0 Command-Center Loaded ", "background: #128C7E; color: white; font-weight: bold;");
+// CellManager CRM Extension (v7.1) - "The Brute Force"
+console.log("%c CRM: Extension v7.1 Brute Loaded ", "background: #128C7E; color: white; font-weight: bold;");
 
 const CONFIG = {
   supabaseUrl: "https://hzrqtolfbwnmmeliazmh.supabase.co",
@@ -8,7 +8,9 @@ const CONFIG = {
 
 let activeLead = { id: null, name: "" };
 let lastSyncedText = "";
-let isSwitching = false;
+let isWorking = false; // Improved state lock
+let lastAttemptedLeadId = null;
+let retryCount = 0;
 
 function setStatus(msg) {
   console.log(`CRM: ${msg}`);
@@ -134,7 +136,7 @@ async function updateLeadStatus(id, data) {
 
 function startResponsePolling() {
   setInterval(async () => {
-    if (isSwitching) return;
+    if (isWorking) return;
     try {
       const res = await fetch(`${CONFIG.supabaseUrl}/rest/v1/lead_responses?status=eq.pending&order=created_at.asc`, {
         headers: { "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` }
@@ -144,36 +146,46 @@ function startResponsePolling() {
 
       if (pending && pending.length > 0) {
         const msg = pending[0];
+        
+        // Anti-infinity: If we've tried this lead too many times, skip it for now
+        if (msg.lead_id === lastAttemptedLeadId && retryCount > 5) {
+            setStatus("Pausando busca por lead problemático...");
+            setTimeout(() => { retryCount = 0; lastAttemptedLeadId = null; }, 10000);
+            return;
+        }
+
         const leadRes = await fetch(`${CONFIG.supabaseUrl}/rest/v1/leads?id=eq.${msg.lead_id}&select=name,phone`, {
           headers: { "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` }
         });
         const leadInfo = (await leadRes.json())[0];
         if (!leadInfo) return;
 
-        setStatus(`Processando lead: ${leadInfo.name}`);
-
         if (await checkIfLeadIsOpenStrict(msg.lead_id, leadInfo.name)) {
-           setStatus("Chat Aberto. Enviando...");
+           isWorking = true;
+           setStatus("Enviando...");
            if (await injectAndSendWhatsApp(msg.content)) {
              await markAsSent(msg.id);
              await updateLeadStatus(msg.lead_id, { has_unread: false });
              setStatus("Mensagem Enviada!");
-             setTimeout(() => setStatus("Sistema Pronto"), 2000);
+             lastAttemptedLeadId = null;
+             retryCount = 0;
            }
+           isWorking = false;
         } else {
-           setStatus("Chat Fechado. Buscando...");
-           await hyperSwitch(leadInfo);
+           await robustSwitch(leadInfo);
         }
       }
     } catch (e) { console.error(e); }
-  }, 4000);
+  }, 4500);
 }
 
 async function checkIfLeadIsOpenStrict(id, name) {
   const header = document.querySelector("#main header");
   if (!header) return false;
   const current = (header.querySelector('span[title]') || header.querySelector('span[dir="auto"]'))?.innerText.trim();
-  return sanitizeName(current) === sanitizeName(name) || current?.includes(name);
+  const cleanCurrent = sanitizeName(current);
+  const cleanTarget = sanitizeName(name);
+  return cleanCurrent === cleanTarget || cleanCurrent.includes(cleanTarget);
 }
 
 async function markAsSent(id) {
@@ -183,67 +195,123 @@ async function markAsSent(id) {
   });
 }
 
-// v5.0 Hyper Switch: The most aggressive way to open a chat
-async function hyperSwitch(lead) {
-  if (isSwitching) return;
-  isSwitching = true;
+async function robustSwitch(lead) {
+  if (isWorking) return;
+  isWorking = true;
+  lastAttemptedLeadId = lead.id;
+  retryCount++;
+
   try {
     const query = lead.phone || lead.name;
-    setStatus(`Buscando por: ${query}`);
+    setStatus(`Buscando: ${query} (Tentativa ${retryCount})`);
 
-    // Find and click search
-    const searchBtn = document.querySelector('button[aria-label="Pesquisar"]') || document.querySelector('span[data-icon="search"]')?.closest('button');
-    if (searchBtn) searchBtn.click();
-    await new Promise(r => setTimeout(r, 500));
-
-    const searchBar = document.querySelector('div[contenteditable="true"][data-tab="3"]') || 
-                      document.querySelector('div[role="textbox"]');
+    // 1. WAKE-UP CALL: Force React to render the input
+    const searchIcon = document.querySelector('span[data-icon="search"]') || 
+                       document.querySelector('span[data-icon="chat"]');
+    if (searchIcon) {
+        let clickable = searchIcon.closest('button, [role="button"]') || searchIcon.parentElement;
+        if (clickable) {
+             clickable.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+             clickable.click();
+        }
+    }
     
-    if (searchBar) {
-      searchBar.focus();
-      document.execCommand('selectAll', false, null);
-      document.execCommand('delete', false, null);
-      document.execCommand('insertText', false, query);
-      searchBar.dispatchEvent(new Event('input', { bubbles: true }));
-      
+    // Fallback Wake-up: find the placeholder text div and click
+    try {
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+        let node;
+        while(node = walker.nextNode()) {
+            if(node.nodeValue.includes('Pesquisar') || node.nodeValue.includes('nova conversa') || node.nodeValue.includes('Search')) {
+                node.parentElement.click();
+                node.parentElement.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+            }
+        }
+    } catch(e) {}
+
+    await new Promise(r => setTimeout(r, 800));
+
+    // BRUTE FORCE SELECTOR: Probe all input candidates and try pasting text
+    const footer = document.querySelector('#main footer, footer.x1nqdnnd'); // WhatsApp main footer
+    const allCandidates = Array.from(document.querySelectorAll('[contenteditable="true"], [role="textbox"], input, [data-lexical-editor="true"]'));
+    const validInputs = allCandidates.filter(el => !footer || !footer.contains(el));
+    
+    let foundAndTyped = false;
+
+    for (let el of validInputs) {
+        if (el.offsetWidth === 0 && el.offsetHeight === 0 && !el.getBoundingClientRect().width) continue; 
+        try {
+            el.focus();
+            document.execCommand('selectAll', false, null);
+            document.execCommand('delete', false, null);
+            document.execCommand('insertText', false, query);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+
+            // Test if the element aggressively accepted the string
+            if ((el.textContent && el.textContent.includes(query)) || (el.value && el.value.includes(query))) {
+                foundAndTyped = true;
+                break;
+            }
+        } catch(e) {}
+    }
+
+    if (foundAndTyped) {
       await new Promise(r => setTimeout(r, 2000));
 
-      const sidebar = document.querySelector('#pane-side');
-      const row = sidebar?.querySelector(`div[role="row"]`); // Click the first result!
-      if (row) {
-        row.click();
-        setStatus("Contato localizado!");
-        activeLead = { id: lead.id, name: lead.name };
-        chrome.storage.local.set({ activeLeadId: lead.id, activeLeadName: lead.name });
-        await new Promise(r => setTimeout(r, 1000));
+      const sidebar = document.querySelector('#pane-side') || document.querySelector('#side');
+      if (sidebar) {
+        // Click the first physically visible row
+        const rows = Array.from(sidebar.querySelectorAll('[role="row"], [role="button"], ._ak8l, ._ak8o'))
+                          .filter(el => el.offsetHeight > 0 && el.innerText.trim().length > 0);
+        
+        if (rows.length > 0) {
+          rows[0].click();
+          setStatus("Chat localizado!");
+          activeLead = { id: lead.id, name: lead.name };
+          chrome.storage.local.set({ activeLeadId: lead.id, activeLeadName: lead.name });
+          await new Promise(r => setTimeout(r, 1500));
+        } else {
+          setStatus("Não encontrado na busca.");
+        }
       }
+      
+      // Clear search UI gently
+      const clearBtn = document.querySelector('button[aria-label="Cancelar pesquisa"]') || document.querySelector('span[data-icon="x-alt"]')?.closest('button') || document.querySelector('span[data-icon="x-alt"]');
+      if (clearBtn) clearBtn.click();
+      
+    } else {
+        setStatus("Barra de busca não encontrada.");
     }
   } catch (e) { console.error(e); }
-  isSwitching = false;
+  isWorking = false;
 }
 
 async function injectAndSendWhatsApp(text) {
-  const footer = document.querySelector('#main footer');
-  const input = footer?.querySelector('div[contenteditable="true"]');
+  // GEOMETRIC SELECTOR: The chat input is ALWAYS the rightmost visible input!
+  const allInputs = Array.from(document.querySelectorAll('[contenteditable="true"], input[type="text"]'))
+                         .filter(el => el.offsetWidth > 0 && el.offsetHeight > 0 && el.getBoundingClientRect().left >= 0);
+  allInputs.sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+  
+  // Rightmost is the chat input
+  const input = allInputs.length > 0 ? allInputs[allInputs.length - 1] : null;
+
   if (!input) return false;
 
   input.focus();
+  document.execCommand('selectAll', false, null);
+  document.execCommand('delete', false, null);
   document.execCommand('insertText', false, text);
   input.dispatchEvent(new Event('input', { bubbles: true }));
   
-  return new Promise(resolve => {
-    setTimeout(() => {
-      const sendBtn = footer.querySelector('span[data-icon="send"]')?.closest('button') || footer.querySelector('[data-testid="send"]');
-      if (sendBtn) {
-        sendBtn.click();
-        resolve(true);
-      } else {
-        const ev = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true });
-        input.dispatchEvent(ev);
-        resolve(true);
-      }
-    }, 1000);
-  });
+  await new Promise(r => setTimeout(r, 1000));
+  const sendBtn = document.querySelector('span[data-icon="send"]')?.closest('button') || document.querySelector('[data-testid="send"]');
+  if (sendBtn) {
+    sendBtn.click();
+    return true;
+  } else {
+    const ev = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true });
+    input.dispatchEvent(ev);
+    return true;
+  }
 }
 
 initSession();

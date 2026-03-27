@@ -51,6 +51,10 @@ const Leads = () => {
   const [stores, setStores] = useState<any[]>([]);
   const [chatModalOpen, setChatModalOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterStore, setFilterStore] = useState("all");
+  const [filterSource, setFilterSource] = useState("all");
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   const fetchData = async () => {
     const { data: leadsData } = await supabase.from("leads").select("*").order("created_at", { ascending: false });
@@ -143,10 +147,75 @@ const Leads = () => {
 
   const handleDragOver = (e: React.DragEvent) => e.preventDefault();
 
+  const handleEditLead = (lead: any) => {
+    setSelectedLead(lead);
+    setForm({
+      name: lead.name,
+      phone: lead.phone || "",
+      email: lead.email || "",
+      source: lead.source,
+      status: lead.status,
+      notes: lead.notes || "",
+      store_id: lead.store_id || ""
+    });
+    setEditModalOpen(true);
+  };
+
+  const saveEditLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLead) return;
+    setLoading(true);
+    const { error } = await supabase.from("leads").update({
+      name: form.name,
+      phone: form.phone,
+      email: form.email,
+      source: form.source,
+      notes: form.notes,
+      store_id: form.store_id || null
+    }).eq("id", selectedLead.id);
+
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Lead atualizado!");
+      setEditModalOpen(false);
+      fetchData();
+    }
+    setLoading(false);
+  };
+
+  const filteredLeads = leads.filter(lead => {
+    const matchesSearch = lead.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          (lead.phone && lead.phone.includes(searchTerm));
+    const matchesStore = filterStore === "all" || lead.store_id === filterStore;
+    const matchesSource = filterSource === "all" || lead.source === filterSource;
+    return matchesSearch && matchesStore && matchesSource;
+  });
+
+  const kpis = {
+    total: leads.length,
+    newToday: leads.filter(l => new Date(l.created_at) > new Date(Date.now() - 24 * 60 * 60 * 1000)).length,
+    concluded: leads.filter(l => l.status === 'concluido').length,
+    conversion: leads.length > 0 ? Math.round((leads.filter(l => l.status === 'concluido').length / leads.length) * 100) : 0
+  };
+
   const handleResponse = (lead: any) => {
     setSelectedLead(lead);
     setResponseModalOpen(true);
     setResponseText("");
+  };
+
+  const handleDeleteLead = async (leadId: string, leadName: string) => {
+    if (window.confirm(`Tem certeza que deseja excluir o lead ${leadName}? Esta ação não pode ser desfeita.`)) {
+      const { error } = await supabase.from("leads").delete().eq("id", leadId);
+      if (error) {
+        toast.error("Erro ao excluir: " + error.message);
+      } else {
+        toast.success("Lead excluído com sucesso!");
+        logAction?.("Leads", "Lead Excluído", `Lead ${leadName} foi excluído.`);
+        setLeads(prev => prev.filter(l => l.id !== leadId));
+      }
+    }
   };
 
   const sendResponse = async () => {
@@ -200,54 +269,82 @@ const Leads = () => {
       <div className="flex flex-col gap-4 border-b pb-4 mb-4">
         <div className="flex items-center justify-between">
           <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight text-white">CRM de Leads</h1>
-          <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">
-            {leads.length} leads
-          </Badge>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-2 h-9 border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
+              onClick={() => window.open(`https://github.com/itamar855/cellpromanager/archive/refs/heads/main.zip`, '_blank')}
+            >
+              <Download className="h-4 w-4" /> Instalar Extensão
+            </Button>
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2 h-9 shadow-lg shadow-primary/20"><Plus className="h-4 w-4" /> Novo Lead</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Cadastrar Lead</DialogTitle></DialogHeader>
+                <form onSubmit={handleCreateLead} className="space-y-3">
+                  <div className="space-y-1.5"><Label className="text-xs">Nome</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required className="h-10" /></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5"><Label className="text-xs">Telefone</Label><Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="(87) 99999-9999" className="h-10" /></div>
+                    <div className="space-y-1.5"><Label className="text-xs">E-mail</Label><Input value={form.email} onChange={e => setForm({...form, email: e.target.value})} type="email" className="h-10" /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Origem</Label>
+                      <Select value={form.source} onValueChange={v => setForm({...form, source: v})}>
+                        <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="instagram">Instagram</SelectItem><SelectItem value="trafego_pago">Tráfego Pago</SelectItem><SelectItem value="indicacao">Indicação</SelectItem><SelectItem value="outro">Outro</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Loja</Label>
+                      <Select value={form.store_id} onValueChange={v => setForm({...form, store_id: v})}>
+                        <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                        <SelectContent>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5"><Label className="text-xs">Observações</Label><Textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} className="min-h-[80px]" /></div>
+                  <Button type="submit" className="w-full h-11" disabled={loading}>{loading ? "Salvando..." : "Cadastrar Lead"}</Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="gap-2 h-9 border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
-            onClick={() => window.open(`https://github.com/itamar855/cellpromanager/archive/refs/heads/main.zip`, '_blank')}
-          >
-            <Download className="h-4 w-4" /> Instalar Extensão
-          </Button>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2 h-9 shadow-lg shadow-primary/20"><Plus className="h-4 w-4" /> Novo Lead</Button>
-            </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Cadastrar Lead</DialogTitle></DialogHeader>
-            <form onSubmit={handleCreateLead} className="space-y-3">
-              <div className="space-y-1.5"><Label className="text-xs">Nome</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required className="h-10" /></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5"><Label className="text-xs">Telefone</Label><Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="(87) 99999-9999" className="h-10" /></div>
-                <div className="space-y-1.5"><Label className="text-xs">E-mail</Label><Input value={form.email} onChange={e => setForm({...form, email: e.target.value})} type="email" className="h-10" /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Origem</Label>
-                  <Select value={form.source} onValueChange={v => setForm({...form, source: v})}>
-                    <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="instagram">Instagram</SelectItem><SelectItem value="trafego_pago">Tráfego Pago</SelectItem><SelectItem value="indicacao">Indicação</SelectItem><SelectItem value="outro">Outro</SelectItem></SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Loja</Label>
-                  <Select value={form.store_id} onValueChange={v => setForm({...form, store_id: v})}>
-                    <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-1.5"><Label className="text-xs">Observações</Label><Textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} className="min-h-[80px]" /></div>
-              <Button type="submit" className="w-full h-11" disabled={loading}>{loading ? "Salvando..." : "Cadastrar Lead"}</Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+
+        {/* KPI Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Card className="bg-muted/30 border-border/40"><CardContent className="p-3"><p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total Leads</p><p className="text-xl font-bold text-white">{kpis.total}</p></CardContent></Card>
+          <Card className="bg-muted/30 border-border/40"><CardContent className="p-3"><p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Novos (24h)</p><p className="text-xl font-bold text-blue-400">{kpis.newToday}</p></CardContent></Card>
+          <Card className="bg-muted/30 border-border/40"><CardContent className="p-3"><p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Conversão</p><p className="text-xl font-bold text-green-400">{kpis.conversion}%</p></CardContent></Card>
+          <Card className="bg-muted/30 border-border/40"><CardContent className="p-3"><p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Concluídos</p><p className="text-xl font-bold text-purple-400">{kpis.concluded}</p></CardContent></Card>
+        </div>
+
+        {/* Search and Filters */}
+        <div className="flex flex-col md:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input 
+              placeholder="Pesquisar por nome ou telefone..." 
+              value={searchTerm} 
+              onChange={e => setSearchTerm(e.target.value)} 
+              className="pl-9 h-10 bg-muted/20 border-border/40 focus:bg-muted/40 transition-all"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Select value={filterStore} onValueChange={setFilterStore}>
+              <SelectTrigger className="w-[140px] h-10 bg-muted/20 border-border/40"><SelectValue placeholder="Loja" /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todas Lojas</SelectItem>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+            </Select>
+            <Select value={filterSource} onValueChange={setFilterSource}>
+              <SelectTrigger className="w-[140px] h-10 bg-muted/20 border-border/40"><SelectValue placeholder="Origem" /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todas Origens</SelectItem><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="instagram">Instagram</SelectItem><SelectItem value="trafego_pago">Tráfego Pago</SelectItem><SelectItem value="indicacao">Indicação</SelectItem></SelectContent>
+            </Select>
+          </div>
+        </div>
       </div>
-    </div>
 
     {leads.length === 0 && (
         <Card className="bg-primary/5 border-dashed border-primary/30">
@@ -282,16 +379,16 @@ const Leads = () => {
                 <Badge className={`h-2 w-2 rounded-full p-0 ${statusConfig[status].color.split(' ')[0]}`} />
                 {statusConfig[status].label}
               </h3>
-              <Badge variant="secondary" className="text-[10px] bg-muted/50">{leads.filter(l => l.status === status).length}</Badge>
+              <Badge variant="secondary" className="text-[10px] bg-muted/50">{filteredLeads.filter(l => l.status === status).length}</Badge>
             </div>
 
             <div className="space-y-3 overflow-y-auto pr-1">
-              {leads.filter(l => l.status === status).length === 0 && (
+              {filteredLeads.filter(l => l.status === status).length === 0 && (
                 <div className="h-20 border-2 border-dashed border-border/30 rounded-xl flex items-center justify-center text-muted-foreground/20 text-[10px]">
-                  Arraste leads aqui
+                  {searchTerm ? "Nenhum resultado" : "Arraste leads aqui"}
                 </div>
               )}
-              {leads.filter(l => l.status === status).map(lead => (
+              {filteredLeads.filter(l => l.status === status).map(lead => (
                 <Card 
                   key={lead.id} 
                   draggable 
@@ -329,9 +426,28 @@ const Leads = () => {
                           size="icon" 
                           variant="ghost"
                           className="h-7 w-7 rounded-full hover:bg-primary/10 hover:text-primary transition-colors"
-                          onClick={() => handleResponse(lead)}
+                          onClick={() => handleEditLead(lead)}
                         >
                           <ChevronRight className="h-3 w-3" />
+                        </Button>
+                        <Button 
+                          size="icon" 
+                          variant="ghost"
+                          className="h-7 w-7 rounded-full hover:bg-primary/10 hover:text-primary transition-colors"
+                          onClick={() => handleResponse(lead)}
+                        >
+                          <MessageCircle className="h-3 w-3 text-green-500" />
+                        </Button>
+                        <Button 
+                          size="icon" 
+                          variant="ghost"
+                          className="h-7 w-7 rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors text-muted-foreground"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteLead(lead.id, lead.name);
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
                       <span className="text-[9px] text-muted-foreground">{new Date(lead.created_at).toLocaleDateString("pt-BR")}</span>
@@ -392,7 +508,43 @@ const Leads = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Chat History Modal */}
+      {/* Edit Lead Modal */}
+      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Editar Lead: {selectedLead?.name}</DialogTitle></DialogHeader>
+          <form onSubmit={saveEditLead} className="space-y-3">
+            <div className="space-y-1.5"><Label className="text-xs">Nome</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required className="h-10" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5"><Label className="text-xs">Telefone</Label><Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} className="h-10" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">E-mail</Label><Input value={form.email} onChange={e => setForm({...form, email: e.target.value})} type="email" className="h-10" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Origem</Label>
+                <Select value={form.source} onValueChange={v => setForm({...form, source: v})}>
+                  <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="instagram">Instagram</SelectItem><SelectItem value="trafego_pago">Tráfego Pago</SelectItem><SelectItem value="indicacao">Indicação</SelectItem></SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Loja</Label>
+                <Select value={form.store_id} onValueChange={v => setForm({...form, store_id: v})}>
+                  <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5"><Label className="text-xs">Observações</Label><Textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} className="min-h-[80px]" /></div>
+            <Button type="submit" className="w-full h-11" disabled={loading}>{loading ? "Salvando..." : "Salvar Alterações"}</Button>
+            <Button type="button" variant="outline" className="w-full h-11" onClick={() => {
+              setEditModalOpen(false);
+              handleResponse(selectedLead);
+            }}>Pular para Responder</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Chat History Modal (Restored) */}
       <Dialog open={chatModalOpen} onOpenChange={setChatModalOpen}>
         <DialogContent className="max-w-md h-[600px] flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-4 border-b bg-muted/30">
