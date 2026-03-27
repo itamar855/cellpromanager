@@ -51,6 +51,8 @@ const Leads = () => {
   const [stores, setStores] = useState<any[]>([]);
   const [chatModalOpen, setChatModalOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const scrollRef = import.meta.env.DEV ? { current: null } : { current: null }; // Temp placeholder
+  const messagesEndRef = typeof window !== 'undefined' ? { current: null } : { current: null };
 
   const fetchData = async () => {
     const { data: leadsData } = await supabase.from("leads").select("*").order("created_at", { ascending: false });
@@ -92,7 +94,14 @@ const Leads = () => {
       console.log("Unsubscribing from realtime...");
       supabase.removeChannel(leadsChannel);
     };
-  }, [selectedLead]);
+  }, [selectedLead?.id]); // Only re-subscribe if the selected lead ID changes
+
+  const messagesEndRef = useEffect(() => {
+    const scrollContainer = document.querySelector('[data-radix-scroll-area-viewport]');
+    if (scrollContainer) {
+      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    }
+  }, [chatMessages, chatModalOpen]);
 
   const handleCreateLead = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -401,7 +410,7 @@ const Leads = () => {
           </DialogHeader>
           
           <ScrollArea className="flex-1 p-4 bg-muted/10">
-            <div className="space-y-3">
+            <div className="space-y-3 pb-4">
               {chatMessages.length === 0 ? (
                 <div className="text-center py-10 text-muted-foreground text-sm">
                   Nenhuma mensagem capturada ainda. <br/> Use o botão "Enviar p/ CRM" na extensão para sincronizar.
