@@ -394,6 +394,7 @@ const Estoque = () => {
                           <SelectItem value="new">Novo</SelectItem>
                           <SelectItem value="used">Usado</SelectItem>
                           <SelectItem value="refurbished">Recondicionado</SelectItem>
+                          <SelectItem value="seminovo_americano">Seminovo (Americano)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -443,7 +444,7 @@ const Estoque = () => {
             <div className="space-y-2">
               {filteredProducts.map((p) => {
                 const margin = p.sale_price ? Number(p.sale_price) - Number(p.cost_price) : null;
-                const conditionLabel = p.condition === "new" ? "Novo" : p.condition === "refurbished" ? "Recondicionado" : "Usado";
+                const conditionLabel = p.condition === "new" ? "Novo" : p.condition === "refurbished" ? "Recondicionado" : p.condition === "seminovo_americano" ? "Seminovo (Americano)" : "Usado";
                 return (
                   <Card key={p.id} className="border-border/50 shadow-lg shadow-black/10">
                     <CardContent className="p-4">
@@ -698,7 +699,7 @@ const Estoque = () => {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5"><Label className="text-xs">Modelo</Label><Input value={editForm.model} onChange={e => setEditForm(f => ({ ...f, model: e.target.value }))} required className="h-10" /></div>
-              <div className="space-y-1.5"><Label className="text-xs">Condição</Label><Select value={editForm.condition} onValueChange={v => setEditForm(f => ({ ...f, condition: v }))}><SelectTrigger className="h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="new">Novo</SelectItem><SelectItem value="used">Usado</SelectItem><SelectItem value="refurbished">Recondicionado</SelectItem></SelectContent></Select></div>
+              <div className="space-y-1.5"><Label className="text-xs">Condição</Label><Select value={editForm.condition} onValueChange={v => setEditForm(f => ({ ...f, condition: v }))}><SelectTrigger className="h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="new">Novo</SelectItem><SelectItem value="used">Usado</SelectItem><SelectItem value="refurbished">Recondicionado</SelectItem><SelectItem value="seminovo_americano">Seminovo (Americano)</SelectItem></SelectContent></Select></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5"><Label className="text-xs">Capacidade</Label><Input value={editForm.capacity} onChange={e => setEditForm(f => ({ ...f, capacity: e.target.value }))} placeholder="128GB" className="h-10" /></div>

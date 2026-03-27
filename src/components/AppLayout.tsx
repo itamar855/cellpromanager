@@ -5,7 +5,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
   LayoutDashboard, Package, ArrowUpDown, ShoppingBag, Store, Landmark, PiggyBank,
-  LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle, FileText, Download, Brain, Settings, Activity, ChevronDown, Wallet
+  LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle, FileText, Download, Brain, Settings, Activity, ChevronDown, Wallet, MessageSquare
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ const navItems = [
   { label: "Estoque", icon: Package, path: "/estoque", permission: "estoque" },
   { label: "OS", icon: Wrench, path: "/ordens-servico", permission: "os" },
   { label: "Clientes", icon: UserCircle, path: "/clientes", permission: "clientes" },
+  { label: "CRM de Leads", icon: MessageSquare, path: "/leads" },
   { label: "Transações", icon: ArrowUpDown, path: "/transacoes", permission: "transacoes" },
   { label: "Relatórios", icon: FileText, path: "/relatorios", permission: "relatorios" },
   { label: "Lojas", icon: Store, path: "/lojas", permission: "lojas" },

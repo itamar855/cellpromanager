@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "CellManager CRM Extension",
+  "version": "1.0",
+  "description": "Capture leads from WhatsApp and Instagram for CellManager ERP",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.whatsapp.com/*",
+    "https://*.instagram.com/*",
+    "https://*.supabase.co/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://web.whatsapp.com/*",
+        "https://www.instagram.com/direct/*"
+      ],
+      "js": ["content.js"],
+      "css": ["style.css"]
+    }
+  ]
+}

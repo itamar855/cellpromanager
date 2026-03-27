@@ -37,6 +37,7 @@ type Sale = {
   notes: string | null; created_by: string; created_at: string;
   commission_value: number | null; discount: number | null;
   warranty_days: number | null; installments: number | null; seller_id: string | null;
+  trade_in_product_id: string | null;
 };
 
 type Customer = Tables<"customers">;
@@ -56,7 +57,7 @@ const createPendingCashEntry = async (storeId: string, userId: string, amount: n
 const emptyCustomerForm = { name: "", phone: "", cpf: "", address: "", email: "", birth: "" };
 
 const Vendas = () => {
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Tables<"products">[]>([]);
   const [accessories, setAccessories] = useState<Accessory[]>([]);
@@ -318,6 +319,38 @@ const Vendas = () => {
       toast.success("Venda rápida registrada!"); setPdvOpen(false); resetPdv(); fetchData();
     } catch (err: any) { toast.error(err.message || "Erro"); }
     setLoading(false);
+  };
+
+  const handleDeleteSale = async (sale: Sale) => {
+    if (userRole !== "admin") return;
+    if (!confirm("Tem certeza que deseja apagar esta venda? O produto voltará para o estoque e as transações vinculadas serão removidas.")) return;
+    
+    setLoading(true);
+    try {
+      // 1. Restaurar o produto para 'in_stock'
+      await supabase.from("products").update({ status: "in_stock", sale_price: null }).eq("id", sale.product_id);
+      
+      // 2. Se houver trade-in, apagar o produto que foi criado
+      if (sale.trade_in_product_id) {
+        await supabase.from("products").delete().eq("id", sale.trade_in_product_id);
+      }
+      
+      // 3. Apagar as transações vinculadas
+      await supabase.from("transactions").delete().eq("product_id", sale.product_id).eq("type", "sale");
+      
+      // 4. Apagar a venda
+      const { error } = await supabase.from("sales").delete().eq("id", sale.id);
+      
+      if (error) throw error;
+      
+      logAction("DELETE_RECORD", "sales", sale.id, sale, null);
+      toast.success("Venda removida e produto retornou ao estoque!");
+      fetchData();
+    } catch (error: any) {
+      toast.error("Erro ao remover venda: " + error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ── Gerar nota ────────────────────────────────────────────────────────────
@@ -789,6 +822,12 @@ const Vendas = () => {
                         <Button className="h-7 px-2 text-[10px] gap-1 text-green-500 border border-green-500/30 bg-transparent hover:bg-green-500/10 shadow-none"
                           onClick={() => handleGerarNota(sale, true)} disabled={isLoading}>
                           <MessageCircle className="h-3 w-3" />WhatsApp
+                        </Button>
+                      )}
+                      {userRole === "admin" && (
+                        <Button className="h-7 px-2 text-[10px] gap-1 text-destructive border border-destructive/30 bg-transparent hover:bg-destructive/10 shadow-none"
+                          onClick={() => handleDeleteSale(sale)} disabled={loading}>
+                          <Trash2 className="h-3 w-3" />Excluir
                         </Button>
                       )}
                     </div>
