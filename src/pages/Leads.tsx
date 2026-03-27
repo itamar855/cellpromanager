@@ -163,7 +163,7 @@ const Leads = () => {
       }
 
       // 2. Queue the message for the extension
-      const { error: queueError } = await (supabase.from("lead_responses") as any)
+      const { error: queueError } = await (supabase as any).from("lead_responses")
         .insert({
           lead_id: selectedLead.id,
           content: responseText,
