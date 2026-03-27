@@ -1,5 +1,5 @@
-// CellManager CRM Extension (v2.9) - "The Safe & Intelligent Messenger"
-console.log("%c CRM: Extension v2.9 Safe-Mode Loaded ", "background: #25d366; color: white; font-weight: bold;");
+// CellManager CRM Extension (v3.0) - "The Ghost Sender"
+console.log("%c CRM: Extension v3.0 Ghost-Mode Loaded ", "background: #25d366; color: white; font-weight: bold;");
 
 const CONFIG = {
   supabaseUrl: "https://hzrqtolfbwnmmeliazmh.supabase.co",
@@ -10,6 +10,7 @@ let activeLead = { id: null, name: "" };
 let lastSyncedText = "";
 let autoSyncObserver = null;
 let responsePolling = null;
+let isSwitching = false;
 
 const style = document.createElement('style');
 style.textContent = `
@@ -38,33 +39,20 @@ async function initSession() {
   if (stored.activeLeadId) {
     activeLead.id = stored.activeLeadId;
     activeLead.name = stored.activeLeadName;
-    console.log("CRM: Session restored for", activeLead.name);
   }
   startResponsePolling();
-  setInterval(findTarget, 2000); // More frequent header check
+  setInterval(findTarget, 2000);
 }
 
 function findTarget() {
-  const isWA = window.location.host.includes("whatsapp");
-  if (!isWA) return;
-
-  const waHeader = document.querySelector("#main header");
-  if (waHeader) {
-    const currentName = (waHeader.querySelector('span[title]') || waHeader.querySelector('span[dir="auto"]') || waHeader.querySelector('span'))?.innerText.trim();
-    if (!currentName) return;
-
-    // v2.9: Always update activeLead name based on what's visible
-    const cleanCurrent = sanitizeName(currentName);
-    if (activeLead.name && cleanCurrent !== sanitizeName(activeLead.name)) {
-        // User changed chat manually, we might need to find the new ID or wait for them to click "Enviar p/ CRM"
-        // But for now, we just know the name changed.
-    }
-    
-    if (!waHeader.querySelector(".crm-capture-btn")) injectButton(waHeader, "WhatsApp");
-    
-    // Automatically setup sync if we have a match
-    if (activeLead.id && (cleanCurrent === sanitizeName(activeLead.name) || cleanCurrent.includes(sanitizeName(activeLead.name)))) {
-      setupAutoSyncWhatsApp();
+  if (window.location.host.includes("whatsapp")) {
+    const waHeader = document.querySelector("#main header");
+    if (waHeader) {
+      const currentName = (waHeader.querySelector('span[title]') || waHeader.querySelector('span[dir="auto"]') || waHeader.querySelector('span'))?.innerText.trim();
+      if (currentName) {
+        if (!waHeader.querySelector(".crm-capture-btn")) injectButton(waHeader, "WhatsApp");
+        setupAutoSyncWhatsApp();
+      }
     }
   }
 }
@@ -73,26 +61,23 @@ function injectButton(parent, platform) {
   const btn = document.createElement("button");
   btn.className = "crm-capture-btn";
   btn.innerText = "Enviar p/ CRM";
-  btn.onclick = (e) => {
-    e.preventDefault(); captureLeadWhatsApp(parent);
-  };
+  btn.onclick = (e) => { e.preventDefault(); captureLeadWhatsApp(parent); };
   (parent.querySelector('div[role="button"]') || parent).appendChild(btn);
 }
 
 async function captureLeadWhatsApp(header) {
   const rawName = (header.querySelector('span[title]') || header.querySelector('span[dir="auto"]') || header.querySelector('span'))?.innerText.trim() || "Lead WhatsApp";
   const name = sanitizeName(rawName);
-  
-  let phone = "";
-  const anyMsg = document.querySelector('[data-id*="@c.us"]');
-  const dataId = anyMsg?.getAttribute('data-id') || "";
-  const jidMatch = dataId.match(/(\d{10,})@/);
-  if (jidMatch) phone = jidMatch[1];
-  else if (name.replace(/\D/g, "").length >= 10) phone = name.replace(/\D/g, "");
-
+  const phone = getWAContactId();
   const messages = extractMessagesWhatsApp();
   await sendToERP({ name, phone, source: "whatsapp", notes: "Sincronizado via WhatsApp Web" }, messages);
-  setupAutoSyncWhatsApp();
+}
+
+function getWAContactId() {
+  const anyMsg = document.querySelector('[data-id*="@c.us"]');
+  const dataId = anyMsg?.getAttribute('data-id') || "";
+  const match = dataId.match(/(\d{10,})@/);
+  return match ? match[1] : "";
 }
 
 function extractMessagesWhatsApp() {
@@ -105,44 +90,34 @@ function extractMessagesWhatsApp() {
 
 async function sendToERP(leadData, messages = []) {
   try {
-    const baseUrl = CONFIG.supabaseUrl;
-    const apiKey = CONFIG.supabaseKey;
-    const headers = { "Content-Type": "application/json", "apikey": apiKey, "Authorization": `Bearer ${apiKey}` };
-
-    let queryUrl = `${baseUrl}/rest/v1/leads?name=ilike.${encodeURIComponent('%' + leadData.name + '%')}&select=id`;
-    if (leadData.phone) {
-      queryUrl = `${baseUrl}/rest/v1/leads?or=(name.ilike.${encodeURIComponent('%' + leadData.name + '%')},phone.eq.${encodeURIComponent(leadData.phone)})&select=id`;
-    }
+    const headers = { "Content-Type": "application/json", "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` };
+    const queryUrl = leadData.phone 
+      ? `${CONFIG.supabaseUrl}/rest/v1/leads?or=(name.ilike.${encodeURIComponent('%'+leadData.name+'%')},phone.eq.${leadData.phone})&select=id`
+      : `${CONFIG.supabaseUrl}/rest/v1/leads?name=ilike.${encodeURIComponent('%'+leadData.name+'%')}&select=id`;
     
-    const checkRes = await fetch(queryUrl, { headers });
-    const existingLeads = await checkRes.json();
+    const res = await fetch(queryUrl, { headers });
+    const existing = await res.json();
     
-    let savedLead;
-    if (Array.isArray(existingLeads) && existingLeads.length > 0) {
-      const updateRes = await fetch(`${baseUrl}/rest/v1/leads?id=eq.${existingLeads[0].id}`, {
-        method: "PATCH", headers: { ...headers, "Prefer": "return=representation" },
-        body: JSON.stringify(leadData)
+    let saved;
+    if (existing.length > 0) {
+      const upd = await fetch(`${CONFIG.supabaseUrl}/rest/v1/leads?id=eq.${existing[0].id}`, {
+        method: "PATCH", headers: { ...headers, "Prefer": "return=representation" }, body: JSON.stringify(leadData)
       });
-      const updated = await updateRes.json();
-      savedLead = updated[0];
+      saved = (await upd.json())[0];
     } else {
-      const createRes = await fetch(`${baseUrl}/rest/v1/leads`, {
-        method: "POST", headers: { ...headers, "Prefer": "return=representation" },
-        body: JSON.stringify(leadData)
+      const cre = await fetch(`${CONFIG.supabaseUrl}/rest/v1/leads`, {
+        method: "POST", headers: { ...headers, "Prefer": "return=representation" }, body: JSON.stringify(leadData)
       });
-      const created = await createRes.json();
-      savedLead = created[0];
+      saved = (await cre.json())[0];
     }
 
-    activeLead.id = savedLead.id;
-    activeLead.name = leadData.name;
-    chrome.storage.local.set({ activeLeadId: savedLead.id, activeLeadName: leadData.name });
+    activeLead = { id: saved.id, name: leadData.name };
+    chrome.storage.local.set({ activeLeadId: saved.id, activeLeadName: leadData.name });
 
     if (messages.length > 0) {
       lastSyncedText = messages[messages.length - 1].content;
-      await fetch(`${baseUrl}/rest/v1/lead_messages`, {
-        method: "POST", headers,
-        body: JSON.stringify(messages.map(m => ({ ...m, lead_id: savedLead.id })))
+      await fetch(`${CONFIG.supabaseUrl}/rest/v1/lead_messages`, {
+        method: "POST", headers, body: JSON.stringify(messages.map(m => ({ ...m, lead_id: saved.id })))
       });
     }
   } catch (err) { console.error(err); }
@@ -152,9 +127,7 @@ function setupAutoSyncWhatsApp() {
   if (autoSyncObserver) autoSyncObserver.disconnect();
   const main = document.querySelector('#main');
   if (!main) return;
-
-  autoSyncObserver = new MutationObserver((mutations) => {
-    if (!activeLead.id) return;
+  autoSyncObserver = new MutationObserver(mutations => {
     for (const m of mutations) {
       for (const node of m.addedNodes) {
         if (node.nodeType === 1) {
@@ -169,135 +142,124 @@ function setupAutoSyncWhatsApp() {
 
 async function syncSingle(el) {
   if (!activeLead.id) return;
-  const contentEl = el.querySelector('.copyable-text span') || el.querySelector('span[dir="ltr"]');
-  const content = (contentEl ? contentEl.innerText : el.innerText).trim();
+  const content = (el.querySelector('.copyable-text span') || el.querySelector('span[dir="ltr"]') || el).innerText.trim();
   const sender = el.classList.contains('message-out') ? 'me' : 'lead';
-
   if (!content || content === lastSyncedText) return;
   lastSyncedText = content;
   
-  try {
-    const res = await fetch(`${CONFIG.supabaseUrl}/rest/v1/lead_messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` },
-      body: JSON.stringify({ lead_id: activeLead.id, content, sender, created_at: new Date().toISOString() })
-    });
-    if (res.ok) {
-       showIndicator();
-       if (sender === 'lead') {
-         updateLeadStatus(activeLead.id, { has_unread: true });
-       }
-    }
-  } catch (err) { console.error(err); }
+  await fetch(`${CONFIG.supabaseUrl}/rest/v1/lead_messages`, {
+    method: "POST", headers: { "Content-Type": "application/json", "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` },
+    body: JSON.stringify({ lead_id: activeLead.id, content, sender, created_at: new Date().toISOString() })
+  });
+  showIndicator();
+  if (sender === 'lead') await updateLeadStatus(activeLead.id, { has_unread: true });
 }
 
 async function updateLeadStatus(id, data) {
-  try {
-    await fetch(`${CONFIG.supabaseUrl}/rest/v1/leads?id=eq.${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` },
-      body: JSON.stringify(data)
-    });
-  } catch (e) {}
+  await fetch(`${CONFIG.supabaseUrl}/rest/v1/leads?id=eq.${id}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json", "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` },
+    body: JSON.stringify(data)
+  });
 }
 
 function startResponsePolling() {
-  if (responsePolling) clearInterval(responsePolling);
-  responsePolling = setInterval(async () => {
+  setInterval(async () => {
+    if (isSwitching) return;
     try {
-      const res = await fetch(`${CONFIG.supabaseUrl}/rest/v1/lead_responses?status=eq.pending`, {
+      const res = await fetch(`${CONFIG.supabaseUrl}/rest/v1/lead_responses?status=eq.pending&order=created_at.asc`, {
         headers: { "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` }
       });
       const pending = await res.json();
-      if (Array.isArray(pending) && pending.length > 0) {
-        for (const msg of pending) {
-          // v2.9: Fetch Target Name from DB to ensure no misdelivery
-          const leadRes = await fetch(`${CONFIG.supabaseUrl}/rest/v1/leads?id=eq.${msg.lead_id}&select=name`, {
-            headers: { "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` }
-          });
-          const leadData = await leadRes.json();
-          const targetName = leadData[0]?.name;
-          
-          if (!targetName) continue;
+      if (pending && pending.length > 0) {
+        const msg = pending[0];
+        const leadRes = await fetch(`${CONFIG.supabaseUrl}/rest/v1/leads?id=eq.${msg.lead_id}&select=name`, {
+          headers: { "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` }
+        });
+        const targetName = (await leadRes.json())[0]?.name;
+        if (!targetName) return;
 
-          // Check if this lead is EXACTLY the one open right now
-          const isCurrentlyOpen = await checkIfLeadIsOpenStrict(msg.lead_id, targetName);
-          if (isCurrentlyOpen) {
-            if (await injectAndSendWhatsApp(msg.content)) {
-              await markAsSent(msg.id);
-              await updateLeadStatus(msg.lead_id, { has_unread: false });
-            }
-          } else {
-            console.log(`CRM: Message for ${targetName} blocked. Switch to their chat to send.`);
-            await attemptChatSwitch(msg.lead_id, targetName);
-          }
+        if (await checkIfLeadIsOpenStrict(msg.lead_id, targetName)) {
+           if (await injectAndSendWhatsApp(msg.content)) {
+             await markAsSent(msg.id);
+             await updateLeadStatus(msg.lead_id, { has_unread: false });
+           }
+        } else {
+           console.log("CRM: Not in target chat. Attempting ghost-search for", targetName);
+           await robustGhostSwitch(msg.lead_id, targetName);
         }
       }
-    } catch (e) { console.error("Polling error", e); }
-  }, 4000);
+    } catch (e) { console.error("Poll Error", e); }
+  }, 5000);
 }
 
-// v2.9 Strict Check: ID match AND Name match in Header
-async function checkIfLeadIsOpenStrict(targetLeadId, targetName) {
-  const waHeader = document.querySelector("#main header");
-  if (!waHeader) return false;
-
-  const currentName = (waHeader.querySelector('span[title]') || waHeader.querySelector('span[dir="auto"]') || waHeader.querySelector('span'))?.innerText.trim();
-  const cleanCurrent = sanitizeName(currentName);
-  const cleanTarget = sanitizeName(targetName);
-
+async function checkIfLeadIsOpenStrict(id, name) {
+  const header = document.querySelector("#main header");
+  if (!header) return false;
+  const current = (header.querySelector('span[title]') || header.querySelector('span[dir="auto"]'))?.innerText.trim();
+  const cleanCurrent = sanitizeName(current);
+  const cleanTarget = sanitizeName(name);
   return cleanCurrent === cleanTarget || cleanCurrent.includes(cleanTarget);
 }
 
 async function markAsSent(id) {
   await fetch(`${CONFIG.supabaseUrl}/rest/v1/lead_responses?id=eq.${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` },
+    method: "PATCH", headers: { "Content-Type": "application/json", "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` },
     body: JSON.stringify({ status: 'sent' })
   });
 }
 
-async function attemptChatSwitch(leadId, leadName) {
-  const sidebar = document.querySelector('#pane-side');
-  const chatRow = sidebar?.querySelector(`span[title="${leadName}"], span[title*="${leadName}"]`);
-  if (chatRow) {
-    chatRow.closest('div[role="row"]')?.click();
-    console.log("CRM: Auto-switched to chat:", leadName);
-    activeLead.id = leadId;
-    activeLead.name = leadName;
-    chrome.storage.local.set({ activeLeadId: leadId, activeLeadName: leadName });
-  } else {
-    // If not in sidebar, we can't switch automatically without searching (too complex for now)
-    console.log(`CRM: Chat with ${leadName} not visible. Please click it.`);
-  }
+// v3.0 Ghost Switch: Use search bar to switch chats reliably
+async function robustGhostSwitch(id, name) {
+  if (isSwitching) return;
+  isSwitching = true;
+  try {
+    // 1. Click Search Bar
+    const searchBar = document.querySelector('div[contenteditable="true"][data-tab="3"]');
+    if (!searchBar) { isSwitching = false; return; }
+    
+    searchBar.focus();
+    document.execCommand('selectAll', false, null);
+    document.execCommand('delete', false, null);
+    document.execCommand('insertText', false, name);
+    searchBar.dispatchEvent(new Event('input', { bubbles: true }));
+
+    // 2. Wait for results and click
+    await new Promise(r => setTimeout(r, 2000));
+    const results = document.querySelector('#pane-side');
+    const row = results?.querySelector(`span[title="${name}"], span[title*="${name}"]`);
+    if (row) {
+      row.closest('div[role="row"]')?.click();
+      console.log("CRM: Found and clicked contact!");
+      activeLead = { id, name };
+      chrome.storage.local.set({ activeLeadId: id, activeLeadName: name });
+      // Clear search
+      const clearBtn = document.querySelector('span[data-icon="x-alt"]');
+      if (clearBtn) clearBtn.click();
+    } else {
+      console.log("CRM: Lead not found in search results.");
+    }
+  } catch (e) { console.error(e); }
+  isSwitching = false;
 }
 
 async function injectAndSendWhatsApp(text) {
-  const main = document.querySelector('#main');
-  const footer = main?.querySelector('footer');
+  const footer = document.querySelector('#main footer');
   const input = footer?.querySelector('div[contenteditable="true"]');
   if (!input) return false;
-
   input.focus();
   input.innerHTML = ""; 
   document.execCommand('insertText', false, text);
   input.dispatchEvent(new Event('input', { bubbles: true }));
-  
   return new Promise(resolve => {
     setTimeout(() => {
-      const sendBtn = footer.querySelector('[data-testid="send"]') || 
-                      footer.querySelector('button span[data-icon="send"]')?.closest('button');
-      if (sendBtn) {
-        sendBtn.click();
-        resolve(true);
-      } else {
-        const enterEv = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true });
-        input.dispatchEvent(enterEv);
-        resolve(true);
+      const sendBtn = footer.querySelector('[data-testid="send"]') || footer.querySelector('button span[data-icon="send"]')?.closest('button');
+      if (sendBtn) { sendBtn.click(); resolve(true); }
+      else { 
+        const ev = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true });
+        input.dispatchEvent(ev); resolve(true); 
       }
-    }, 800);
+    }, 1000); // 1s delay for ghost mode safety
   });
 }
 
-chrome.runtime.onMessage.addListener((r) => { if (r.action === "manualCapture") findTarget(); });
 initSession();
