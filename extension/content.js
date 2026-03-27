@@ -1,5 +1,5 @@
-// CellManager CRM Extension (v4.1) - "The Precision Solver"
-console.log("%c CRM: Extension v4.1 Precision-Mode Loaded ", "background: #128C7E; color: white; font-weight: bold;");
+// CellManager CRM Extension (v4.2) - "The Deep Linker"
+console.log("%c CRM: Extension v4.2 Deep-Link Loaded ", "background: #128C7E; color: white; font-weight: bold;");
 
 const CONFIG = {
   supabaseUrl: "https://hzrqtolfbwnmmeliazmh.supabase.co",
@@ -174,7 +174,7 @@ function startResponsePolling() {
            }
         } else {
            console.log("CRM: Target chat NOT open. Commencing auto-switch search...");
-           await precisionSwitch(leadInfo);
+           await deepLinkSwitch(leadInfo);
         }
       }
     } catch (e) { console.error(e); }
@@ -197,50 +197,53 @@ async function markAsSent(id) {
   });
 }
 
-// v4.1 Precision Switch: Explicitly targets the Search-Bar using data-tab="3"
-async function precisionSwitch(lead) {
+// v4.2 DeepLink Switch: More aggressive search trigger and fallback
+async function deepLinkSwitch(lead) {
   if (isSwitching) return;
   isSwitching = true;
   try {
     const searchKey = lead.phone || lead.name;
-    // VERY SPECIFIC SELECTOR for Search input
-    const searchBar = document.querySelector('div[contenteditable="true"][data-tab="3"]');
+    const searchBar = document.querySelector('div[contenteditable="true"][data-tab="3"]') || 
+                      document.querySelector('div[role="textbox"][aria-label="Caixa de texto de pesquisa"]') ||
+                      document.querySelector('div[role="textbox"][aria-label="Search inputbox"]');
     
     if (!searchBar) { 
-        console.log("CRM: Search bar not found (data-tab=3)");
+        console.log("CRM: Search bar not found");
         isSwitching = false; return; 
     }
     
     searchBar.focus();
-    // Simulate user typing to be safe
-    document.execCommand('selectAll', false, null);
-    document.execCommand('delete', false, null);
-    
-    // Inject key-by-key if possible or just as one block
-    document.execCommand('insertText', false, searchKey);
+    // Use innerHTML + Input Events for more reliability
+    searchBar.innerHTML = searchKey;
     searchBar.dispatchEvent(new Event('input', { bubbles: true }));
+    searchBar.dispatchEvent(new Event('change', { bubbles: true }));
+    
+    // Fallback: Simulate Enter to force results
+    const enterEv = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true });
+    searchBar.dispatchEvent(enterEv);
 
     await new Promise(r => setTimeout(r, 2000));
     
+    // Look for the match in the pane-side
     const sidebar = document.querySelector('#pane-side');
-    // Try to find the exact match in titles
-    const rows = Array.from(sidebar?.querySelectorAll('span[title]') || []);
-    const match = rows.find(r => sanitizeName(r.title).includes(sanitizeName(searchKey)) || sanitizeName(r.title).includes(sanitizeName(lead.name)));
+    const resultRows = Array.from(sidebar?.querySelectorAll('div[role="row"]') || []);
     
-    if (match) {
-      match.closest('div[role="row"]')?.click();
-      console.log("CRM: Matched and clicked contact:", lead.name);
-      activeLead = { id: lead.id, name: lead.name };
-      chrome.storage.local.set({ activeLeadId: lead.id, activeLeadName: lead.name });
-      
-      // WAIT for #main to change before doing anything else
-      await new Promise(r => setTimeout(r, 1000));
-      
-      // Clear search so it doesn't stay there
-      const clearBtn = document.querySelector('span[data-icon="x-alt"]');
-      if (clearBtn) clearBtn.click();
-    } else {
-      console.log("CRM: No match found for", searchKey);
+    // Find row by title or aria-label
+    for (const row of resultRows) {
+        const titleSpan = row.querySelector('span[title]');
+        const nameText = titleSpan?.title || row.ariaLabel || "";
+        if (sanitizeName(nameText).includes(sanitizeName(searchKey)) || sanitizeName(nameText).includes(sanitizeName(lead.name))) {
+            row.click();
+            console.log("CRM: Clicked matched row:", nameText);
+            activeLead = { id: lead.id, name: lead.name };
+            chrome.storage.local.set({ activeLeadId: lead.id, activeLeadName: lead.name });
+            await new Promise(r => setTimeout(r, 1000));
+            // Clear search
+            const clearBtn = document.querySelector('span[data-icon="x-alt"]');
+            if (clearBtn) clearBtn.click();
+            isSwitching = false;
+            return;
+        }
     }
   } catch (e) { console.error(e); }
   isSwitching = false;
@@ -248,8 +251,8 @@ async function precisionSwitch(lead) {
 
 async function injectAndSendWhatsApp(text) {
   const footer = document.querySelector('#main footer');
-  // VERY SPECIFIC SELECTOR for Chat input (usually data-tab=10)
-  const input = footer?.querySelector('div[contenteditable="true"][data-tab="10"] span') || footer?.querySelector('div[contenteditable="true"]');
+  const input = footer?.querySelector('div[contenteditable="true"][data-tab="10"]') || 
+                footer?.querySelector('div[contenteditable="true"]');
   if (!input) return false;
 
   input.focus();
@@ -262,7 +265,6 @@ async function injectAndSendWhatsApp(text) {
       const sendBtn = footer.querySelector('[data-testid="send"]') || footer.querySelector('span[data-icon="send"]')?.closest('button');
       if (sendBtn) {
         sendBtn.click();
-        console.log("CRM: Message sent!");
         resolve(true);
       } else {
         const ev = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true });
