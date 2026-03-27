@@ -44,22 +44,26 @@ function findTarget() {
       injectButton(waHeader, "WhatsApp");
     }
   } else if (isInstagram) {
-    // Broad search for Instagram DM header
+    // Broad search for Instagram DM header - ultra aggressive
     const possibleHeaders = [
       document.querySelector('div[role="main"] header'),
       document.querySelector('div[role="presentation"] header'),
       document.querySelector('header[role="banner"]'),
       document.querySelector('div._aa61'),
       document.querySelector('div[style*="height: 75px"]'),
+      document.querySelector('.x1qjc9v5.x972fbf.xcf7096.x1qhh985'), // Common IG classes for DM header
+      document.querySelector('div[role="dialog"] header'),
+      // Find based on icons
       document.querySelector('svg[aria-label="Expandir"]')?.closest('div')?.parentElement,
       document.querySelector('svg[aria-label="Informações"]')?.closest('div')?.parentElement,
-      // Fallback: look for the element that contains the icons
-      document.querySelector('svg[aria-label="Encaminhar"]') ? document.querySelector('svg[aria-label="Encaminhar"]').closest('div').parentElement : null
+      document.querySelector('svg[aria-label="Direct"]')?.closest('div')?.parentElement,
+      // Search for any div that has a back button or name link
+      document.querySelector('a[href*="/direct/"]')?.parentElement?.parentElement
     ];
 
     for (const h of possibleHeaders) {
-      if (h && h.offsetHeight > 40 && !h.querySelector(".crm-capture-btn")) {
-        console.log("IG Header Found");
+      if (h && h.offsetHeight > 30 && h.offsetHeight < 150 && !h.querySelector(".crm-capture-btn")) {
+        console.log("IG Header Detected!");
         injectButton(h, "Instagram");
         break;
       }
