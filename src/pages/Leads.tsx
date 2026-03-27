@@ -56,7 +56,21 @@ const Leads = () => {
     setStores(storesData ?? []);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    fetchData();
+
+    // Configurar Realtime para atualizações automáticas
+    const channel = supabase
+      .channel('leads-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => {
+        fetchData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const handleCreateLead = async (e: React.FormEvent) => {
     e.preventDefault();

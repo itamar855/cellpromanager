@@ -96,13 +96,37 @@ async function captureLeadWhatsApp(header) {
 }
 
 async function captureLeadInstagram(header) {
-  // Broad search for the name inside the provided header
-  const nameEl = header.querySelector('span[role="link"]') || 
-                header.querySelector('span') || 
-                document.querySelector('div[role="main"] header span');
-                
-  const name = nameEl ? nameEl.innerText.trim() : "Lead Instagram";
-  await sendToERP({ name, source: "instagram", notes: "Via Instagram Web" });
+  try {
+    let name = "Lead Instagram";
+    
+    // Attempt multiple strategies to find the name
+    const selectors = [
+      'span[role="link"]',
+      'h2 span',
+      'a[href*="/"] span',
+      'div[role="button"] span',
+      'span[dir="auto"]'
+    ];
+
+    for (const selector of selectors) {
+      const el = header.querySelector(selector);
+      if (el && el.innerText.trim().length > 1) {
+        name = el.innerText.trim();
+        break;
+      }
+    }
+
+    if (name === "Lead Instagram") {
+      // Fallback: search for any bold span or specific IG classes
+      const boldSpan = header.querySelector('span[style*="font-weight: 600"]') || header.querySelector('span._ap32');
+      if (boldSpan) name = boldSpan.innerText.trim();
+    }
+
+    console.log("Captured IG Name:", name);
+    await sendToERP({ name, source: "instagram", notes: "Via Instagram Web" });
+  } catch (err) {
+    alert("Erro ao extrair nome: " + err.message);
+  }
 }
 
 // Support for manual capture from popup
