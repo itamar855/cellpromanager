@@ -1,10 +1,14 @@
-// Advanced Content Script for CellManager Extension (v1.5) - "The Messenger"
-console.log("CellManager CRM Extension Activity");
+// CellManager CRM Extension (v1.7) - "The Persistent Real-Time Messenger"
+console.log("CellManager CRM Extension Activity - Persistent Real-Time Enabled");
 
 const CONFIG = {
   supabaseUrl: "https://hzrqtolfbwnmmeliazmh.supabase.co",
   supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6cnF0b2xmYndubW1lbGlhem1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMTI1MDEsImV4cCI6MjA4OTc4ODUwMX0.wQyORyhVI5FaUapc3uwsOV48VUQgvdj2_y0FXjYchAo"
 };
+
+let activeLead = { id: null, name: "" };
+let lastSyncedText = "";
+let autoSyncObserver = null;
 
 // CSS Injection
 const style = document.createElement('style');
@@ -29,8 +33,34 @@ style.textContent = `
   }
   .crm-capture-btn:hover { transform: scale(1.05); filter: brightness(1.1); }
   .crm-capture-btn-instagram { background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888) !important; }
+  .crm-sync-indicator {
+    position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.7);
+    color: #25d366; padding: 5px 10px; border-radius: 5px; font-size: 10px;
+    z-index: 10000; display: none;
+  }
 `;
 document.head.appendChild(style);
+
+const syncIndicator = document.createElement('div');
+syncIndicator.className = 'crm-sync-indicator';
+syncIndicator.innerText = 'Sincronizando...';
+document.body.appendChild(syncIndicator);
+
+function showIndicator() {
+  syncIndicator.style.display = 'block';
+  setTimeout(() => syncIndicator.style.display = 'none', 2000);
+}
+
+// Persist Lead ID across reloads
+async function initSession() {
+  const stored = await chrome.storage.local.get(['activeLeadId', 'activeLeadName']);
+  if (stored.activeLeadId) {
+    activeLead.id = stored.activeLeadId;
+    activeLead.name = stored.activeLeadName;
+    console.log("Session Restored:", activeLead);
+    findTarget();
+  }
+}
 
 function findTarget() {
   const isWhatsApp = window.location.host.includes("whatsapp");
@@ -38,8 +68,17 @@ function findTarget() {
 
   if (isWhatsApp) {
     const waHeader = document.querySelector("#main header");
-    if (waHeader && !waHeader.querySelector(".crm-capture-btn")) {
-      injectButton(waHeader, "WhatsApp");
+    if (waHeader) {
+      const currentName = (waHeader.querySelector('span[dir="auto"]') || waHeader.querySelector('span'))?.innerText.trim();
+      if (!waHeader.querySelector(".crm-capture-btn")) injectButton(waHeader, "WhatsApp");
+      
+      // If the header matches our stored lead, start auto-sync
+      if (activeLead.id && activeLead.name === currentName) {
+        setupAutoSyncWhatsApp();
+      } else {
+        // Different chat, stop sync until manual click
+        if (autoSyncObserver) autoSyncObserver.disconnect();
+      }
     }
   } else if (isInstagram) {
     const infoLabels = ["Informações", "Information", "Informações da conversa", "Conversation Information", "Expandir", "Expand"];
@@ -49,7 +88,14 @@ function findTarget() {
         let current = icon.parentElement;
         for (let i = 0; i < 5; i++) {
           if (current && current.offsetHeight > 40 && current.offsetHeight < 120 && !current.closest('div[role="navigation"]')) {
+            const currentName = current.innerText.trim().split('\n')[0];
             if (!current.querySelector(".crm-capture-btn")) injectButton(current, "Instagram");
+            
+            if (activeLead.id && (activeLead.name === currentName || currentName.includes(activeLead.name))) {
+              setupAutoSyncInstagram();
+            } else if (autoSyncObserver) {
+              autoSyncObserver.disconnect();
+            }
             return;
           }
           current = current?.parentElement;
@@ -72,123 +118,140 @@ function injectButton(parent, platform) {
 }
 
 async function captureLeadWhatsApp(header) {
-  const nameEl = header.querySelector('span[dir="auto"]') || header.querySelector('span');
-  const name = nameEl ? nameEl.innerText.trim() : "Lead WhatsApp";
+  const name = (header.querySelector('span[dir="auto"]') || header.querySelector('span'))?.innerText.trim() || "Lead WhatsApp";
   const phone = name.replace(/\D/g, "").length >= 8 ? name : "";
-  
   const messages = extractMessagesWhatsApp();
   await sendToERP({ name, phone, source: "whatsapp", notes: "Sincronizado via WhatsApp Web" }, messages);
+  setupAutoSyncWhatsApp();
 }
 
 async function captureLeadInstagram(header) {
   try {
-    let name = "Lead Instagram";
-    
-    // 1. Precise selectors for common IG layouts
-    const specificSelectors = [
-      'h2 span', // Desktop header Title
-      'span[role="link"]', // Common name link
-      'div[role="button"] span', // Interactive headers
-      'a[href*="/"] span', // Link to profile
-      'div._ab8w span' // Obfuscated IG class
-    ];
-
-    for (const selector of specificSelectors) {
-      const el = header.querySelector(selector);
-      if (el && el.innerText.trim().length > 1 && !el.innerText.includes("Sua conversa")) {
-        name = el.innerText.trim();
-        break;
-      }
-    }
-
-    if (name === "Lead Instagram") {
-      // 2. Broad search: find first span that is actually text and not a status/number
-      const allSpans = Array.from(header.querySelectorAll('span'));
-      const likelyName = allSpans.find(s => 
-        s.innerText.length > 2 && 
-        s.innerText.length < 40 && 
-        !s.innerText.includes("Ativo") && 
-        !s.innerText.includes("Online")
-      );
-      if (likelyName) name = likelyName.innerText.trim();
-    }
-
-    console.log("Captured IG Name:", name);
+    let name = header.innerText.trim().split('\n')[0] || "Lead Instagram";
     const messages = extractMessagesInstagram();
     await sendToERP({ name, source: "instagram", notes: "Sincronizado via Instagram Web" }, messages);
-  } catch (err) {
-    alert("Erro ao extrair nome: " + err.message);
-  }
+    setupAutoSyncInstagram();
+  } catch (err) { console.error("Erro IG:", err); }
 }
 
 function extractMessagesWhatsApp() {
   const msgEls = document.querySelectorAll('.message-in, .message-out');
   return Array.from(msgEls).slice(-15).map(el => {
-    const content = el.querySelector('.copyable-text span')?.innerText || el.innerText;
-    return {
-      content: content.trim(),
-      sender: el.classList.contains('message-out') ? 'me' : 'lead',
-      created_at: new Date().toISOString()
-    };
+    const content = (el.querySelector('.copyable-text span')?.innerText || el.innerText).trim();
+    return { content, sender: el.classList.contains('message-out') ? 'me' : 'lead', created_at: new Date().toISOString() };
   });
 }
 
 function extractMessagesInstagram() {
   const msgEls = document.querySelectorAll('div[role="row"]');
   return Array.from(msgEls).slice(-15).map(el => {
+    const content = el.innerText.split('\n')[0].trim();
     const isMe = el.querySelector('div[style*="align-items: flex-end"]') || el.innerText.includes("Você enviou");
-    return {
-      content: el.innerText.split('\n')[0].trim(),
-      sender: isMe ? 'me' : 'lead',
-      created_at: new Date().toISOString()
-    };
+    return { content, sender: isMe ? 'me' : 'lead', created_at: new Date().toISOString() };
   });
 }
 
 async function sendToERP(leadData, messages = []) {
   try {
-    const url = CONFIG.supabaseUrl;
-    const key = CONFIG.supabaseKey;
-
-    // 1. Upsert Lead (find by name/phone or create)
-    const leadRes = await fetch(`${url}/rest/v1/leads`, {
+    const res = await fetch(`${CONFIG.supabaseUrl}/rest/v1/leads`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "apikey": key, "Authorization": `Bearer ${key}`, "Prefer": "return=representation" },
+      headers: { "Content-Type": "application/json", "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}`, "Prefer": "return=representation" },
       body: JSON.stringify(leadData)
     });
 
-    if (!leadRes.ok) throw new Error("Falha ao salvar lead");
-    const [savedLead] = await leadRes.json();
+    if (!res.ok) throw new Error("Falha ao salvar lead");
+    const [saved] = await res.json();
+    
+    activeLead.id = saved.id;
+    activeLead.name = leadData.name;
+    
+    // Persist to storage
+    chrome.storage.local.set({ activeLeadId: saved.id, activeLeadName: leadData.name });
 
-    // 2. Save Messages
     if (messages.length > 0) {
-      console.log("Syncing messages for lead ID:", savedLead.id);
-      const msgData = messages.map(m => ({ ...m, lead_id: savedLead.id }));
-      const msgRes = await fetch(`${url}/rest/v1/lead_messages`, {
+      lastSyncedText = messages[messages.length - 1].content;
+      await fetch(`${CONFIG.supabaseUrl}/rest/v1/lead_messages`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "apikey": key, "Authorization": `Bearer ${key}` },
-        body: JSON.stringify(msgData)
+        headers: { "Content-Type": "application/json", "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` },
+        body: JSON.stringify(messages.map(m => ({ ...m, lead_id: saved.id })))
       });
-      if (!msgRes.ok) console.error("Failed to sync messages:", await msgRes.text());
-      else console.log("Messages synced successfully!");
     }
-
-    alert(`✅ Lead "${leadData.name}" e conversa sincronizados!`);
-  } catch (err) {
-    alert("❌ Erro: " + err.message);
-  }
+    alert(`✅ Sincronizado: ${leadData.name}`);
+  } catch (err) { alert("❌ Erro: " + err.message); }
 }
 
-// Manual capture from popup
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+function setupAutoSyncWhatsApp() {
+  if (autoSyncObserver) autoSyncObserver.disconnect();
+  const chat = document.querySelector('#main');
+  if (!chat) return;
+
+  autoSyncObserver = new MutationObserver((mutations) => {
+    mutations.forEach(m => {
+      m.addedNodes.forEach(node => {
+        if (node.nodeType === 1) {
+          if (node.classList.contains('message-in') || node.classList.contains('message-out')) syncSingle(node, 'wa');
+          else node.querySelectorAll('.message-in, .message-out').forEach(el => syncSingle(el, 'wa'));
+        }
+      });
+    });
+  });
+  autoSyncObserver.observe(chat, { childList: true, subtree: true });
+  console.log("WA Auto-Sync ON for", activeLead.name);
+}
+
+function setupAutoSyncInstagram() {
+  if (autoSyncObserver) autoSyncObserver.disconnect();
+  const chat = document.querySelector('div[role="main"]') || document.body;
+  
+  autoSyncObserver = new MutationObserver((mutations) => {
+    mutations.forEach(m => {
+      m.addedNodes.forEach(node => {
+        if (node.nodeType === 1 && (node.getAttribute('role') === 'row' || node.querySelector('div[role="row"]'))) {
+          const row = node.getAttribute('role') === 'row' ? node : node.querySelector('div[role="row"]');
+          syncSingle(row, 'ig');
+        }
+      });
+    });
+  });
+  autoSyncObserver.observe(chat, { childList: true, subtree: true });
+}
+
+async function syncSingle(el, platform) {
+  if (!activeLead.id) return;
+  let content = "", sender = "lead";
+
+  if (platform === 'wa') {
+    content = (el.querySelector('.copyable-text span')?.innerText || el.innerText).trim();
+    sender = el.classList.contains('message-out') ? 'me' : 'lead';
+  } else {
+    content = el.innerText.split('\n')[0].trim();
+    sender = (el.querySelector('div[style*="align-items: flex-end"]') || el.innerText.includes("Você enviou")) ? 'me' : 'lead';
+  }
+
+  if (!content || content === lastSyncedText) return;
+  lastSyncedText = content;
+  
+  showIndicator();
+  console.log("Auto-Syncing:", content);
+
+  try {
+    await fetch(`${CONFIG.supabaseUrl}/rest/v1/lead_messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` },
+      body: JSON.stringify({ lead_id: activeLead.id, content, sender, created_at: new Date().toISOString() })
+    });
+  } catch (err) { console.error("Sync Error:", err); }
+}
+
+chrome.runtime.onMessage.addListener((request) => {
   if (request.action === "manualCapture") {
-    const isWhatsApp = window.location.host.includes("whatsapp");
-    const isInstagram = window.location.host.includes("instagram");
-    if (isWhatsApp) { const h = document.querySelector("#main header"); if (h) captureLeadWhatsApp(h); }
-    else if (isInstagram) { const h = document.querySelector('div[role="main"] header') || document.querySelector('div[role="dialog"] header'); if (h) captureLeadInstagram(h); }
+    const isWA = window.location.host.includes("whatsapp");
+    const h = isWA ? document.querySelector("#main header") : (document.querySelector('div[role="main"] header') || document.querySelector('div[role="dialog"] header'));
+    if (h) isWA ? captureLeadWhatsApp(h) : captureLeadInstagram(h);
   }
 });
 
-const observer = new MutationObserver(() => findTarget());
-observer.observe(document.body, { childList: true, subtree: true });
+const mainObserver = new MutationObserver(() => findTarget());
+mainObserver.observe(document.body, { childList: true, subtree: true });
+initSession();
 setTimeout(findTarget, 2000);
