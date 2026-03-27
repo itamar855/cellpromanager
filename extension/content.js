@@ -292,21 +292,30 @@ async function injectAndSendWhatsApp(text) {
   if (!input) return false;
 
   input.focus();
+  // Clear any existing text first to be safe
+  input.innerHTML = ""; 
   document.execCommand('insertText', false, text);
   input.dispatchEvent(new Event('input', { bubbles: true }));
   
   return new Promise(resolve => {
     setTimeout(() => {
-      const sendBtn = footer.querySelector('span[data-testid="send"]') || footer.querySelector('button');
+      // Precise Send Button Selectors
+      const sendBtn = footer.querySelector('[data-testid="send"]') || 
+                      footer.querySelector('button span[data-icon="send"]')?.closest('button') ||
+                      footer.querySelector('button[aria-label="Enviar"], button[aria-label="Send"]');
+      
       if (sendBtn) {
         sendBtn.click();
+        console.log("CRM: Message injected and sent via button!");
         resolve(true);
       } else {
+        // Final fallback: Press Enter
+        console.log("CRM: Send button not found, trying Enter...");
         const enterEv = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true });
         input.dispatchEvent(enterEv);
         resolve(true);
       }
-    }, 500);
+    }, 800);
   });
 }
 
