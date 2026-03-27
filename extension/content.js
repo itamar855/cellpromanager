@@ -1,10 +1,17 @@
-// CellManager CRM Extension (v1.7) - "The Persistent Real-Time Messenger"
-console.log("CellManager CRM Extension Activity - Persistent Real-Time Enabled");
+// CellManager CRM Extension (v1.8) - "The Configurable Messenger"
+console.log("CellManager CRM Extension Activity");
 
-const CONFIG = {
+let CONFIG = {
   supabaseUrl: "https://hzrqtolfbwnmmeliazmh.supabase.co",
   supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6cnF0b2xmYndubW1lbGlhem1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMTI1MDEsImV4cCI6MjA4OTc4ODUwMX0.wQyORyhVI5FaUapc3uwsOV48VUQgvdj2_y0FXjYchAo"
 };
+
+// Load user-defined config if exists
+chrome.storage.sync.get(["supabaseUrl", "supabaseKey"], (data) => {
+  if (data.supabaseUrl) CONFIG.supabaseUrl = data.supabaseUrl;
+  if (data.supabaseKey) CONFIG.supabaseKey = data.supabaseKey;
+  console.log("Config loaded from storage");
+});
 
 let activeLead = { id: null, name: "" };
 let lastSyncedText = "";

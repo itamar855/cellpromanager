@@ -37,10 +37,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const manualBtn = document.getElementById("manual");
   manualBtn.addEventListener("click", async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab) {
-      chrome.tabs.sendMessage(tab.id, { action: "manualCapture" });
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab || !tab.url.includes("whatsapp.com") && !tab.url.includes("instagram.com")) {
+        showStatus("Abra o WhatsApp ou Instagram primeiro", "error");
+        return;
+      }
+      
+      await chrome.tabs.sendMessage(tab.id, { action: "manualCapture" });
       showStatus("Solicitando captura...", "success");
+    } catch (err) {
+      console.error(err);
+      showStatus("Erro: Recarregue a página do WhatsApp/IG", "error");
     }
   });
 });
