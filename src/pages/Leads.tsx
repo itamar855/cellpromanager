@@ -139,7 +139,7 @@ const Leads = () => {
   const handleResponse = (lead: any) => {
     setSelectedLead(lead);
     setResponseModalOpen(true);
-    setResponseText(`Olá ${lead.name.split(' ')[0]}! Vi que você se interessou pela nossa loja...`);
+    setResponseText("");
   };
 
   const sendResponse = async () => {

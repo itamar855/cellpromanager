@@ -1,5 +1,5 @@
-// CellManager CRM Extension (v2.4) - "The Automation & Sync Master"
-console.log("%c CRM: Extension v2.4 Loaded ", "background: #25d366; color: white; font-weight: bold;");
+// CellManager CRM Extension (v2.5) - "The Multi-Platform Master"
+console.log("%c CRM: Extension v2.5 Loaded ", "background: #25d366; color: white; font-weight: bold;");
 
 const CONFIG = {
   supabaseUrl: "https://hzrqtolfbwnmmeliazmh.supabase.co",
@@ -14,6 +14,7 @@ let responsePolling = null;
 const style = document.createElement('style');
 style.textContent = `
   .crm-capture-btn { background: #25d366 !important; color: white !important; border: none !important; padding: 6px 14px !important; border-radius: 20px !important; cursor: pointer !important; font-size: 11px !important; font-weight: bold !important; margin: 5px 10px !important; z-index: 99999 !important; }
+  .crm-capture-btn-instagram { background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888) !important; }
   .crm-sync-indicator { position: fixed; top: 10px; right: 80px; background: rgba(37, 211, 102, 0.9); color: white; padding: 4px 12px; border-radius: 20px; font-size: 10px; font-weight: bold; z-index: 10000; display: none; }
 `;
 document.head.appendChild(style);
@@ -29,6 +30,7 @@ function showIndicator() {
 }
 
 function sanitizeName(name) {
+  if (!name) return "";
   return name.replace(/[^\x20-\x7E]/g, "").trim(); 
 }
 
@@ -45,6 +47,8 @@ async function initSession() {
 
 function findTarget() {
   const isWA = window.location.host.includes("whatsapp");
+  const isIG = window.location.host.includes("instagram");
+
   if (isWA) {
     const waHeader = document.querySelector("#main header");
     if (waHeader) {
@@ -55,8 +59,24 @@ function findTarget() {
       if (!waHeader.querySelector(".crm-capture-btn")) injectButton(waHeader, "WhatsApp");
       
       const isMatch = activeLead.id && (cleanCurrent === cleanStored || cleanCurrent.includes(cleanStored) || cleanStored.includes(cleanCurrent));
-      if (isMatch) {
-         setupAutoSyncWhatsApp();
+      if (isMatch) setupAutoSyncWhatsApp();
+    }
+  } else if (isIG) {
+    const infoLabels = ["Informações", "Information", "Informações da conversa", "Conversation Information", "Expandir", "Expand"];
+    for (const label of infoLabels) {
+      const icon = document.querySelector(`svg[aria-label="${label}"]`);
+      if (icon) {
+        let current = icon.parentElement;
+        for (let i = 0; i < 5; i++) {
+          if (current && current.offsetHeight > 40 && current.offsetHeight < 120 && !current.closest('div[role="navigation"]')) {
+            const currentName = current.innerText.trim().split('\n')[0];
+            if (!current.querySelector(".crm-capture-btn")) injectButton(current, "Instagram");
+            const isMatch = activeLead.id && (sanitizeName(currentName) === sanitizeName(activeLead.name));
+            if (isMatch) setupAutoSyncInstagram();
+            return;
+          }
+          current = current?.parentElement;
+        }
       }
     }
   }
@@ -64,12 +84,13 @@ function findTarget() {
 
 function injectButton(parent, platform) {
   const btn = document.createElement("button");
-  btn.className = "crm-capture-btn";
+  btn.className = platform === "Instagram" ? "crm-capture-btn crm-capture-btn-instagram" : "crm-capture-btn";
   btn.innerText = "Enviar p/ CRM";
   btn.onclick = (e) => {
     e.preventDefault(); platform === "WhatsApp" ? captureLeadWhatsApp(parent) : captureLeadInstagram(parent);
   };
-  (parent.querySelector('div[role="button"]') || parent).appendChild(btn);
+  if (platform === "Instagram") parent.prepend(btn);
+  else (parent.querySelector('div[role="button"]') || parent).appendChild(btn);
 }
 
 async function captureLeadWhatsApp(header) {
@@ -88,11 +109,29 @@ async function captureLeadWhatsApp(header) {
   setupAutoSyncWhatsApp();
 }
 
+async function captureLeadInstagram(header) {
+  try {
+    let name = header.innerText.trim().split('\n')[0] || "Lead Instagram";
+    const messages = extractMessagesInstagram();
+    await sendToERP({ name, source: "instagram", notes: "Sincronizado via Instagram Web" }, messages);
+    setupAutoSyncInstagram();
+  } catch (err) { console.error("Erro IG:", err); }
+}
+
 function extractMessagesWhatsApp() {
   const msgEls = document.querySelectorAll('.message-in, .message-out');
   return Array.from(msgEls).slice(-25).map(el => {
     const content = (el.querySelector('.copyable-text span')?.innerText || el.innerText).trim();
     return { content, sender: el.classList.contains('message-out') ? 'me' : 'lead', created_at: new Date().toISOString() };
+  });
+}
+
+function extractMessagesInstagram() {
+  const msgEls = document.querySelectorAll('div[role="row"]');
+  return Array.from(msgEls).slice(-25).map(el => {
+    const content = el.innerText.split('\n')[0].trim();
+    const isMe = el.querySelector('div[style*="align-items: flex-end"]') || el.innerText.includes("Você enviou");
+    return { content, sender: isMe ? 'me' : 'lead', created_at: new Date().toISOString() };
   });
 }
 
@@ -164,11 +203,36 @@ function setupAutoSyncWhatsApp() {
   autoSyncObserver.observe(main, { childList: true, subtree: true });
 }
 
+function setupAutoSyncInstagram() {
+  if (autoSyncObserver) autoSyncObserver.disconnect();
+  const chat = document.querySelector('div[role="main"]') || document.body;
+  autoSyncObserver = new MutationObserver((mutations) => {
+    if (!activeLead.id) return;
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType === 1) {
+          const row = node.getAttribute('role') === 'row' ? node : node.querySelector('div[role="row"]');
+          if (row) syncSingle(row, 'ig');
+        }
+      }
+    }
+  });
+  autoSyncObserver.observe(chat, { childList: true, subtree: true });
+}
+
 async function syncSingle(el, platform) {
   if (!activeLead.id) return;
-  const contentEl = el.querySelector('.copyable-text span') || el.querySelector('span[dir="ltr"]');
-  const content = (contentEl ? contentEl.innerText : el.innerText).trim();
-  const sender = el.classList.contains('message-out') ? 'me' : 'lead';
+  const isWA = platform === 'wa';
+  let content = "", sender = "lead";
+  
+  if (isWA) {
+    const contentEl = el.querySelector('.copyable-text span') || el.querySelector('span[dir="ltr"]');
+    content = (contentEl ? contentEl.innerText : el.innerText).trim();
+    sender = el.classList.contains('message-out') ? 'me' : 'lead';
+  } else {
+    content = el.innerText.split('\n')[0].trim();
+    sender = (el.querySelector('div[style*="align-items: flex-end"]') || el.innerText.includes("Você enviou")) ? 'me' : 'lead';
+  }
 
   if (!content || content === lastSyncedText) return;
   lastSyncedText = content;
@@ -181,20 +245,12 @@ async function syncSingle(el, platform) {
     });
     if (res.ok) {
        showIndicator();
-       // Update Unread Status if message is from lead
-       if (sender === 'lead') {
-         fetch(`${CONFIG.supabaseUrl}/rest/v1/leads?id=eq.${activeLead.id}`, {
-           method: "PATCH",
-           headers: { "Content-Type": "application/json", "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` },
-           body: JSON.stringify({ has_unread: true })
-         }).catch(e => console.log("Unread column might be missing"));
-       } else {
-         fetch(`${CONFIG.supabaseUrl}/rest/v1/leads?id=eq.${activeLead.id}`, {
-           method: "PATCH",
-           headers: { "Content-Type": "application/json", "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` },
-           body: JSON.stringify({ has_unread: false })
-         }).catch(e => console.log("Unread column might be missing"));
-       }
+       const isUnread = sender === 'lead';
+       fetch(`${CONFIG.supabaseUrl}/rest/v1/leads?id=eq.${activeLead.id}`, {
+         method: "PATCH",
+         headers: { "Content-Type": "application/json", "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` },
+         body: JSON.stringify({ has_unread: isUnread })
+       }).catch(() => {});
     }
   } catch (err) { console.error(err); }
 }
@@ -216,6 +272,12 @@ function startResponsePolling() {
               headers: { "Content-Type": "application/json", "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` },
               body: JSON.stringify({ status: 'sent' })
             });
+            // Also reset has_unread when sending
+            fetch(`${CONFIG.supabaseUrl}/rest/v1/leads?id=eq.${activeLead.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json", "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` },
+              body: JSON.stringify({ has_unread: false })
+            }).catch(() => {});
           }
         }
       }
@@ -238,10 +300,8 @@ async function injectAndSendWhatsApp(text) {
       const sendBtn = footer.querySelector('span[data-testid="send"]') || footer.querySelector('button');
       if (sendBtn) {
         sendBtn.click();
-        console.log("CRM: Message injected and sent!");
         resolve(true);
       } else {
-        // Try pressing Enter as fallback
         const enterEv = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true });
         input.dispatchEvent(enterEv);
         resolve(true);
