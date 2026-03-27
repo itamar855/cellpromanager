@@ -1,5 +1,5 @@
-// CellManager CRM Extension (v2.7) - "The Intelligent Auto-Switch Master"
-console.log("%c CRM: Extension v2.7 Loaded ", "background: #25d366; color: white; font-weight: bold;");
+// CellManager CRM Extension (v2.9) - "The Safe & Intelligent Messenger"
+console.log("%c CRM: Extension v2.9 Safe-Mode Loaded ", "background: #25d366; color: white; font-weight: bold;");
 
 const CONFIG = {
   supabaseUrl: "https://hzrqtolfbwnmmeliazmh.supabase.co",
@@ -41,7 +41,7 @@ async function initSession() {
     console.log("CRM: Session restored for", activeLead.name);
   }
   startResponsePolling();
-  setInterval(findTarget, 3000);
+  setInterval(findTarget, 2000); // More frequent header check
 }
 
 function findTarget() {
@@ -50,13 +50,20 @@ function findTarget() {
 
   const waHeader = document.querySelector("#main header");
   if (waHeader) {
-    const currentName = (waHeader.querySelector('span[dir="auto"]') || waHeader.querySelector('span'))?.innerText.trim();
+    const currentName = (waHeader.querySelector('span[title]') || waHeader.querySelector('span[dir="auto"]') || waHeader.querySelector('span'))?.innerText.trim();
+    if (!currentName) return;
+
+    // v2.9: Always update activeLead name based on what's visible
     const cleanCurrent = sanitizeName(currentName);
-    const cleanStored = sanitizeName(activeLead.name);
+    if (activeLead.name && cleanCurrent !== sanitizeName(activeLead.name)) {
+        // User changed chat manually, we might need to find the new ID or wait for them to click "Enviar p/ CRM"
+        // But for now, we just know the name changed.
+    }
     
     if (!waHeader.querySelector(".crm-capture-btn")) injectButton(waHeader, "WhatsApp");
     
-    if (activeLead.id && (cleanCurrent === cleanStored || cleanCurrent.includes(cleanStored) || cleanStored.includes(cleanCurrent))) {
+    // Automatically setup sync if we have a match
+    if (activeLead.id && (cleanCurrent === sanitizeName(activeLead.name) || cleanCurrent.includes(sanitizeName(activeLead.name)))) {
       setupAutoSyncWhatsApp();
     }
   }
@@ -73,7 +80,7 @@ function injectButton(parent, platform) {
 }
 
 async function captureLeadWhatsApp(header) {
-  const rawName = (header.querySelector('span[dir="auto"]') || header.querySelector('span'))?.innerText.trim() || "Lead WhatsApp";
+  const rawName = (header.querySelector('span[title]') || header.querySelector('span[dir="auto"]') || header.querySelector('span'))?.innerText.trim() || "Lead WhatsApp";
   const name = sanitizeName(rawName);
   
   let phone = "";
@@ -204,16 +211,25 @@ function startResponsePolling() {
       const pending = await res.json();
       if (Array.isArray(pending) && pending.length > 0) {
         for (const msg of pending) {
-          // Check if this lead is the one currently open on screen
-          const isCurrentlyOpen = await checkIfLeadIsOpen(msg.lead_id);
+          // v2.9: Fetch Target Name from DB to ensure no misdelivery
+          const leadRes = await fetch(`${CONFIG.supabaseUrl}/rest/v1/leads?id=eq.${msg.lead_id}&select=name`, {
+            headers: { "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` }
+          });
+          const leadData = await leadRes.json();
+          const targetName = leadData[0]?.name;
+          
+          if (!targetName) continue;
+
+          // Check if this lead is EXACTLY the one open right now
+          const isCurrentlyOpen = await checkIfLeadIsOpenStrict(msg.lead_id, targetName);
           if (isCurrentlyOpen) {
             if (await injectAndSendWhatsApp(msg.content)) {
               await markAsSent(msg.id);
               await updateLeadStatus(msg.lead_id, { has_unread: false });
             }
           } else {
-            console.log("CRM: Lead pending but not open, attempting auto-switch...");
-            await attemptChatSwitch(msg.lead_id);
+            console.log(`CRM: Message for ${targetName} blocked. Switch to their chat to send.`);
+            await attemptChatSwitch(msg.lead_id, targetName);
           }
         }
       }
@@ -221,13 +237,16 @@ function startResponsePolling() {
   }, 4000);
 }
 
-async function checkIfLeadIsOpen(targetLeadId) {
-  if (activeLead.id === targetLeadId) {
-     const waHeader = document.querySelector("#main header");
-     const currentName = (waHeader.querySelector('span[dir="auto"]') || waHeader.querySelector('span'))?.innerText.trim();
-     return sanitizeName(currentName) === sanitizeName(activeLead.name);
-  }
-  return false;
+// v2.9 Strict Check: ID match AND Name match in Header
+async function checkIfLeadIsOpenStrict(targetLeadId, targetName) {
+  const waHeader = document.querySelector("#main header");
+  if (!waHeader) return false;
+
+  const currentName = (waHeader.querySelector('span[title]') || waHeader.querySelector('span[dir="auto"]') || waHeader.querySelector('span'))?.innerText.trim();
+  const cleanCurrent = sanitizeName(currentName);
+  const cleanTarget = sanitizeName(targetName);
+
+  return cleanCurrent === cleanTarget || cleanCurrent.includes(cleanTarget);
 }
 
 async function markAsSent(id) {
@@ -238,17 +257,7 @@ async function markAsSent(id) {
   });
 }
 
-// v2.7 New: Switch chat automatically if sidebar contains the lead
-async function attemptChatSwitch(leadId) {
-  // First, find the lead name from the DB to know what to look for
-  const res = await fetch(`${CONFIG.supabaseUrl}/rest/v1/leads?id=eq.${leadId}&select=name`, {
-    headers: { "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` }
-  });
-  const data = await res.json();
-  const leadName = data[0]?.name;
-  if (!leadName) return;
-
-  // Try to find in sidebar
+async function attemptChatSwitch(leadId, leadName) {
   const sidebar = document.querySelector('#pane-side');
   const chatRow = sidebar?.querySelector(`span[title="${leadName}"], span[title*="${leadName}"]`);
   if (chatRow) {
@@ -258,7 +267,8 @@ async function attemptChatSwitch(leadId) {
     activeLead.name = leadName;
     chrome.storage.local.set({ activeLeadId: leadId, activeLeadName: leadName });
   } else {
-    console.log("CRM: Lead not visible in sidebar, please click it manually.");
+    // If not in sidebar, we can't switch automatically without searching (too complex for now)
+    console.log(`CRM: Chat with ${leadName} not visible. Please click it.`);
   }
 }
 
