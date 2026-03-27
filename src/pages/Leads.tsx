@@ -109,16 +109,25 @@ const Leads = () => {
   const sendResponse = () => {
     if (!selectedLead) return;
     
-    // Logic to bridge with extension will go here
-    // For now, let's open a wa.me link as fallback
     const phone = selectedLead.phone?.replace(/\D/g, "");
-    if (phone) {
-      window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(responseText)}`, "_blank");
-      toast.success("Mensagem enviada (via WhatsApp Web)");
+    const message = encodeURIComponent(responseText);
+
+    if (selectedLead.source === 'whatsapp') {
+      if (phone) {
+        window.open(`https://wa.me/55${phone}?text=${message}`, "_blank");
+        toast.success("Abrindo WhatsApp Web...");
+        updateStatus(selectedLead.id, 'atendimento');
+      } else {
+        toast.error("Este lead não possui telefone cadastrado.");
+      }
+    } else if (selectedLead.source === 'instagram') {
+      // Instagram doesn't have a direct "wa.me" equivalent for DM with text easily,
+      // but we can open the profile or a general DM link.
+      toast.info("Para Instagram, responda diretamente pelo App ou Web. Capture o lead para registro.");
+      window.open(`https://www.instagram.com/direct/inbox/`, "_blank");
       updateStatus(selectedLead.id, 'atendimento');
-    } else {
-      toast.error("Lead sem telefone cadastrado");
     }
+    
     setResponseModalOpen(false);
   };
 
@@ -163,6 +172,25 @@ const Leads = () => {
           </DialogContent>
         </Dialog>
       </div>
+
+      {leads.length === 0 && (
+        <Card className="bg-primary/5 border-dashed border-primary/30">
+          <CardContent className="p-6 text-center space-y-3">
+            <div className="bg-primary/10 w-12 h-12 rounded-full flex items-center justify-center mx-auto">
+              <Plus className="h-6 w-6 text-primary" />
+            </div>
+            <h3 className="font-bold text-lg">Seu funil está vazio</h3>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto">
+              Use a nossa <strong>Extensão do Chrome</strong> no WhatsApp Web ou Instagram para capturar leads com um clique, ou clique em "Novo Lead" para adicionar manualmente.
+            </p>
+            <div className="flex justify-center gap-4 pt-2">
+              <div className="text-xs flex items-center gap-1.5"><Badge variant="outline" className="h-5">1</Badge> Capture no WhatsApp</div>
+              <div className="text-xs flex items-center gap-1.5"><Badge variant="outline" className="h-5">2</Badge> Gerencie no Kanban</div>
+              <div className="text-xs flex items-center gap-1.5"><Badge variant="outline" className="h-5">3</Badge> Responda e Venda!</div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Kanban Board */}
       <div className="flex gap-4 overflow-x-auto pb-4 items-start flex-1 min-h-[500px] scrollbar-thin">

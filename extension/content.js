@@ -7,23 +7,45 @@ function addCaptureButton() {
 
   if (isWhatsApp) {
     // WhatsApp logic
-    const header = document.querySelector("#main header");
+    const header = document.querySelector("#main header") || document.querySelector('header[role="toolbar"]').parentElement;
     if (header && !header.querySelector(".crm-capture-btn")) {
       const btn = document.createElement("button");
       btn.className = "crm-capture-btn";
       btn.innerText = "Enviar p/ CRM";
-      btn.onclick = () => captureLeadWhatsApp(header);
+      btn.style.zIndex = "9999";
+      btn.onclick = (e) => { e.stopPropagation(); captureLeadWhatsApp(header); };
       header.appendChild(btn);
     }
   } else if (isInstagram) {
-    // Instagram logic
-    const directHeader = document.querySelector('header[role="banner"]') || document.querySelector('div[role="main"] header');
-    if (directHeader && !directHeader.querySelector(".crm-capture-btn")) {
+    // Instagram logic - look for any header in the DM area
+    const directHeader = document.querySelector('div[role="main"] header') || 
+                       document.querySelector('div[style*="height: 75px"]') || 
+                       document.querySelector('div._aa61') ||
+                       document.querySelector('div[role="presentation"] header'); // Added common modal header
+    
+    // Find based on icons in the header (Expand, Info, etc)
+    const iconsInHeader = document.querySelector('svg[aria-label="Expandir"]') || 
+                         document.querySelector('svg[aria-label="Informações"]') ||
+                         document.querySelector('svg[aria-label="Conversation Information"]');
+    
+    const target = iconsInHeader ? iconsInHeader.closest('div').parentElement : directHeader;
+
+    if (target && !target.querySelector(".crm-capture-btn")) {
       const btn = document.createElement("button");
       btn.className = "crm-capture-btn crm-capture-btn-instagram";
-      btn.innerText = "Enviar p/ CRM";
-      btn.onclick = () => captureLeadInstagram(directHeader);
-      directHeader.appendChild(btn);
+      btn.innerText = "CRM";
+      btn.style.marginRight = "10px";
+      btn.style.padding = "2px 8px";
+      btn.style.height = "24px";
+      btn.style.zIndex = "9999";
+      btn.onclick = (e) => { e.stopPropagation(); captureLeadInstagram(target); };
+      
+      // Inject next to the icons or at the start
+      if (iconsInHeader) {
+        iconsInHeader.closest('div').prepend(btn);
+      } else {
+        target.prepend(btn);
+      }
     }
   }
 }
