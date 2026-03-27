@@ -15,9 +15,9 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { 
-  Users, Plus, MessageCircle, Phone, Mail, Search, 
-  Trash2, MoreVertical, MessageSquare, ChevronRight
+  Trash2, MoreVertical, MessageSquare, ChevronRight, Download
 } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 // Placeholder for Instagram if not in lucide-react
 const Instagram = ({ className }: { className?: string }) => (
   <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>
@@ -48,6 +48,8 @@ const Leads = () => {
     name: "", phone: "", email: "", source: "whatsapp", status: "novo" as LeadStatus, notes: "", store_id: ""
   });
   const [stores, setStores] = useState<any[]>([]);
+  const [chatModalOpen, setChatModalOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
 
   const fetchData = async () => {
     const { data: leadsData } = await supabase.from("leads").select("*").order("created_at", { ascending: false });
@@ -56,21 +58,32 @@ const Leads = () => {
     setStores(storesData ?? []);
   };
 
+  const fetchMessages = async (leadId: string) => {
+    const { data } = await supabase
+      .from("lead_messages")
+      .select("*")
+      .eq("lead_id", leadId)
+      .order("created_at", { ascending: true });
+    setChatMessages(data ?? []);
+  };
+
   useEffect(() => {
     fetchData();
 
-    // Configurar Realtime para atualizações automáticas
-    const channel = supabase
-      .channel('leads-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => {
-        fetchData();
+    const leadsChannel = supabase
+      .channel('leads-all')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchData())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lead_messages' }, (payload) => {
+        if (selectedLead && payload.new.lead_id === selectedLead.id) {
+          fetchMessages(selectedLead.id);
+        }
       })
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(leadsChannel);
     };
-  }, []);
+  }, [selectedLead]);
 
   const handleCreateLead = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,7 +165,16 @@ const Leads = () => {
           <h1 className="font-display text-xl md:text-3xl font-bold tracking-tight">CRM de Leads</h1>
           <p className="text-muted-foreground text-sm mt-0.5">{leads.length} leads no funil</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="gap-2 h-10 border-primary/20 hover:bg-primary/5"
+            onClick={() => window.open(`https://github.com/itamar855/cellpromanager/archive/refs/heads/main.zip`, '_blank')}
+          >
+            <Download className="h-4 w-4" /> Instalar Extensão
+          </Button>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2 h-10"><Plus className="h-4 w-4" /> Novo Lead</Button>
           </DialogTrigger>
@@ -245,14 +267,29 @@ const Leads = () => {
                     {lead.notes && <p className="text-[10px] text-muted-foreground line-clamp-2 italic">"{lead.notes}"</p>}
                     
                     <div className="flex items-center justify-between pt-2 border-t border-border/40">
+                      <div className="flex gap-1">
+                        <Button 
+                          size="icon" 
+                          variant="ghost"
+                          className="h-7 w-7 rounded-full hover:bg-primary/10 hover:text-primary transition-colors"
+                          onClick={() => {
+                            setSelectedLead(lead);
+                            setChatModalOpen(true);
+                            fetchMessages(lead.id);
+                          }}
+                        >
+                          <MessageSquare className="h-3 w-3" />
+                        </Button>
+                        <Button 
+                          size="icon" 
+                          variant="ghost"
+                          className="h-7 w-7 rounded-full hover:bg-primary/10 hover:text-primary transition-colors"
+                          onClick={() => handleResponse(lead)}
+                        >
+                          <ChevronRight className="h-3 w-3" />
+                        </Button>
+                      </div>
                       <span className="text-[9px] text-muted-foreground">{new Date(lead.created_at).toLocaleDateString("pt-BR")}</span>
-                      <Button 
-                        size="icon" 
-                        className="h-7 w-7 bg-primary text-white rounded-full shadow-lg shadow-primary/20 hover:scale-110 transition-transform"
-                        onClick={() => handleResponse(lead)}
-                      >
-                        <MessageSquare className="h-3 w-3" />
-                      </Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -295,6 +332,52 @@ const Leads = () => {
               </p>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Chat History Modal */}
+      <Dialog open={chatModalOpen} onOpenChange={setChatModalOpen}>
+        <DialogContent className="max-w-md h-[600px] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-4 border-b bg-muted/30">
+            <DialogTitle className="flex items-center gap-2">
+              {selectedLead?.source === 'whatsapp' ? <MessageCircle className="h-5 w-5 text-green-500" /> : <Instagram className="h-5 w-5 text-pink-500" />}
+              Conversa com {selectedLead?.name}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <ScrollArea className="flex-1 p-4 bg-muted/10">
+            <div className="space-y-3">
+              {chatMessages.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground text-sm">
+                  Nenhuma mensagem capturada ainda. <br/> Use o botão "Enviar p/ CRM" na extensão para sincronizar.
+                </div>
+              ) : (
+                chatMessages.map(msg => (
+                  <div key={msg.id} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+                      msg.sender === 'me' 
+                      ? 'bg-primary text-white rounded-tr-none' 
+                      : 'bg-white border rounded-tl-none shadow-sm'
+                    }`}>
+                      {msg.content}
+                      <div className={`text-[9px] mt-1 opacity-70 ${msg.sender === 'me' ? 'text-right' : ''}`}>
+                        {new Date(msg.created_at).toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </ScrollArea>
+
+          <div className="p-4 border-t bg-muted/30 flex gap-2">
+            <Button className="flex-1 h-10 gap-2 font-bold" onClick={() => {
+              setChatModalOpen(false);
+              handleResponse(selectedLead);
+            }}>
+              Responder agora
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
