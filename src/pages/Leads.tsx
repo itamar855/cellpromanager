@@ -163,8 +163,7 @@ const Leads = () => {
       }
 
       // 2. Queue the message for the extension
-      const { error: queueError } = await supabase
-        .from("lead_responses")
+      const { error: queueError } = await (supabase.from("lead_responses") as any)
         .insert({
           lead_id: selectedLead.id,
           content: responseText,
@@ -296,7 +295,7 @@ const Leads = () => {
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-2">
                         <p className="font-bold text-sm leading-tight group-hover:text-primary transition-colors">{lead.name}</p>
-                        {lead.has_unread && (
+                        {(lead as any).has_unread && (
                           <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
                         )}
                       </div>
