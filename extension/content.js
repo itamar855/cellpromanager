@@ -44,28 +44,32 @@ function findTarget() {
       injectButton(waHeader, "WhatsApp");
     }
   } else if (isInstagram) {
-    // Broad search for Instagram DM header - ultra aggressive
-    const possibleHeaders = [
-      document.querySelector('div[role="main"] header'),
-      document.querySelector('div[role="presentation"] header'),
-      document.querySelector('header[role="banner"]'),
-      document.querySelector('div._aa61'),
-      document.querySelector('div[style*="height: 75px"]'),
-      document.querySelector('.x1qjc9v5.x972fbf.xcf7096.x1qhh985'), // Common IG classes for DM header
-      document.querySelector('div[role="dialog"] header'),
-      // Find based on icons
-      document.querySelector('svg[aria-label="Expandir"]')?.closest('div')?.parentElement,
-      document.querySelector('svg[aria-label="Informações"]')?.closest('div')?.parentElement,
-      document.querySelector('svg[aria-label="Direct"]')?.closest('div')?.parentElement,
-      // Search for any div that has a back button or name link
-      document.querySelector('a[href*="/direct/"]')?.parentElement?.parentElement
+    // Ultra-aggressive Instagram DM header detection
+    const headers = [
+      ...document.querySelectorAll('div[role="main"] header'),
+      ...document.querySelectorAll('div[role="presentation"] header'),
+      ...document.querySelectorAll('.x1qjc9v5.x972fbf'), // Generic IG classes
+      ...document.querySelectorAll('div[style*="height: 75px"]'),
+      ...document.querySelectorAll('div[role="dialog"] header')
     ];
 
-    for (const h of possibleHeaders) {
-      if (h && h.offsetHeight > 30 && h.offsetHeight < 150 && !h.querySelector(".crm-capture-btn")) {
-        console.log("IG Header Detected!");
-        injectButton(h, "Instagram");
-        break;
+    // Additional check: Find elements with specific aria-labels and get their container
+    const icons = document.querySelectorAll('svg[aria-label="Informações"], svg[aria-label="Expandir"], svg[aria-label="Back"]');
+    icons.forEach(icon => {
+      const container = icon.closest('div')?.parentElement;
+      if (container && container.offsetHeight < 150) headers.push(container);
+    });
+
+    for (const h of headers) {
+      if (h && h.offsetHeight > 30 && h.offsetHeight < 120 && !h.querySelector(".crm-capture-btn")) {
+        // Verification: Does it have a name (span)?
+        const hasText = h.querySelector('span') || h.querySelector('a');
+        if (hasText) {
+          console.log("IG Potential Header Detected:", h);
+          injectButton(h, "Instagram");
+          // If we found one solid header, we stop
+          if (h.closest('div[role="main"]')) break;
+        }
       }
     }
   }
