@@ -1,17 +1,10 @@
-// CellManager CRM Extension (v1.8) - "The Configurable Messenger"
-console.log("CellManager CRM Extension Activity");
+// CellManager CRM Extension (v1.9) - "The Intelligent Real-Time Messenger"
+console.log("CellManager CRM Extension Activity - Upsert & Sync Logic Improved");
 
-let CONFIG = {
+const CONFIG = {
   supabaseUrl: "https://hzrqtolfbwnmmeliazmh.supabase.co",
   supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6cnF0b2xmYndubW1lbGlhem1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMTI1MDEsImV4cCI6MjA4OTc4ODUwMX0.wQyORyhVI5FaUapc3uwsOV48VUQgvdj2_y0FXjYchAo"
 };
-
-// Load user-defined config if exists
-chrome.storage.sync.get(["supabaseUrl", "supabaseKey"], (data) => {
-  if (data.supabaseUrl) CONFIG.supabaseUrl = data.supabaseUrl;
-  if (data.supabaseKey) CONFIG.supabaseKey = data.supabaseKey;
-  console.log("Config loaded from storage");
-});
 
 let activeLead = { id: null, name: "" };
 let lastSyncedText = "";
@@ -41,24 +34,23 @@ style.textContent = `
   .crm-capture-btn:hover { transform: scale(1.05); filter: brightness(1.1); }
   .crm-capture-btn-instagram { background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888) !important; }
   .crm-sync-indicator {
-    position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.7);
-    color: #25d366; padding: 5px 10px; border-radius: 5px; font-size: 10px;
-    z-index: 10000; display: none;
+    position: fixed; top: 10px; right: 80px; background: rgba(37, 211, 102, 0.9);
+    color: white; padding: 4px 12px; border-radius: 20px; font-size: 10px; font-weight: bold;
+    z-index: 10000; display: none; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
   }
 `;
 document.head.appendChild(style);
 
 const syncIndicator = document.createElement('div');
 syncIndicator.className = 'crm-sync-indicator';
-syncIndicator.innerText = 'Sincronizando...';
+syncIndicator.innerText = '✓ Sincronizado';
 document.body.appendChild(syncIndicator);
 
 function showIndicator() {
   syncIndicator.style.display = 'block';
-  setTimeout(() => syncIndicator.style.display = 'none', 2000);
+  setTimeout(() => syncIndicator.style.display = 'none', 1500);
 }
 
-// Persist Lead ID across reloads
 async function initSession() {
   const stored = await chrome.storage.local.get(['activeLeadId', 'activeLeadName']);
   if (stored.activeLeadId) {
@@ -79,12 +71,10 @@ function findTarget() {
       const currentName = (waHeader.querySelector('span[dir="auto"]') || waHeader.querySelector('span'))?.innerText.trim();
       if (!waHeader.querySelector(".crm-capture-btn")) injectButton(waHeader, "WhatsApp");
       
-      // If the header matches our stored lead, start auto-sync
-      if (activeLead.id && activeLead.name === currentName) {
+      if (activeLead.id && (activeLead.name === currentName || currentName?.includes(activeLead.name))) {
         setupAutoSyncWhatsApp();
-      } else {
-        // Different chat, stop sync until manual click
-        if (autoSyncObserver) autoSyncObserver.disconnect();
+      } else if (autoSyncObserver) {
+        autoSyncObserver.disconnect();
       }
     }
   } else if (isInstagram) {
@@ -126,7 +116,16 @@ function injectButton(parent, platform) {
 
 async function captureLeadWhatsApp(header) {
   const name = (header.querySelector('span[dir="auto"]') || header.querySelector('span'))?.innerText.trim() || "Lead WhatsApp";
-  const phone = name.replace(/\D/g, "").length >= 8 ? name : "";
+  
+  // Better phone extraction: check the "about" or subtext if it contains digits
+  let phone = name.replace(/\D/g, "");
+  if (phone.length < 8) {
+    const subtext = header.querySelector('.vW7d1')?.innerText || "";
+    const subPhone = subtext.replace(/\D/g, "");
+    if (subPhone.length >= 8) phone = subPhone;
+    else phone = "";
+  } else { phone = name; }
+
   const messages = extractMessagesWhatsApp();
   await sendToERP({ name, phone, source: "whatsapp", notes: "Sincronizado via WhatsApp Web" }, messages);
   setupAutoSyncWhatsApp();
@@ -160,50 +159,77 @@ function extractMessagesInstagram() {
 
 async function sendToERP(leadData, messages = []) {
   try {
-    const res = await fetch(`${CONFIG.supabaseUrl}/rest/v1/leads`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}`, "Prefer": "return=representation" },
-      body: JSON.stringify(leadData)
-    });
+    const baseUrl = CONFIG.supabaseUrl;
+    const apiKey = CONFIG.supabaseKey;
+    const headers = { "Content-Type": "application/json", "apikey": apiKey, "Authorization": `Bearer ${apiKey}` };
 
-    if (!res.ok) throw new Error("Falha ao salvar lead");
-    const [saved] = await res.json();
+    // 1. Check if lead already exists to avoid duplicates
+    let queryUrl = `${baseUrl}/rest/v1/leads?name=eq.${encodeURIComponent(leadData.name)}&select=id`;
+    if (leadData.phone) queryUrl += `&or=(phone.eq.${encodeURIComponent(leadData.phone)})`;
     
-    activeLead.id = saved.id;
+    const checkRes = await fetch(queryUrl, { headers });
+    const existingLeads = await checkRes.json();
+    
+    let savedLead;
+    if (existingLeads && existingLeads.length > 0) {
+      // Update existing
+      const updateRes = await fetch(`${baseUrl}/rest/v1/leads?id=eq.${existingLeads[0].id}`, {
+        method: "PATCH",
+        headers: { ...headers, "Prefer": "return=representation" },
+        body: JSON.stringify(leadData)
+      });
+      [savedLead] = await updateRes.json();
+      console.log("Updated existing lead:", savedLead.id);
+    } else {
+      // Create new
+      const createRes = await fetch(`${baseUrl}/rest/v1/leads`, {
+        method: "POST",
+        headers: { ...headers, "Prefer": "return=representation" },
+        body: JSON.stringify(leadData)
+      });
+      if (!createRes.ok) throw new Error("Erro ao criar lead");
+      [savedLead] = await createRes.json();
+      console.log("Created new lead:", savedLead.id);
+    }
+
+    activeLead.id = savedLead.id;
     activeLead.name = leadData.name;
-    
-    // Persist to storage
-    chrome.storage.local.set({ activeLeadId: saved.id, activeLeadName: leadData.name });
+    chrome.storage.local.set({ activeLeadId: savedLead.id, activeLeadName: leadData.name });
 
     if (messages.length > 0) {
+      // Deduplicate messages by content temporarily (basic)
       lastSyncedText = messages[messages.length - 1].content;
-      await fetch(`${CONFIG.supabaseUrl}/rest/v1/lead_messages`, {
+      await fetch(`${baseUrl}/rest/v1/lead_messages`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` },
-        body: JSON.stringify(messages.map(m => ({ ...m, lead_id: saved.id })))
+        headers,
+        body: JSON.stringify(messages.map(m => ({ ...m, lead_id: savedLead.id })))
       });
     }
-    alert(`✅ Sincronizado: ${leadData.name}`);
-  } catch (err) { alert("❌ Erro: " + err.message); }
+    alert(`✅ Sincronizado com CRM: ${leadData.name}`);
+  } catch (err) { alert("❌ Erro CRM: " + err.message); }
 }
 
 function setupAutoSyncWhatsApp() {
   if (autoSyncObserver) autoSyncObserver.disconnect();
-  const chat = document.querySelector('#main');
-  if (!chat) return;
+  const main = document.querySelector('#main');
+  if (!main) return;
 
   autoSyncObserver = new MutationObserver((mutations) => {
-    mutations.forEach(m => {
-      m.addedNodes.forEach(node => {
+    if (!activeLead.id) return;
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
         if (node.nodeType === 1) {
           if (node.classList.contains('message-in') || node.classList.contains('message-out')) syncSingle(node, 'wa');
-          else node.querySelectorAll('.message-in, .message-out').forEach(el => syncSingle(el, 'wa'));
+          else {
+            const inner = node.querySelectorAll('.message-in, .message-out');
+            inner.forEach(el => syncSingle(el, 'wa'));
+          }
         }
-      });
-    });
+      }
+    }
   });
-  autoSyncObserver.observe(chat, { childList: true, subtree: true });
-  console.log("WA Auto-Sync ON for", activeLead.name);
+
+  autoSyncObserver.observe(main, { childList: true, subtree: true });
 }
 
 function setupAutoSyncInstagram() {
@@ -211,24 +237,27 @@ function setupAutoSyncInstagram() {
   const chat = document.querySelector('div[role="main"]') || document.body;
   
   autoSyncObserver = new MutationObserver((mutations) => {
-    mutations.forEach(m => {
-      m.addedNodes.forEach(node => {
-        if (node.nodeType === 1 && (node.getAttribute('role') === 'row' || node.querySelector('div[role="row"]'))) {
+    if (!activeLead.id) return;
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType === 1) {
           const row = node.getAttribute('role') === 'row' ? node : node.querySelector('div[role="row"]');
-          syncSingle(row, 'ig');
+          if (row) syncSingle(row, 'ig');
         }
-      });
-    });
+      }
+    }
   });
   autoSyncObserver.observe(chat, { childList: true, subtree: true });
 }
 
 async function syncSingle(el, platform) {
   if (!activeLead.id) return;
+  console.log("Checking message for auto-sync...");
+  
   let content = "", sender = "lead";
-
   if (platform === 'wa') {
-    content = (el.querySelector('.copyable-text span')?.innerText || el.innerText).trim();
+    const contentEl = el.querySelector('.copyable-text span');
+    content = (contentEl ? contentEl.innerText : el.innerText).trim();
     sender = el.classList.contains('message-out') ? 'me' : 'lead';
   } else {
     content = el.innerText.split('\n')[0].trim();
@@ -238,15 +267,16 @@ async function syncSingle(el, platform) {
   if (!content || content === lastSyncedText) return;
   lastSyncedText = content;
   
-  showIndicator();
-  console.log("Auto-Syncing:", content);
-
   try {
-    await fetch(`${CONFIG.supabaseUrl}/rest/v1/lead_messages`, {
+    const res = await fetch(`${CONFIG.supabaseUrl}/rest/v1/lead_messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "apikey": CONFIG.supabaseKey, "Authorization": `Bearer ${CONFIG.supabaseKey}` },
       body: JSON.stringify({ lead_id: activeLead.id, content, sender, created_at: new Date().toISOString() })
     });
+    if (res.ok) {
+      console.log("Auto-sync success:", content);
+      showIndicator();
+    }
   } catch (err) { console.error("Sync Error:", err); }
 }
 

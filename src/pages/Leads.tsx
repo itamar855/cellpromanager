@@ -142,24 +142,35 @@ const Leads = () => {
     setResponseText(`Olá ${lead.name.split(' ')[0]}! Vi que você se interessou pela nossa loja...`);
   };
 
-  const sendResponse = () => {
+  const sendResponse = async () => {
     if (!selectedLead) return;
     
-    const phone = selectedLead.phone?.replace(/\D/g, "");
+    // If phone was empty, we might have updated it in the local state or need to save it
+    if (!selectedLead.phone && form.phone) {
+      const { data: updatedLead } = await supabase
+        .from("leads")
+        .update({ phone: form.phone })
+        .eq("id", selectedLead.id)
+        .select()
+        .single();
+      if (updatedLead) setSelectedLead(updatedLead);
+    }
+
+    const rawPhone = (selectedLead.phone || form.phone)?.replace(/\D/g, "");
+    if (!rawPhone) {
+      toast.error("Este lead não possui telefone cadastrado.");
+      return;
+    }
+
+    const phone = rawPhone.startsWith("55") ? rawPhone : `55${rawPhone}`;
     const message = encodeURIComponent(responseText);
 
     if (selectedLead.source === 'whatsapp') {
-      if (phone) {
-        window.open(`https://wa.me/55${phone}?text=${message}`, "_blank");
-        toast.success("Abrindo WhatsApp Web...");
-        updateStatus(selectedLead.id, 'atendimento');
-      } else {
-        toast.error("Este lead não possui telefone cadastrado.");
-      }
+      window.open(`https://wa.me/${phone}?text=${message}`, "_blank");
+      toast.success("Abrindo WhatsApp Web...");
+      updateStatus(selectedLead.id, 'atendimento');
     } else if (selectedLead.source === 'instagram') {
-      // Instagram doesn't have a direct "wa.me" equivalent for DM with text easily,
-      // but we can open the profile or a general DM link.
-      toast.info("Para Instagram, responda diretamente pelo App ou Web. Capture o lead para registro.");
+      toast.info("Para Instagram, responda diretamente pelo App ou Web.");
       window.open(`https://www.instagram.com/direct/inbox/`, "_blank");
       updateStatus(selectedLead.id, 'atendimento');
     }
@@ -319,8 +330,20 @@ const Leads = () => {
             <div className="space-y-4">
               <div className="rounded-lg bg-primary/5 border border-primary/20 p-3">
                 <p className="text-sm font-semibold">{selectedLead.name}</p>
-                <div className="flex gap-3 mt-1">
-                  <span className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3" /> {selectedLead.phone}</span>
+                <div className="flex flex-col gap-2 mt-2">
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-3 w-3 text-muted-foreground" />
+                    {selectedLead.phone ? (
+                      <span className="text-xs">{selectedLead.phone}</span>
+                    ) : (
+                      <Input 
+                        placeholder="Digite o WhatsApp (com DDD)" 
+                        className="h-8 text-xs" 
+                        value={form.phone}
+                        onChange={e => setForm({...form, phone: e.target.value})}
+                      />
+                    )}
+                  </div>
                   <span className="text-xs text-muted-foreground flex items-center gap-1 uppercase font-bold text-[9px]"><ChevronRight className="h-3 w-3" /> {selectedLead.source}</span>
                 </div>
               </div>
@@ -351,9 +374,14 @@ const Leads = () => {
       <Dialog open={chatModalOpen} onOpenChange={setChatModalOpen}>
         <DialogContent className="max-w-md h-[600px] flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-4 border-b bg-muted/30">
-            <DialogTitle className="flex items-center gap-2">
-              {selectedLead?.source === 'whatsapp' ? <MessageCircle className="h-5 w-5 text-green-500" /> : <Instagram className="h-5 w-5 text-pink-500" />}
-              Conversa com {selectedLead?.name}
+            <DialogTitle className="flex items-center justify-between w-full pr-6">
+              <div className="flex items-center gap-2">
+                {selectedLead?.source === 'whatsapp' ? <MessageCircle className="h-5 w-5 text-green-500" /> : <Instagram className="h-5 w-5 text-pink-500" />}
+                Conversa com {selectedLead?.name}
+              </div>
+              <Badge variant="outline" className="animate-pulse bg-green-500/10 text-green-500 border-green-500/20 text-[10px]">
+                LIVE SYNC
+              </Badge>
             </DialogTitle>
           </DialogHeader>
           
