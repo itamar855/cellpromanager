@@ -143,39 +143,50 @@ const Leads = () => {
   };
 
   const sendResponse = async () => {
-    if (!selectedLead) return;
+    if (!selectedLead || !responseText.trim()) return;
     
-    // If phone was empty, we might have updated it in the local state or need to save it
-    if (!selectedLead.phone && form.phone) {
-      const { data: updatedLead } = await supabase
-        .from("leads")
-        .update({ phone: form.phone })
-        .eq("id", selectedLead.id)
-        .select()
-        .single();
-      if (updatedLead) setSelectedLead(updatedLead);
-    }
+    setLoading(true);
+    try {
+      // 1. Update phone if it was missing and user provided it
+      let currentPhone = selectedLead.phone;
+      if (!currentPhone && form.phone) {
+        const { data: updatedLead } = await supabase
+          .from("leads")
+          .update({ phone: form.phone })
+          .eq("id", selectedLead.id)
+          .select()
+          .single();
+        if (updatedLead) {
+          currentPhone = updatedLead.phone;
+          setSelectedLead(updatedLead);
+        }
+      }
 
-    const rawPhone = (selectedLead.phone || form.phone)?.replace(/\D/g, "");
-    if (!rawPhone) {
-      toast.error("Este lead não possui telefone cadastrado.");
-      return;
-    }
+      // 2. Queue the message for the extension
+      const { error: queueError } = await supabase
+        .from("lead_responses")
+        .insert({
+          lead_id: selectedLead.id,
+          content: responseText,
+          status: 'pending'
+        });
 
-    const phone = rawPhone.startsWith("55") ? rawPhone : `55${rawPhone}`;
-    const message = encodeURIComponent(responseText);
+      if (queueError) throw queueError;
 
-    if (selectedLead.source === 'whatsapp') {
-      window.open(`https://wa.me/${phone}?text=${message}`, "_blank");
-      toast.success("Abrindo WhatsApp Web...");
-      updateStatus(selectedLead.id, 'atendimento');
-    } else if (selectedLead.source === 'instagram') {
-      toast.info("Para Instagram, responda diretamente pelo App ou Web.");
-      window.open(`https://www.instagram.com/direct/inbox/`, "_blank");
-      updateStatus(selectedLead.id, 'atendimento');
+      toast.success("Mensagem enviada para a fila! A extensão irá processar em instantes.");
+      
+      // 3. Mark as atendimento if it was novo
+      if (selectedLead.status === 'novo') {
+        await updateStatus(selectedLead.id, 'atendimento');
+      }
+
+      setResponseModalOpen(false);
+      setResponseText("");
+    } catch (err: any) {
+      toast.error("Erro ao enviar: " + err.message);
+    } finally {
+      setLoading(false);
     }
-    
-    setResponseModalOpen(false);
   };
 
   return (
@@ -283,7 +294,12 @@ const Leads = () => {
                 >
                   <CardContent className="p-3 space-y-2">
                     <div className="flex justify-between items-start">
-                      <p className="font-bold text-sm leading-tight group-hover:text-primary transition-colors">{lead.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-sm leading-tight group-hover:text-primary transition-colors">{lead.name}</p>
+                        {lead.has_unread && (
+                          <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+                        )}
+                      </div>
                       {lead.source === 'whatsapp' ? <MessageCircle className="h-3 w-3 text-green-500" /> : <Instagram className="h-3 w-3 text-pink-500" />}
                     </div>
                     {lead.phone && <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Phone className="h-2.5 w-2.5" /> {lead.phone}</div>}
@@ -394,10 +410,10 @@ const Leads = () => {
               ) : (
                 chatMessages.map(msg => (
                   <div key={msg.id} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+                    <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
                       msg.sender === 'me' 
-                      ? 'bg-primary text-white rounded-tr-none' 
-                      : 'bg-white border rounded-tl-none shadow-sm'
+                      ? 'bg-[#dcf8c6] text-slate-800 rounded-tr-none border border-[#c7eba6]' 
+                      : 'bg-white border text-slate-700 rounded-tl-none'
                     }`}>
                       {msg.content}
                       <div className={`text-[9px] mt-1 opacity-70 ${msg.sender === 'me' ? 'text-right' : ''}`}>
