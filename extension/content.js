@@ -48,27 +48,31 @@ function findTarget() {
     const headers = [
       ...document.querySelectorAll('div[role="main"] header'),
       ...document.querySelectorAll('div[role="presentation"] header'),
-      ...document.querySelectorAll('.x1qjc9v5.x972fbf'), // Generic IG classes
+      ...document.querySelectorAll('.x1qjc9v5.x972fbf'), 
       ...document.querySelectorAll('div[style*="height: 75px"]'),
-      ...document.querySelectorAll('div[role="dialog"] header')
+      ...document.querySelectorAll('div[role="dialog"] header'),
+      ...document.querySelectorAll('div[style*="flex-direction: column"] > div[style*="height: 60px"]')
     ];
 
-    // Additional check: Find elements with specific aria-labels and get their container
-    const icons = document.querySelectorAll('svg[aria-label="Informações"], svg[aria-label="Expandir"], svg[aria-label="Back"]');
-    icons.forEach(icon => {
-      const container = icon.closest('div')?.parentElement;
-      if (container && container.offsetHeight < 150) headers.push(container);
+    // Find by icons
+    document.querySelectorAll('svg[aria-label="Informações"], svg[aria-label="Expandir"], svg[aria-label="Back"], svg[aria-label="Video Call"]').forEach(icon => {
+      let current = icon.parentElement;
+      for (let i = 0; i < 5; i++) {
+        if (current && current.offsetHeight > 40 && current.offsetHeight < 150) {
+          headers.push(current);
+          break;
+        }
+        current = current?.parentElement;
+      }
     });
 
     for (const h of headers) {
-      if (h && h.offsetHeight > 30 && h.offsetHeight < 120 && !h.querySelector(".crm-capture-btn")) {
-        // Verification: Does it have a name (span)?
-        const hasText = h.querySelector('span') || h.querySelector('a');
+      if (h && h.offsetHeight > 30 && h.offsetHeight < 150 && !h.querySelector(".crm-capture-btn")) {
+        const hasText = h.innerText.length > 2;
         if (hasText) {
-          console.log("IG Potential Header Detected:", h);
+          console.log("IG Header Candidate Found");
           injectButton(h, "Instagram");
-          // If we found one solid header, we stop
-          if (h.closest('div[role="main"]')) break;
+          break;
         }
       }
     }
@@ -132,11 +136,17 @@ async function captureLeadInstagram(header) {
 async function sendToERP(leadData) {
   console.log("Sending Lead Data:", leadData);
   try {
+    if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.sync) {
+      alert("⚠️ Erro de Extensão: Por favor, atualize esta página (F5) para restaurar a conexão da extensão.");
+      return;
+    }
+
     const settings = await chrome.storage.sync.get(["supabaseUrl", "supabaseKey"]);
-    if (!settings.supabaseUrl || !settings.supabaseKey) {
+    if (!settings?.supabaseUrl || !settings?.supabaseKey) {
       alert("⚠️ ERRO: Configure a URL e Chave do Supabase na extensão primeiro!");
       return;
     }
+// ...
 
     const response = await fetch(`${settings.supabaseUrl.trim()}/rest/v1/leads`, {
       method: "POST",
