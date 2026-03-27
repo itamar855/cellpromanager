@@ -1,5 +1,5 @@
-// CellManager CRM Extension (v4.0) - "The Number Sniper"
-console.log("%c CRM: Extension v4.0 Sniper-Mode Loaded ", "background: #128C7E; color: white; font-weight: bold;");
+// CellManager CRM Extension (v4.1) - "The Precision Solver"
+console.log("%c CRM: Extension v4.1 Precision-Mode Loaded ", "background: #128C7E; color: white; font-weight: bold;");
 
 const CONFIG = {
   supabaseUrl: "https://hzrqtolfbwnmmeliazmh.supabase.co",
@@ -173,19 +173,21 @@ function startResponsePolling() {
              await updateLeadStatus(msg.lead_id, { has_unread: false });
            }
         } else {
-           console.log("CRM: Auto-Switching to target...");
-           await sniperSwitch(leadInfo);
+           console.log("CRM: Target chat NOT open. Commencing auto-switch search...");
+           await precisionSwitch(leadInfo);
         }
       }
     } catch (e) { console.error(e); }
-  }, 4000);
+  }, 4500);
 }
 
 async function checkIfLeadIsOpenStrict(id, name) {
   const header = document.querySelector("#main header");
   if (!header) return false;
   const current = (header.querySelector('span[title]') || header.querySelector('span[dir="auto"]'))?.innerText.trim();
-  return sanitizeName(current) === sanitizeName(name) || current?.includes(name);
+  const cleanCurrent = sanitizeName(current);
+  const cleanTarget = sanitizeName(name);
+  return cleanCurrent === cleanTarget || cleanCurrent.includes(cleanTarget);
 }
 
 async function markAsSent(id) {
@@ -195,35 +197,50 @@ async function markAsSent(id) {
   });
 }
 
-// v4.0 Sniper Switch: Uses phone number for precision searching
-async function sniperSwitch(lead) {
+// v4.1 Precision Switch: Explicitly targets the Search-Bar using data-tab="3"
+async function precisionSwitch(lead) {
   if (isSwitching) return;
   isSwitching = true;
   try {
     const searchKey = lead.phone || lead.name;
-    const searchBar = document.querySelector('div[contenteditable="true"][data-tab="3"]') || document.querySelector('div.lexical-rich-text-input div[contenteditable="true"]');
-    if (!searchBar) { isSwitching = false; return; }
+    // VERY SPECIFIC SELECTOR for Search input
+    const searchBar = document.querySelector('div[contenteditable="true"][data-tab="3"]');
+    
+    if (!searchBar) { 
+        console.log("CRM: Search bar not found (data-tab=3)");
+        isSwitching = false; return; 
+    }
     
     searchBar.focus();
+    // Simulate user typing to be safe
     document.execCommand('selectAll', false, null);
     document.execCommand('delete', false, null);
+    
+    // Inject key-by-key if possible or just as one block
     document.execCommand('insertText', false, searchKey);
     searchBar.dispatchEvent(new Event('input', { bubbles: true }));
 
-    await new Promise(r => setTimeout(r, 2500));
+    await new Promise(r => setTimeout(r, 2000));
     
-    // Look for the exact phone number in side results if possible
     const sidebar = document.querySelector('#pane-side');
-    const row = sidebar?.querySelector(`span[title*="${searchKey}"], span[title*="${lead.name}"]`);
+    // Try to find the exact match in titles
+    const rows = Array.from(sidebar?.querySelectorAll('span[title]') || []);
+    const match = rows.find(r => sanitizeName(r.title).includes(sanitizeName(searchKey)) || sanitizeName(r.title).includes(sanitizeName(lead.name)));
     
-    if (row) {
-      row.closest('div[role="row"]')?.click();
-      console.log("CRM: Sniper matched and clicked!");
+    if (match) {
+      match.closest('div[role="row"]')?.click();
+      console.log("CRM: Matched and clicked contact:", lead.name);
       activeLead = { id: lead.id, name: lead.name };
       chrome.storage.local.set({ activeLeadId: lead.id, activeLeadName: lead.name });
-      // Clear search
+      
+      // WAIT for #main to change before doing anything else
+      await new Promise(r => setTimeout(r, 1000));
+      
+      // Clear search so it doesn't stay there
       const clearBtn = document.querySelector('span[data-icon="x-alt"]');
       if (clearBtn) clearBtn.click();
+    } else {
+      console.log("CRM: No match found for", searchKey);
     }
   } catch (e) { console.error(e); }
   isSwitching = false;
@@ -231,19 +248,26 @@ async function sniperSwitch(lead) {
 
 async function injectAndSendWhatsApp(text) {
   const footer = document.querySelector('#main footer');
-  const input = footer?.querySelector('div[contenteditable="true"]');
+  // VERY SPECIFIC SELECTOR for Chat input (usually data-tab=10)
+  const input = footer?.querySelector('div[contenteditable="true"][data-tab="10"] span') || footer?.querySelector('div[contenteditable="true"]');
   if (!input) return false;
+
   input.focus();
   input.innerHTML = ""; 
   document.execCommand('insertText', false, text);
   input.dispatchEvent(new Event('input', { bubbles: true }));
+  
   return new Promise(resolve => {
     setTimeout(() => {
       const sendBtn = footer.querySelector('[data-testid="send"]') || footer.querySelector('span[data-icon="send"]')?.closest('button');
-      if (sendBtn) { sendBtn.click(); resolve(true); }
-      else { 
+      if (sendBtn) {
+        sendBtn.click();
+        console.log("CRM: Message sent!");
+        resolve(true);
+      } else {
         const ev = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true });
-        input.dispatchEvent(ev); resolve(true); 
+        input.dispatchEvent(ev);
+        resolve(true);
       }
     }, 1200); 
   });
