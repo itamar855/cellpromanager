@@ -1,5 +1,5 @@
-// CellManager CRM Extension (v2.0) - "The Diagnostic & Resilient Messenger"
-console.log("CellManager CRM Extension v2.0 Loaded");
+// CellManager CRM Extension (v2.2) - "The Ultra-Resilient Messenger"
+console.log("%c CRM: Extension v2.2 Loaded ", "background: #25d366; color: white; font-weight: bold;");
 
 const CONFIG = {
   supabaseUrl: "https://hzrqtolfbwnmmeliazmh.supabase.co",
@@ -10,34 +10,11 @@ let activeLead = { id: null, name: "" };
 let lastSyncedText = "";
 let autoSyncObserver = null;
 
-// CSS Injection
 const style = document.createElement('style');
 style.textContent = `
-  .crm-capture-btn {
-    background: #25d366 !important;
-    color: white !important;
-    border: none !important;
-    padding: 6px 14px !important;
-    border-radius: 20px !important;
-    cursor: pointer !important;
-    font-size: 11px !important;
-    font-weight: bold !important;
-    margin: 5px 10px !important;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
-    transition: all 0.2s !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    white-space: nowrap !important;
-    z-index: 99999 !important;
-  }
-  .crm-capture-btn:hover { transform: scale(1.05); filter: brightness(1.1); }
+  .crm-capture-btn { background: #25d366 !important; color: white !important; border: none !important; padding: 6px 14px !important; border-radius: 20px !important; cursor: pointer !important; font-size: 11px !important; font-weight: bold !important; margin: 5px 10px !important; z-index: 99999 !important; }
   .crm-capture-btn-instagram { background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888) !important; }
-  .crm-sync-indicator {
-    position: fixed; top: 10px; right: 80px; background: rgba(37, 211, 102, 0.9);
-    color: white; padding: 4px 12px; border-radius: 20px; font-size: 10px; font-weight: bold;
-    z-index: 10000; display: none; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-  }
+  .crm-sync-indicator { position: fixed; top: 10px; right: 80px; background: rgba(37, 211, 102, 0.9); color: white; padding: 4px 12px; border-radius: 20px; font-size: 10px; font-weight: bold; z-index: 10000; display: none; }
 `;
 document.head.appendChild(style);
 
@@ -62,10 +39,10 @@ async function initSession() {
 }
 
 function findTarget() {
-  const isWhatsApp = window.location.host.includes("whatsapp");
-  const isInstagram = window.location.host.includes("instagram");
+  const isWA = window.location.host.includes("whatsapp");
+  const isIG = window.location.host.includes("instagram");
 
-  if (isWhatsApp) {
+  if (isWA) {
     const waHeader = document.querySelector("#main header");
     if (waHeader) {
       const currentName = (waHeader.querySelector('span[dir="auto"]') || waHeader.querySelector('span'))?.innerText.trim();
@@ -73,14 +50,10 @@ function findTarget() {
       
       const isMatch = activeLead.id && (activeLead.name === currentName || currentName?.includes(activeLead.name) || activeLead.name?.includes(currentName));
       if (isMatch) {
-        console.log("CRM: Auto-sync active for", currentName);
         setupAutoSyncWhatsApp();
-      } else if (autoSyncObserver) {
-        console.log("CRM: Auto-sync paused (name mismatch)");
-        autoSyncObserver.disconnect();
       }
     }
-  } else if (isInstagram) {
+  } else if (isIG) {
     const infoLabels = ["Informações", "Information", "Informações da conversa", "Conversation Information", "Expandir", "Expand"];
     for (const label of infoLabels) {
       const icon = document.querySelector(`svg[aria-label="${label}"]`);
@@ -120,23 +93,30 @@ function injectButton(parent, platform) {
 
 async function captureLeadWhatsApp(header) {
   const name = (header.querySelector('span[dir="auto"]') || header.querySelector('span'))?.innerText.trim() || "Lead WhatsApp";
-  let phone = name.replace(/\D/g, "");
+  console.log("CRM: Capturing lead", name);
   
-  // Strategy: If name is not a phone, check message IDs
-  if (phone.length < 8) {
-    const anyMsg = document.querySelector('.message-in, .message-out');
-    const dataId = anyMsg?.closest('[data-id]')?.getAttribute('data-id') || "";
-    const match = dataId.match(/(\d{10,})@/);
-    if (match) {
-      phone = match[1];
-      console.log("CRM: Phone found in message data-id:", phone);
-    } else {
-      const subtext = header.querySelector('.vW7d1')?.innerText || "";
-      const subPhone = subtext.replace(/\D/g, "");
-      if (subPhone.length >= 8) phone = subPhone;
-      else phone = "";
+  let phone = "";
+  // Strategy 1: Look for JID in data-id of messages
+  const anyMsg = document.querySelector('[data-id*="@c.us"]');
+  const dataId = anyMsg?.getAttribute('data-id') || "";
+  const jidMatch = dataId.match(/(\d{10,})@/);
+
+  if (jidMatch) {
+    phone = jidMatch[1];
+    console.log("CRM: Phone found in JID:", phone);
+  } else {
+    // Strategy 2: Look for digits in name
+    const digitsInName = name.replace(/\D/g, "");
+    if (digitsInName.length >= 10) phone = digitsInName;
+    else {
+      // Strategy 3: Search entire page text for a phone number
+      const allText = document.body.innerText;
+      const phoneMatch = allText.match(/\d{2} ?9?\d{8}/); // Brazilian phone regex approx
+      if (phoneMatch) phone = phoneMatch[0].replace(/\D/g, "");
     }
-  } else { phone = name; }
+  }
+
+  console.log("CRM: Finalized phone extraction:", phone || "NOT FOUND");
 
   const messages = extractMessagesWhatsApp();
   await sendToERP({ name, phone, source: "whatsapp", notes: "Sincronizado via WhatsApp Web" }, messages);
@@ -154,7 +134,7 @@ async function captureLeadInstagram(header) {
 
 function extractMessagesWhatsApp() {
   const msgEls = document.querySelectorAll('.message-in, .message-out');
-  return Array.from(msgEls).slice(-20).map(el => {
+  return Array.from(msgEls).slice(-25).map(el => {
     const content = (el.querySelector('.copyable-text span')?.innerText || el.innerText).trim();
     return { content, sender: el.classList.contains('message-out') ? 'me' : 'lead', created_at: new Date().toISOString() };
   });
@@ -162,7 +142,7 @@ function extractMessagesWhatsApp() {
 
 function extractMessagesInstagram() {
   const msgEls = document.querySelectorAll('div[role="row"]');
-  return Array.from(msgEls).slice(-20).map(el => {
+  return Array.from(msgEls).slice(-25).map(el => {
     const content = el.innerText.split('\n')[0].trim();
     const isMe = el.querySelector('div[style*="align-items: flex-end"]') || el.innerText.includes("Você enviou");
     return { content, sender: isMe ? 'me' : 'lead', created_at: new Date().toISOString() };
@@ -175,30 +155,36 @@ async function sendToERP(leadData, messages = []) {
     const apiKey = CONFIG.supabaseKey;
     const headers = { "Content-Type": "application/json", "apikey": apiKey, "Authorization": `Bearer ${apiKey}` };
 
-    let queryUrl = `${baseUrl}/rest/v1/leads?name=eq.${encodeURIComponent(leadData.name)}&select=id`;
-    if (leadData.phone) queryUrl += `&or=(phone.eq.${encodeURIComponent(leadData.phone)})`;
+    console.log("CRM: Searching for existing lead...", leadData.name);
+    // Use ilike and handle the potential for multiple matches or or-conditions
+    let queryUrl = `${baseUrl}/rest/v1/leads?name=ilike.${encodeURIComponent(leadData.name)}&select=id`;
+    if (leadData.phone && leadData.phone.length > 5) {
+      queryUrl = `${baseUrl}/rest/v1/leads?or=(name.ilike.${encodeURIComponent(leadData.name)},phone.eq.${encodeURIComponent(leadData.phone)})&select=id`;
+    }
     
     const checkRes = await fetch(queryUrl, { headers });
     const existingLeads = await checkRes.json();
     
     let savedLead;
-    if (existingLeads && existingLeads.length > 0) {
+    if (Array.isArray(existingLeads) && existingLeads.length > 0) {
+      console.log("CRM: Lead found, updating...", existingLeads[0].id);
       const updateRes = await fetch(`${baseUrl}/rest/v1/leads?id=eq.${existingLeads[0].id}`, {
         method: "PATCH",
         headers: { ...headers, "Prefer": "return=representation" },
         body: JSON.stringify(leadData)
       });
-      [savedLead] = await updateRes.json();
-      console.log("CRM: Updated existing lead:", savedLead.id);
+      const updated = await updateRes.json();
+      savedLead = updated[0];
     } else {
+      console.log("CRM: Lead not found, creating new...");
       const createRes = await fetch(`${baseUrl}/rest/v1/leads`, {
         method: "POST",
         headers: { ...headers, "Prefer": "return=representation" },
         body: JSON.stringify(leadData)
       });
-      if (!createRes.ok) throw new Error("Erro ao criar lead");
-      [savedLead] = await createRes.json();
-      console.log("CRM: Created new lead:", savedLead.id);
+      if (!createRes.ok) throw new Error("Erro API: " + await createRes.text());
+      const created = await createRes.json();
+      savedLead = created[0];
     }
 
     activeLead.id = savedLead.id;
@@ -214,32 +200,28 @@ async function sendToERP(leadData, messages = []) {
       });
     }
     alert(`✅ Sincronizado com CRM: ${leadData.name}`);
-  } catch (err) { alert("❌ Erro CRM: " + err.message); }
+  } catch (err) { 
+    console.error("CRM: Error in sendToERP", err);
+    alert("❌ Erro CRM: " + err.message); 
+  }
 }
 
 function setupAutoSyncWhatsApp() {
   if (autoSyncObserver) autoSyncObserver.disconnect();
   const main = document.querySelector('#main');
-  if (!main) {
-    console.log("CRM: #main not found for auto-sync");
-    return;
-  }
+  if (!main) return;
 
-  console.log("CRM: Observer starting on #main");
+  console.log("CRM: Auto-Sync Observer active for", activeLead.name);
   autoSyncObserver = new MutationObserver((mutations) => {
     if (!activeLead.id) return;
     for (const m of mutations) {
       for (const node of m.addedNodes) {
         if (node.nodeType === 1) {
-          // Check if it's a message or contains messages
           if (node.classList.contains('message-in') || node.classList.contains('message-out')) {
-             syncSingle(node, 'wa');
+            syncSingle(node, 'wa');
           } else {
-             const innerMessages = node.querySelectorAll('.message-in, .message-out');
-             if (innerMessages.length > 0) {
-               console.log(`CRM: Detected ${innerMessages.length} inner messages`);
-               innerMessages.forEach(el => syncSingle(el, 'wa'));
-             }
+            const children = node.querySelectorAll('.message-in, .message-out');
+            children.forEach(c => syncSingle(c, 'wa'));
           }
         }
       }
@@ -276,18 +258,15 @@ async function syncSingle(el, platform) {
     content = (contentEl ? contentEl.innerText : el.innerText).trim();
     sender = el.classList.contains('message-out') ? 'me' : 'lead';
   } else {
-    content = el.innerText.split('\n')[0].trim();
+    const contentText = el.innerText.split('\n')[0].trim();
+    content = contentText;
     sender = (el.querySelector('div[style*="align-items: flex-end"]') || el.innerText.includes("Você enviou")) ? 'me' : 'lead';
   }
 
-  // Deduplication check
-  if (!content || content === lastSyncedText) {
-    console.log("CRM: Skipping duplicate/empty message:", content);
-    return;
-  }
-  
-  console.log("CRM: Attempting auto-sync for:", content);
+  if (!content || content === lastSyncedText) return;
   lastSyncedText = content;
+  
+  console.log("CRM: Auto-syncing message...", content);
   
   try {
     const res = await fetch(`${CONFIG.supabaseUrl}/rest/v1/lead_messages`, {
@@ -296,19 +275,17 @@ async function syncSingle(el, platform) {
       body: JSON.stringify({ lead_id: activeLead.id, content, sender, created_at: new Date().toISOString() })
     });
     if (res.ok) {
-      console.log("CRM: Auto-sync SUCCESS!");
       showIndicator();
-    } else {
-      console.error("CRM: Auto-sync API error:", await res.text());
+      console.log("CRM: Sync success");
     }
-  } catch (err) { console.error("CRM: Auto-sync NETWORK error:", err); }
+  } catch (err) { console.error("CRM: Auto-sync error", err); }
 }
 
 chrome.runtime.onMessage.addListener((request) => {
   if (request.action === "manualCapture") {
-    const isWA = window.location.host.includes("whatsapp");
-    const h = isWA ? document.querySelector("#main header") : (document.querySelector('div[role="main"] header') || document.querySelector('div[role="dialog"] header'));
-    if (h) isWA ? captureLeadWhatsApp(h) : captureLeadInstagram(h);
+     findTarget(); 
+     const waHeader = document.querySelector("#main header");
+     if (waHeader) captureLeadWhatsApp(waHeader);
   }
 });
 
