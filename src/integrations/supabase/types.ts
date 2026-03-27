@@ -186,6 +186,38 @@ export type Database = {
           },
         ]
       }
+      lead_messages: {
+        Row: {
+          content: string | null
+          created_at: string
+          id: string
+          lead_id: string | null
+          sender: string | null
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          id?: string
+          lead_id?: string | null
+          sender?: string | null
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          id?: string
+          lead_id?: string | null
+          sender?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_messages_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           brand: string

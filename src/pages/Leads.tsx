@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { 
-  Trash2, MoreVertical, MessageSquare, ChevronRight, Download
+  Trash2, MoreVertical, MessageSquare, ChevronRight, Download,
+  MessageCircle, Phone, Plus, Users, Mail, Search
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 // Placeholder for Instagram if not in lucide-react
@@ -218,8 +219,9 @@ const Leads = () => {
           </DialogContent>
         </Dialog>
       </div>
+    </div>
 
-      {leads.length === 0 && (
+    {leads.length === 0 && (
         <Card className="bg-primary/5 border-dashed border-primary/30">
           <CardContent className="p-6 text-center space-y-3">
             <div className="bg-primary/10 w-12 h-12 rounded-full flex items-center justify-center mx-auto">
