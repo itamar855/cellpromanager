@@ -154,10 +154,18 @@ async function sendToERP(leadData) {
     if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.sync) {
       alert("⚠️ Erro de Extensão: Atualize (F5) esta página."); return;
     }
-    const settings = await chrome.storage.sync.get(["supabaseUrl", "supabaseKey"]);
+    
+    let settings = await chrome.storage.sync.get(["supabaseUrl", "supabaseKey"]);
+    
+    // Pre-configuração automática (v1.5)
     if (!settings?.supabaseUrl || !settings?.supabaseKey) {
-      alert("⚠️ ERRO: Configure a URL e Chave na extensão!"); return;
+      const defaultUrl = "https://hzrqtolfbwnmmeliazmh.supabase.co";
+      const defaultKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6cnF0b2xmYndubW1lbGlhem1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMTI1MDEsImV4cCI6MjA4OTc4ODUwMX0.wQyORyhVI5FaUapc3uwsOV48VUQgvdj2_y0FXjYchAo";
+      
+      await chrome.storage.sync.set({ supabaseUrl: defaultUrl, supabaseKey: defaultKey });
+      settings = { supabaseUrl: defaultUrl, supabaseKey: defaultKey };
     }
+
     const response = await fetch(`${settings.supabaseUrl.trim()}/rest/v1/leads`, {
       method: "POST",
       headers: {
