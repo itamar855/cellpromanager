@@ -1,5 +1,5 @@
-// CellManager CRM Extension (v1.9) - "The Intelligent Real-Time Messenger"
-console.log("CellManager CRM Extension Activity - Upsert & Sync Logic Improved");
+// CellManager CRM Extension (v2.0) - "The Diagnostic & Resilient Messenger"
+console.log("CellManager CRM Extension v2.0 Loaded");
 
 const CONFIG = {
   supabaseUrl: "https://hzrqtolfbwnmmeliazmh.supabase.co",
@@ -56,7 +56,7 @@ async function initSession() {
   if (stored.activeLeadId) {
     activeLead.id = stored.activeLeadId;
     activeLead.name = stored.activeLeadName;
-    console.log("Session Restored:", activeLead);
+    console.log("CRM: Session restored for", activeLead.name);
     findTarget();
   }
 }
@@ -71,9 +71,12 @@ function findTarget() {
       const currentName = (waHeader.querySelector('span[dir="auto"]') || waHeader.querySelector('span'))?.innerText.trim();
       if (!waHeader.querySelector(".crm-capture-btn")) injectButton(waHeader, "WhatsApp");
       
-      if (activeLead.id && (activeLead.name === currentName || currentName?.includes(activeLead.name))) {
+      const isMatch = activeLead.id && (activeLead.name === currentName || currentName?.includes(activeLead.name) || activeLead.name?.includes(currentName));
+      if (isMatch) {
+        console.log("CRM: Auto-sync active for", currentName);
         setupAutoSyncWhatsApp();
       } else if (autoSyncObserver) {
+        console.log("CRM: Auto-sync paused (name mismatch)");
         autoSyncObserver.disconnect();
       }
     }
@@ -88,7 +91,8 @@ function findTarget() {
             const currentName = current.innerText.trim().split('\n')[0];
             if (!current.querySelector(".crm-capture-btn")) injectButton(current, "Instagram");
             
-            if (activeLead.id && (activeLead.name === currentName || currentName.includes(activeLead.name))) {
+            const isMatch = activeLead.id && (activeLead.name === currentName || currentName.includes(activeLead.name));
+            if (isMatch) {
               setupAutoSyncInstagram();
             } else if (autoSyncObserver) {
               autoSyncObserver.disconnect();
@@ -116,8 +120,6 @@ function injectButton(parent, platform) {
 
 async function captureLeadWhatsApp(header) {
   const name = (header.querySelector('span[dir="auto"]') || header.querySelector('span'))?.innerText.trim() || "Lead WhatsApp";
-  
-  // Better phone extraction: check the "about" or subtext if it contains digits
   let phone = name.replace(/\D/g, "");
   if (phone.length < 8) {
     const subtext = header.querySelector('.vW7d1')?.innerText || "";
@@ -142,7 +144,7 @@ async function captureLeadInstagram(header) {
 
 function extractMessagesWhatsApp() {
   const msgEls = document.querySelectorAll('.message-in, .message-out');
-  return Array.from(msgEls).slice(-15).map(el => {
+  return Array.from(msgEls).slice(-20).map(el => {
     const content = (el.querySelector('.copyable-text span')?.innerText || el.innerText).trim();
     return { content, sender: el.classList.contains('message-out') ? 'me' : 'lead', created_at: new Date().toISOString() };
   });
@@ -150,7 +152,7 @@ function extractMessagesWhatsApp() {
 
 function extractMessagesInstagram() {
   const msgEls = document.querySelectorAll('div[role="row"]');
-  return Array.from(msgEls).slice(-15).map(el => {
+  return Array.from(msgEls).slice(-20).map(el => {
     const content = el.innerText.split('\n')[0].trim();
     const isMe = el.querySelector('div[style*="align-items: flex-end"]') || el.innerText.includes("Você enviou");
     return { content, sender: isMe ? 'me' : 'lead', created_at: new Date().toISOString() };
@@ -163,7 +165,6 @@ async function sendToERP(leadData, messages = []) {
     const apiKey = CONFIG.supabaseKey;
     const headers = { "Content-Type": "application/json", "apikey": apiKey, "Authorization": `Bearer ${apiKey}` };
 
-    // 1. Check if lead already exists to avoid duplicates
     let queryUrl = `${baseUrl}/rest/v1/leads?name=eq.${encodeURIComponent(leadData.name)}&select=id`;
     if (leadData.phone) queryUrl += `&or=(phone.eq.${encodeURIComponent(leadData.phone)})`;
     
@@ -172,16 +173,14 @@ async function sendToERP(leadData, messages = []) {
     
     let savedLead;
     if (existingLeads && existingLeads.length > 0) {
-      // Update existing
       const updateRes = await fetch(`${baseUrl}/rest/v1/leads?id=eq.${existingLeads[0].id}`, {
         method: "PATCH",
         headers: { ...headers, "Prefer": "return=representation" },
         body: JSON.stringify(leadData)
       });
       [savedLead] = await updateRes.json();
-      console.log("Updated existing lead:", savedLead.id);
+      console.log("CRM: Updated existing lead:", savedLead.id);
     } else {
-      // Create new
       const createRes = await fetch(`${baseUrl}/rest/v1/leads`, {
         method: "POST",
         headers: { ...headers, "Prefer": "return=representation" },
@@ -189,7 +188,7 @@ async function sendToERP(leadData, messages = []) {
       });
       if (!createRes.ok) throw new Error("Erro ao criar lead");
       [savedLead] = await createRes.json();
-      console.log("Created new lead:", savedLead.id);
+      console.log("CRM: Created new lead:", savedLead.id);
     }
 
     activeLead.id = savedLead.id;
@@ -197,7 +196,6 @@ async function sendToERP(leadData, messages = []) {
     chrome.storage.local.set({ activeLeadId: savedLead.id, activeLeadName: leadData.name });
 
     if (messages.length > 0) {
-      // Deduplicate messages by content temporarily (basic)
       lastSyncedText = messages[messages.length - 1].content;
       await fetch(`${baseUrl}/rest/v1/lead_messages`, {
         method: "POST",
@@ -212,17 +210,26 @@ async function sendToERP(leadData, messages = []) {
 function setupAutoSyncWhatsApp() {
   if (autoSyncObserver) autoSyncObserver.disconnect();
   const main = document.querySelector('#main');
-  if (!main) return;
+  if (!main) {
+    console.log("CRM: #main not found for auto-sync");
+    return;
+  }
 
+  console.log("CRM: Observer starting on #main");
   autoSyncObserver = new MutationObserver((mutations) => {
     if (!activeLead.id) return;
     for (const m of mutations) {
       for (const node of m.addedNodes) {
         if (node.nodeType === 1) {
-          if (node.classList.contains('message-in') || node.classList.contains('message-out')) syncSingle(node, 'wa');
-          else {
-            const inner = node.querySelectorAll('.message-in, .message-out');
-            inner.forEach(el => syncSingle(el, 'wa'));
+          // Check if it's a message or contains messages
+          if (node.classList.contains('message-in') || node.classList.contains('message-out')) {
+             syncSingle(node, 'wa');
+          } else {
+             const innerMessages = node.querySelectorAll('.message-in, .message-out');
+             if (innerMessages.length > 0) {
+               console.log(`CRM: Detected ${innerMessages.length} inner messages`);
+               innerMessages.forEach(el => syncSingle(el, 'wa'));
+             }
           }
         }
       }
@@ -252,7 +259,6 @@ function setupAutoSyncInstagram() {
 
 async function syncSingle(el, platform) {
   if (!activeLead.id) return;
-  console.log("Checking message for auto-sync...");
   
   let content = "", sender = "lead";
   if (platform === 'wa') {
@@ -264,7 +270,13 @@ async function syncSingle(el, platform) {
     sender = (el.querySelector('div[style*="align-items: flex-end"]') || el.innerText.includes("Você enviou")) ? 'me' : 'lead';
   }
 
-  if (!content || content === lastSyncedText) return;
+  // Deduplication check
+  if (!content || content === lastSyncedText) {
+    console.log("CRM: Skipping duplicate/empty message:", content);
+    return;
+  }
+  
+  console.log("CRM: Attempting auto-sync for:", content);
   lastSyncedText = content;
   
   try {
@@ -274,10 +286,12 @@ async function syncSingle(el, platform) {
       body: JSON.stringify({ lead_id: activeLead.id, content, sender, created_at: new Date().toISOString() })
     });
     if (res.ok) {
-      console.log("Auto-sync success:", content);
+      console.log("CRM: Auto-sync SUCCESS!");
       showIndicator();
+    } else {
+      console.error("CRM: Auto-sync API error:", await res.text());
     }
-  } catch (err) { console.error("Sync Error:", err); }
+  } catch (err) { console.error("CRM: Auto-sync NETWORK error:", err); }
 }
 
 chrome.runtime.onMessage.addListener((request) => {
