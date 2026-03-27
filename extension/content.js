@@ -121,11 +121,21 @@ function injectButton(parent, platform) {
 async function captureLeadWhatsApp(header) {
   const name = (header.querySelector('span[dir="auto"]') || header.querySelector('span'))?.innerText.trim() || "Lead WhatsApp";
   let phone = name.replace(/\D/g, "");
+  
+  // Strategy: If name is not a phone, check message IDs
   if (phone.length < 8) {
-    const subtext = header.querySelector('.vW7d1')?.innerText || "";
-    const subPhone = subtext.replace(/\D/g, "");
-    if (subPhone.length >= 8) phone = subPhone;
-    else phone = "";
+    const anyMsg = document.querySelector('.message-in, .message-out');
+    const dataId = anyMsg?.closest('[data-id]')?.getAttribute('data-id') || "";
+    const match = dataId.match(/(\d{10,})@/);
+    if (match) {
+      phone = match[1];
+      console.log("CRM: Phone found in message data-id:", phone);
+    } else {
+      const subtext = header.querySelector('.vW7d1')?.innerText || "";
+      const subPhone = subtext.replace(/\D/g, "");
+      if (subPhone.length >= 8) phone = subPhone;
+      else phone = "";
+    }
   } else { phone = name; }
 
   const messages = extractMessagesWhatsApp();
