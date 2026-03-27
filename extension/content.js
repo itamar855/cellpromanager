@@ -1,4 +1,4 @@
-// Smart Content Script for CellManager Extension (v1.3) - "The Balanced One"
+// Balanced Content Script for CellManager Extension (v1.4)
 console.log("CellManager CRM Extension Activity");
 
 // CSS Injection
@@ -22,10 +22,8 @@ style.textContent = `
     white-space: nowrap !important;
     z-index: 99999 !important;
   }
-  .crm-capture-btn:hover { transform: scale(1.05); filter: brightness(1.1); box-shadow: 0 4px 10px rgba(0,0,0,0.2) !important; }
-  .crm-capture-btn-instagram {
-    background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888) !important;
-  }
+  .crm-capture-btn:hover { transform: scale(1.05); filter: brightness(1.1); }
+  .crm-capture-btn-instagram { background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888) !important; }
 `;
 document.head.appendChild(style);
 
@@ -39,26 +37,39 @@ function findTarget() {
       injectButton(waHeader, "WhatsApp");
     }
   } else if (isInstagram) {
-    // Strategy: Look for the specific icons of a DM conversation
-    const infoIcon = document.querySelector('svg[aria-label="Informações"]') || 
-                   document.querySelector('svg[aria-label="Conversation Information"]') ||
-                   document.querySelector('svg[aria-label="Expandir"]');
-    
-    if (infoIcon) {
-      // Go up until we find a container that looks like a header (usually 2-4 levels up)
-      let current = infoIcon.parentElement;
-      for (let i = 0; i < 5; i++) {
-        if (current && current.offsetHeight > 40 && current.offsetHeight < 120) {
-          // Check if it's NOT in the sidebar
-          if (!current.closest('div[role="navigation"]') && !current.querySelector('._aacz')) {
-            if (!current.querySelector(".crm-capture-btn")) {
-              console.log("IG DM Header Found via Icon");
-              injectButton(current, "Instagram");
+    // Search for header by analyzing all headers in the main/dialog areas
+    const possibleHeaders = [
+      ...document.querySelectorAll('div[role="main"] header'),
+      ...document.querySelectorAll('div[role="dialog"] header'),
+      ...document.querySelectorAll('div[role="presentation"] header')
+    ];
+
+    // Localized labels for the Info icon
+    const infoLabels = [
+      "Informações", "Information", "Informações da conversa", "Conversation Information",
+      "Expandir", "Expand", "Ver detalhes", "Details", "Voltar", "Back"
+    ];
+
+    infoLabels.forEach(label => {
+      const icon = document.querySelector(`svg[aria-label="${label}"]`);
+      if (icon) {
+        let current = icon.parentElement;
+        for (let i = 0; i < 5; i++) {
+          if (current && current.offsetHeight > 40 && current.offsetHeight < 150) {
+            if (!current.closest('div[role="navigation"]') && !current.querySelector('._aacz')) {
+              possibleHeaders.push(current);
             }
-            break;
           }
+          current = current?.parentElement;
         }
-        current = current?.parentElement;
+      }
+    });
+
+    for (const h of possibleHeaders) {
+      if (h && h.offsetHeight > 30 && h.offsetHeight < 150 && !h.querySelector(".crm-capture-btn")) {
+        console.log("IG Header Candidate:", h);
+        injectButton(h, "Instagram");
+        break; // Only one button per page
       }
     }
   }
@@ -66,65 +77,62 @@ function findTarget() {
 
 function injectButton(parent, platform) {
   if (parent.querySelector(".crm-capture-btn")) return;
-
   const btn = document.createElement("button");
   btn.className = platform === "Instagram" ? "crm-capture-btn crm-capture-btn-instagram" : "crm-capture-btn";
   btn.innerText = "Enviar p/ CRM";
-  
   btn.onclick = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (platform === "WhatsApp") {
-       captureLeadWhatsApp(parent);
-    } else {
-       captureLeadInstagram(parent);
-    }
+    e.preventDefault(); e.stopPropagation();
+    platform === "WhatsApp" ? captureLeadWhatsApp(parent) : captureLeadInstagram(parent);
   };
-
-  if (platform === "Instagram") {
-    // Prepend is usually safer on IG headers
-    parent.prepend(btn);
-  } else {
-    const secondary = parent.querySelector('div[role="button"]') || parent;
-    secondary.appendChild(btn);
-  }
+  if (platform === "Instagram") parent.prepend(btn);
+  else (parent.querySelector('div[role="button"]') || parent).appendChild(btn);
 }
 
 async function captureLeadWhatsApp(header) {
-  try {
-    const nameEl = header.querySelector('span[dir="auto"]') || header.querySelector('span');
-    const name = nameEl ? nameEl.innerText.trim() : "Lead WhatsApp";
-    const phone = name.replace(/\D/g, "").length >= 8 ? name : "";
-    await sendToERP({ name, phone, source: "whatsapp", notes: "Via WhatsApp Web" });
-  } catch (err) {
-    alert("Erro ao extrair dados: " + err.message);
-  }
+  const nameEl = header.querySelector('span[dir="auto"]') || header.querySelector('span');
+  const name = nameEl ? nameEl.innerText.trim() : "Lead WhatsApp";
+  const phone = name.replace(/\D/g, "").length >= 8 ? name : "";
+  await sendToERP({ name, phone, source: "whatsapp", notes: "Via WhatsApp Web" });
 }
 
 async function captureLeadInstagram(header) {
-  try {
-    // Find the name in the header more reliably
-    const nameEl = header.querySelector('span[role="link"]') || 
-                  header.querySelector('span') || 
-                  document.querySelector('div[role="main"] header span');
-                  
-    const name = nameEl ? nameEl.innerText.trim() : "Lead Instagram";
-    await sendToERP({ name, source: "instagram", notes: "Via Instagram Web" });
-  } catch (err) {
-    alert("Erro ao extrair dados: " + err.message);
-  }
+  // Broad search for the name inside the provided header
+  const nameEl = header.querySelector('span[role="link"]') || 
+                header.querySelector('span') || 
+                document.querySelector('div[role="main"] header span');
+                
+  const name = nameEl ? nameEl.innerText.trim() : "Lead Instagram";
+  await sendToERP({ name, source: "instagram", notes: "Via Instagram Web" });
 }
+
+// Support for manual capture from popup
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "manualCapture") {
+    console.log("Manual Capture Triggered");
+    const isWhatsApp = window.location.host.includes("whatsapp");
+    const isInstagram = window.location.host.includes("instagram");
+    
+    if (isWhatsApp) {
+      const header = document.querySelector("#main header");
+      if (header) captureLeadWhatsApp(header);
+      else alert("Aba do WhatsApp aberta, mas conversa não encontrada.");
+    } else if (isInstagram) {
+      // Find ANY header
+      const header = document.querySelector('div[role="main"] header') || document.querySelector('div[role="dialog"] header');
+      if (header) captureLeadInstagram(header);
+      else alert("Aba do Instagram aberta, mas conversa não encontrada.");
+    }
+  }
+});
 
 async function sendToERP(leadData) {
   try {
     if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.sync) {
-      alert("⚠️ Erro de Extensão: Por favor, atualize esta página (F5).");
-      return;
+      alert("⚠️ Erro de Extensão: Atualize (F5) esta página."); return;
     }
     const settings = await chrome.storage.sync.get(["supabaseUrl", "supabaseKey"]);
     if (!settings?.supabaseUrl || !settings?.supabaseKey) {
-      alert("⚠️ ERRO: Configure a URL e Chave do Supabase na extensão!");
-      return;
+      alert("⚠️ ERRO: Configure a URL e Chave na extensão!"); return;
     }
     const response = await fetch(`${settings.supabaseUrl.trim()}/rest/v1/leads`, {
       method: "POST",
@@ -136,15 +144,9 @@ async function sendToERP(leadData) {
       },
       body: JSON.stringify(leadData)
     });
-    if (response.ok) {
-      alert(`✅ Lead "${leadData.name}" enviado com sucesso!`);
-    } else {
-      const error = await response.json();
-      alert("❌ Supabase: " + (error.message || JSON.stringify(error)));
-    }
-  } catch (err) {
-    alert("❌ Erro de Conexão: " + err.message);
-  }
+    if (response.ok) alert(`✅ Lead "${leadData.name}" enviado com sucesso!`);
+    else { const error = await response.json(); alert("❌ Supabase: " + (error.message || JSON.stringify(error))); }
+  } catch (err) { alert("❌ Erro de Conexão: " + err.message); }
 }
 
 const observer = new MutationObserver(() => { findTarget(); });

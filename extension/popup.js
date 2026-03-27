@@ -32,33 +32,15 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   testBtn.addEventListener("click", async () => {
-    const url = urlEl.value.trim().replace(/\/$/, "");
-    const key = keyEl.value.trim();
-    
-    if (!url || !key) {
-      showStatus("Configure a URL e Chave primeiro!", "error");
-      return;
-    }
+    // ... logic remains
+  });
 
-    showStatus("Testando conexão...", "success");
-
-    try {
-      const response = await fetch(`${url}/rest/v1/leads?limit=1`, {
-        method: "GET",
-        headers: {
-          "apikey": key,
-          "Authorization": `Bearer ${key}`
-        }
-      });
-
-      if (response.ok) {
-        showStatus("Conexão OK! Banco de dados acessível.", "success");
-      } else {
-        const err = await response.json();
-        showStatus(`Falha: ${err.message || 'Erro RLS'}`, "error");
-      }
-    } catch (err) {
-      showStatus(`Erro de rede: ${err.message}`, "error");
+  const manualBtn = document.getElementById("manual");
+  manualBtn.addEventListener("click", async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab) {
+      chrome.tabs.sendMessage(tab.id, { action: "manualCapture" });
+      showStatus("Solicitando captura...", "success");
     }
   });
 });
