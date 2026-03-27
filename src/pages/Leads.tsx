@@ -160,24 +160,24 @@ const Leads = () => {
 
   return (
     <div className="space-y-4 h-full flex flex-col">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b pb-4 mb-2">
         <div>
-          <h1 className="font-display text-xl md:text-3xl font-bold tracking-tight">CRM de Leads</h1>
+          <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight text-white">CRM de Leads</h1>
           <p className="text-muted-foreground text-sm mt-0.5">{leads.length} leads no funil</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button 
             variant="outline" 
             size="sm" 
-            className="gap-2 h-10 border-primary/20 hover:bg-primary/5"
+            className="gap-2 h-9 border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
             onClick={() => window.open(`https://github.com/itamar855/cellpromanager/archive/refs/heads/main.zip`, '_blank')}
           >
             <Download className="h-4 w-4" /> Instalar Extensão
           </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 h-10"><Plus className="h-4 w-4" /> Novo Lead</Button>
-          </DialogTrigger>
+            <DialogTrigger asChild>
+              <Button className="gap-2 h-9 shadow-lg shadow-primary/20"><Plus className="h-4 w-4" /> Novo Lead</Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Cadastrar Lead</DialogTitle></DialogHeader>
             <form onSubmit={handleCreateLead} className="space-y-3">

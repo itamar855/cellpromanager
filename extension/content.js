@@ -81,15 +81,44 @@ async function captureLeadWhatsApp(header) {
 }
 
 async function captureLeadInstagram(header) {
-  let name = "Lead Instagram";
-  const selectors = ['span[role="link"]', 'h2 span', 'a[href*="/"] span', 'span._ap32', 'span'];
-  for (const s of selectors) {
-    const el = header.querySelector(s);
-    if (el && el.innerText.trim().length > 1) { name = el.innerText.trim(); break; }
+  try {
+    let name = "Lead Instagram";
+    
+    // 1. Precise selectors for common IG layouts
+    const specificSelectors = [
+      'h2 span', // Desktop header Title
+      'span[role="link"]', // Common name link
+      'div[role="button"] span', // Interactive headers
+      'a[href*="/"] span', // Link to profile
+      'div._ab8w span' // Obfuscated IG class
+    ];
+
+    for (const selector of specificSelectors) {
+      const el = header.querySelector(selector);
+      if (el && el.innerText.trim().length > 1 && !el.innerText.includes("Sua conversa")) {
+        name = el.innerText.trim();
+        break;
+      }
+    }
+
+    if (name === "Lead Instagram") {
+      // 2. Broad search: find first span that is actually text and not a status/number
+      const allSpans = Array.from(header.querySelectorAll('span'));
+      const likelyName = allSpans.find(s => 
+        s.innerText.length > 2 && 
+        s.innerText.length < 40 && 
+        !s.innerText.includes("Ativo") && 
+        !s.innerText.includes("Online")
+      );
+      if (likelyName) name = likelyName.innerText.trim();
+    }
+
+    console.log("Captured IG Name:", name);
+    const messages = extractMessagesInstagram();
+    await sendToERP({ name, source: "instagram", notes: "Sincronizado via Instagram Web" }, messages);
+  } catch (err) {
+    alert("Erro ao extrair nome: " + err.message);
   }
-  
-  const messages = extractMessagesInstagram();
-  await sendToERP({ name, source: "instagram", notes: "Sincronizado via Instagram Web" }, messages);
 }
 
 function extractMessagesWhatsApp() {
