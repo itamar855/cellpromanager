@@ -1,54 +1,24 @@
-document.addEventListener("DOMContentLoaded", () => {
-  const urlEl = document.getElementById("url");
-  const keyEl = document.getElementById("key");
-  const saveBtn = document.getElementById("save");
-  const testBtn = document.getElementById("test");
-  const statusEl = document.getElementById("status");
+async function updateUI() {
+  const data = await chrome.storage.local.get(['activeLeadId', 'activeLeadName', 'automationStatus', 'queueCount']);
+  
+  document.getElementById('active-lead-name').innerText = data.activeLeadName || 'Nenhum';
+  document.getElementById('active-lead-id').innerText = data.activeLeadId ? `ID: ${data.activeLeadId.slice(0,8)}...` : 'Nenhum lead monitorado';
+  document.getElementById('automation-status').innerText = data.automationStatus || 'Aguardando comando...';
+  document.getElementById('queue-count').innerText = data.queueCount || '0';
 
-  function showStatus(msg, type) {
-    statusEl.innerText = msg;
-    statusEl.className = `status ${type}`;
-    setTimeout(() => { statusEl.className = "status"; }, 4000);
+  const progress = document.getElementById('progress-fill');
+  if (data.automationStatus && data.automationStatus.includes('Enviando')) {
+    progress.style.width = '70%';
+  } else if (data.automationStatus && data.automationStatus.includes('Busca')) {
+    progress.style.width = '40%';
+  } else {
+    progress.style.width = '0%';
   }
+}
 
-  // Load saved settings
-  chrome.storage.sync.get(["supabaseUrl", "supabaseKey"], (data) => {
-    if (data.supabaseUrl) urlEl.value = data.supabaseUrl;
-    if (data.supabaseKey) keyEl.value = data.supabaseKey;
-  });
-
-  saveBtn.addEventListener("click", () => {
-    const supabaseUrl = urlEl.value.trim().replace(/\/$/, "");
-    const supabaseKey = keyEl.value.trim();
-
-    if (!supabaseUrl || !supabaseKey) {
-      showStatus("Preencha todos os campos", "error");
-      return;
-    }
-
-    chrome.storage.sync.set({ supabaseUrl, supabaseKey }, () => {
-      showStatus("Configurações salvas!", "success");
-    });
-  });
-
-  testBtn.addEventListener("click", async () => {
-    // ... logic remains
-  });
-
-  const manualBtn = document.getElementById("manual");
-  manualBtn.addEventListener("click", async () => {
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab || !tab.url.includes("whatsapp.com") && !tab.url.includes("instagram.com")) {
-        showStatus("Abra o WhatsApp ou Instagram primeiro", "error");
-        return;
-      }
-      
-      await chrome.tabs.sendMessage(tab.id, { action: "manualCapture" });
-      showStatus("Solicitando captura...", "success");
-    } catch (err) {
-      console.error(err);
-      showStatus("Erro: Recarregue a página do WhatsApp/IG", "error");
-    }
-  });
+document.getElementById('open-whatsapp').addEventListener('click', () => {
+  chrome.tabs.create({ url: 'https://web.whatsapp.com' });
 });
+
+setInterval(updateUI, 1000);
+updateUI();

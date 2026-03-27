@@ -2,42 +2,48 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <style>
-    body { width: 320px; padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #fdfdfd; color: #333; }
-    h2 { font-size: 18px; margin-top: 0; color: #1a1a1a; border-bottom: 2px solid #25d366; padding-bottom: 8px; }
-    .field { margin-bottom: 15px; }
-    label { display: block; font-size: 12px; color: #555; margin-bottom: 5px; font-weight: 600; }
-    input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 13px; transition: border-color 0.2s; }
-    input:focus { border-color: #25d366; outline: none; }
-    .btn-group { display: flex; gap: 10px; margin-top: 10px; }
-    button { flex: 1; padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; transition: opacity 0.2s; }
-    button#save { background: #25d366; color: white; }
-    button#test { background: #007bff; color: white; }
-    button:hover { opacity: 0.9; }
-    .status { font-size: 12px; text-align: center; margin-top: 12px; padding: 8px; border-radius: 4px; display: none; }
-    .status.success { background: #d4edda; color: #155724; display: block; }
-    .status.error { background: #f8d7da; color: #721c24; display: block; }
-    .info { font-size: 11px; color: #888; margin-top: 15px; line-height: 1.4; border-top: 1px solid #eee; padding-top: 10px; }
-  </style>
+  <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <h2>CellManager CRM</h2>
-  <div class="field">
-    <label>URL do Supabase</label>
-    <input type="text" id="url" placeholder="https://abc.supabase.co">
-  </div>
-  <div class="field">
-    <label>Chave de API (Anon)</label>
-    <input type="password" id="key" placeholder="Suas chaves do projeto">
-  </div>
-  <div class="btn-group">
-    <button id="save">Salvar</button>
-    <button id="test">Conexão</button>
-    <button id="manual" style="background: #e6683c;">Capturar</button>
-  </div>
-  <div id="status" class="status"></div>
-  <div class="info">
-    Após salvar, recarregue as páginas do WhatsApp/Instagram para aplicar as mudanças.
+  <div class="container">
+    <header>
+      <div class="logo-area">
+        <h1>CellManager</h1>
+        <div class="status-badge" id="crm-status">
+          <span class="dot"></span> Online
+        </div>
+      </div>
+    </header>
+
+    <div class="glass-card main-card">
+      <div class="label">LEAD ATIVO</div>
+      <div class="value" id="active-lead-name">Nenhum</div>
+      <div class="sub-label" id="active-lead-id">Nenhum lead sendo monitorado</div>
+    </div>
+
+    <div class="grid">
+      <div class="glass-card stat">
+        <div class="label">FILA</div>
+        <div class="value" id="queue-count">0</div>
+      </div>
+      <div class="glass-card stat">
+        <div class="label">SYNC</div>
+        <div class="value" id="sync-count">OK</div>
+      </div>
+    </div>
+
+    <div class="automation-area">
+      <div class="label">ESTADO DA AUTOMAÇÃO</div>
+      <div class="status-msg" id="automation-status">Aguardando comando do CRM...</div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+    </div>
+
+    <footer>
+      <button id="open-whatsapp" class="btn-primary">Abrir WhatsApp Web</button>
+      <p class="version">CellManager CRM Extension v5.0</p>
+    </footer>
   </div>
   <script src="popup.js"></script>
 </body>
