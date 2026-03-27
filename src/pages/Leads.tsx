@@ -51,8 +51,6 @@ const Leads = () => {
   const [stores, setStores] = useState<any[]>([]);
   const [chatModalOpen, setChatModalOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
-  const scrollRef = import.meta.env.DEV ? { current: null } : { current: null }; // Temp placeholder
-  const messagesEndRef = typeof window !== 'undefined' ? { current: null } : { current: null };
 
   const fetchData = async () => {
     const { data: leadsData } = await supabase.from("leads").select("*").order("created_at", { ascending: false });
@@ -96,7 +94,7 @@ const Leads = () => {
     };
   }, [selectedLead?.id]); // Only re-subscribe if the selected lead ID changes
 
-  const messagesEndRef = useEffect(() => {
+  useEffect(() => {
     const scrollContainer = document.querySelector('[data-radix-scroll-area-viewport]');
     if (scrollContainer) {
       scrollContainer.scrollTop = scrollContainer.scrollHeight;
