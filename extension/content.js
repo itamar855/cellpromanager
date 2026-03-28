@@ -278,19 +278,36 @@ async function robustSwitch(lead) {
     }
 
     if (foundAndTyped) {
-      await new Promise(r => setTimeout(r, 2500)); // Increased wait for results to render
+      await new Promise(r => setTimeout(r, 1000)); 
 
-      const sidebar = document.querySelector('#pane-side') || document.querySelector('#side') || document.body;
+      // 1. ATTEMPT: Press Enter on the search bar (Native WhatsApp behavior to open first result)
+      for (let el of validInputs) {
+          if ((el.textContent && el.textContent.includes(query)) || (el.value && el.value.includes(query))) {
+              el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+              el.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+              el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+              console.log("CRM: Sent Enter to search input.");
+              break;
+          }
+      }
+
+      await new Promise(r => setTimeout(r, 2000)); // Wait for chat to open
+
+      if (document.querySelector('#main header')) {
+          setStatus("Chat aberto via Enter!");
+          console.log("CRM: Chat detected after Enter.");
+          return true;
+      }
+
+      // 2. ATTEMPT: Result Sniffer (Scoped specifically to result pane)
+      const sidebar = document.querySelector('#pane-side') || document.querySelector('[aria-label="Lista de chats"]');
       if (sidebar) {
-        // ULTIMATE RESULT SNIFFER: Target common WhatsApp list item patterns
         const resultSelectors = [
             '[role="row"]', 
             '[role="listitem"]', 
             '._ak8l', 
             '._ak8o',
-            'div[data-testid="list-item-search"]',
-            'div[style*="translateY(72px)"]', // First row often has this offset
-            '#pane-side > div > div > div > div'
+            'div[data-testid="list-item-search"]'
         ];
 
         let rows = [];
@@ -304,19 +321,19 @@ async function robustSwitch(lead) {
         }
         
         if (rows.length > 0) {
-          // Find the most 'button-like' child or just click the row
+          // Find the most 'button-like' child or click the row directly
           const target = rows[0].querySelector('[role="button"]') || rows[0];
           target.click();
           target.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
           
-          setStatus("Chat localizado!");
-          console.log("CRM: Clicked first result row.");
+          setStatus("Chat localizado via clique!");
+          console.log("CRM: Clicked first result row in #pane-side.");
           activeLead = { id: lead.id, name: lead.name };
           chrome.storage.local.set({ activeLeadId: lead.id, activeLeadName: lead.name });
-          await new Promise(r => setTimeout(r, 2000)); // Wait for chat to load
+          await new Promise(r => setTimeout(r, 2000));
           return true;
         } else {
-          setStatus("Nenhum resultado clicável.");
+          setStatus("Nenhum resultado clicável no painel.");
         }
       }
       
