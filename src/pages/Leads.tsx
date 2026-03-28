@@ -212,7 +212,7 @@ const Leads = () => {
         toast.error("Erro ao excluir: " + error.message);
       } else {
         toast.success("Lead excluído com sucesso!");
-        logAction?.("Leads", "Lead Excluído", `Lead ${leadName} foi excluído.`);
+        logAction?.("DELETE_RECORD", "Leads", leadId);
         setLeads(prev => prev.filter(l => l.id !== leadId));
       }
     }
