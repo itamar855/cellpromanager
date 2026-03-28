@@ -280,67 +280,59 @@ async function robustSwitch(lead) {
     if (foundAndTyped) {
       await new Promise(r => setTimeout(r, 1000)); 
 
-      // 1. ATTEMPT: Press Enter on the search bar (Native WhatsApp behavior to open first result)
+      // 1. ATTEMPT: Press Enter on the search bar
       for (let el of validInputs) {
           if ((el.textContent && el.textContent.includes(query)) || (el.value && el.value.includes(query))) {
-              el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
-              el.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
-              el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+              ['keydown', 'keypress', 'keyup'].forEach(type => {
+                  el.dispatchEvent(new KeyboardEvent(type, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+              });
               console.log("CRM: Sent Enter to search input.");
               break;
           }
       }
 
-      await new Promise(r => setTimeout(r, 2000)); // Wait for chat to open
+      await new Promise(r => setTimeout(r, 2000)); 
 
       if (document.querySelector('#main header')) {
           setStatus("Chat aberto via Enter!");
-          console.log("CRM: Chat detected after Enter.");
           return true;
       }
 
-      // 2. ATTEMPT: Result Sniffer (Scoped specifically to result pane)
+      // 2. ATTEMPT: Result Sniffer (Scoped specifically to result pane with multi-event click)
       const sidebar = document.querySelector('#pane-side') || document.querySelector('[aria-label="Lista de chats"]');
       if (sidebar) {
-        const resultSelectors = [
-            '[role="row"]', 
-            '[role="listitem"]', 
-            '._ak8l', 
-            '._ak8o',
-            'div[data-testid="list-item-search"]'
-        ];
-
+        const resultSelectors = ['[role="row"]', '[role="listitem"]', '._ak8l', '._ak8o', 'div[data-testid="list-item-search"]'];
         let rows = [];
         for (const sel of resultSelectors) {
-            const found = Array.from(sidebar.querySelectorAll(sel))
-                               .filter(el => el.offsetHeight > 10 && el.innerText.trim().length > 0);
-            if (found.length > 0) {
-                rows = found;
-                break;
-            }
+            const found = Array.from(sidebar.querySelectorAll(sel)).filter(el => el.offsetHeight > 10);
+            if (found.length > 0) { rows = found; break; }
         }
         
         if (rows.length > 0) {
-          // Find the most 'button-like' child or click the row directly
           const target = rows[0].querySelector('[role="button"]') || rows[0];
-          target.click();
-          target.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
           
-          setStatus("Chat localizado via clique!");
-          console.log("CRM: Clicked first result row in #pane-side.");
+          // HYPER-AGGRESSIVE CLICK SEQUENCE
+          ['mousedown', 'mouseup', 'click'].forEach(type => {
+              target.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window, buttons: 1 }));
+          });
+          target.click(); // Standard click fallback
+          
+          setStatus("Chat localizado via Sniper Click!");
           activeLead = { id: lead.id, name: lead.name };
           chrome.storage.local.set({ activeLeadId: lead.id, activeLeadName: lead.name });
           await new Promise(r => setTimeout(r, 2000));
-          return true;
-        } else {
-          setStatus("Nenhum resultado clicável no painel.");
+          if (document.querySelector('#main')) return true;
         }
       }
       
-      // Clear search if failed
-      const clearBtn = document.querySelector('button[aria-label="Cancelar pesquisa"]') || 
-                       document.querySelector('span[data-icon="x-alt"]')?.closest('button');
-      if (clearBtn) clearBtn.click();
+      // 3. FINAL FALLBACK: Emergency URL Navigation (The Nuclear Option)
+      if (lead.phone && lead.phone.length > 8) {
+          setStatus("Usando navegação direta por URL...");
+          const cleanPhone = lead.phone.replace(/\D/g, '');
+          // We use window.location.assign to trigger a "soft" navigation if possible, but WA usually needs a full redirect or specific handler
+          window.location.href = `https://web.whatsapp.com/send?phone=${cleanPhone}`;
+          return false; // Return false because the page will reload/redirect
+      }
       
     } else {
         setStatus("Barra de busca não encontrada.");
