@@ -1,5 +1,5 @@
-// CellManager CRM Extension (v7.1) - "The Brute Force"
-console.log("%c CRM: Extension v7.1 Brute Loaded ", "background: #128C7E; color: white; font-weight: bold;");
+// CellManager CRM Extension (v8.0) - "The Direct Fire"
+console.log("%c CRM: Extension v8.0 Direct Loaded ", "background: #128C7E; color: white; font-weight: bold;");
 
 const CONFIG = {
   supabaseUrl: "https://hzrqtolfbwnmmeliazmh.supabase.co",
@@ -160,7 +160,7 @@ function startResponsePolling() {
         const leadInfo = (await leadRes.json())[0];
         if (!leadInfo) return;
 
-        if (await checkIfLeadIsOpenStrict(msg.lead_id, leadInfo.name)) {
+        if (await checkIfLeadIsOpenStrict(msg.lead_id, leadInfo.name, leadInfo.phone)) {
            isWorking = true;
            setStatus("Enviando...");
            if (await injectAndSendWhatsApp(msg.content)) {
@@ -172,20 +172,43 @@ function startResponsePolling() {
            }
            isWorking = false;
         } else {
-           await robustSwitch(leadInfo);
+           if (await robustSwitch(leadInfo)) {
+              // Direct Fire: Sent immediately after clicking row!
+              isWorking = true;
+              setStatus("Enviando...");
+              if (await injectAndSendWhatsApp(msg.content)) {
+                  await markAsSent(msg.id);
+                  await updateLeadStatus(msg.lead_id, { has_unread: false });
+                  setStatus("Mensagem Enviada!");
+                  lastAttemptedLeadId = null;
+                  retryCount = 0;
+              }
+              isWorking = false;
+           }
         }
       }
     } catch (e) { console.error(e); }
   }, 4500);
 }
 
-async function checkIfLeadIsOpenStrict(id, name) {
+async function checkIfLeadIsOpenStrict(id, name, phone) {
   const header = document.querySelector("#main header");
   if (!header) return false;
   const current = (header.querySelector('span[title]') || header.querySelector('span[dir="auto"]'))?.innerText.trim();
-  const cleanCurrent = sanitizeName(current);
-  const cleanTarget = sanitizeName(name);
-  return cleanCurrent === cleanTarget || cleanCurrent.includes(cleanTarget);
+  if (!current) return false;
+  
+  const cleanCurrent = sanitizeName(current).toLowerCase();
+  const cleanTarget = sanitizeName(name).toLowerCase();
+  
+  const p1 = current.replace(/\D/g, '');
+  const p2 = phone ? phone.replace(/\D/g, '') : '';
+  
+  if (cleanCurrent === cleanTarget || cleanCurrent.includes(cleanTarget) || cleanTarget.includes(cleanCurrent)) return true;
+  if (p1.length >= 8 && p2.length >= 8 && (p1.includes(p2) || p2.includes(p1))) return true;
+  
+  if (activeLead && activeLead.id === id) return true;
+
+  return false;
 }
 
 async function markAsSent(id) {
@@ -255,27 +278,51 @@ async function robustSwitch(lead) {
     }
 
     if (foundAndTyped) {
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 2500)); // Increased wait for results to render
 
-      const sidebar = document.querySelector('#pane-side') || document.querySelector('#side');
+      const sidebar = document.querySelector('#pane-side') || document.querySelector('#side') || document.body;
       if (sidebar) {
-        // Click the first physically visible row
-        const rows = Array.from(sidebar.querySelectorAll('[role="row"], [role="button"], ._ak8l, ._ak8o'))
-                          .filter(el => el.offsetHeight > 0 && el.innerText.trim().length > 0);
+        // ULTIMATE RESULT SNIFFER: Target common WhatsApp list item patterns
+        const resultSelectors = [
+            '[role="row"]', 
+            '[role="listitem"]', 
+            '._ak8l', 
+            '._ak8o',
+            'div[data-testid="list-item-search"]',
+            'div[style*="translateY(72px)"]', // First row often has this offset
+            '#pane-side > div > div > div > div'
+        ];
+
+        let rows = [];
+        for (const sel of resultSelectors) {
+            const found = Array.from(sidebar.querySelectorAll(sel))
+                               .filter(el => el.offsetHeight > 10 && el.innerText.trim().length > 0);
+            if (found.length > 0) {
+                rows = found;
+                break;
+            }
+        }
         
         if (rows.length > 0) {
-          rows[0].click();
+          // Find the most 'button-like' child or just click the row
+          const target = rows[0].querySelector('[role="button"]') || rows[0];
+          target.click();
+          target.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+          
           setStatus("Chat localizado!");
+          console.log("CRM: Clicked first result row.");
           activeLead = { id: lead.id, name: lead.name };
           chrome.storage.local.set({ activeLeadId: lead.id, activeLeadName: lead.name });
-          await new Promise(r => setTimeout(r, 1500));
+          await new Promise(r => setTimeout(r, 2000)); // Wait for chat to load
+          return true;
         } else {
-          setStatus("Não encontrado na busca.");
+          setStatus("Nenhum resultado clicável.");
         }
       }
       
-      // Clear search UI gently
-      const clearBtn = document.querySelector('button[aria-label="Cancelar pesquisa"]') || document.querySelector('span[data-icon="x-alt"]')?.closest('button') || document.querySelector('span[data-icon="x-alt"]');
+      // Clear search if failed
+      const clearBtn = document.querySelector('button[aria-label="Cancelar pesquisa"]') || 
+                       document.querySelector('span[data-icon="x-alt"]')?.closest('button');
       if (clearBtn) clearBtn.click();
       
     } else {
@@ -283,18 +330,24 @@ async function robustSwitch(lead) {
     }
   } catch (e) { console.error(e); }
   isWorking = false;
+  return false;
 }
 
 async function injectAndSendWhatsApp(text) {
-  // GEOMETRIC SELECTOR: The chat input is ALWAYS the rightmost visible input!
-  const allInputs = Array.from(document.querySelectorAll('[contenteditable="true"], input[type="text"]'))
-                         .filter(el => el.offsetWidth > 0 && el.offsetHeight > 0 && el.getBoundingClientRect().left >= 0);
-  allInputs.sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
-  
-  // Rightmost is the chat input
-  const input = allInputs.length > 0 ? allInputs[allInputs.length - 1] : null;
+  const footer = document.querySelector('#main footer, footer.x1nqdnnd');
+  if (!footer) return false;
 
-  if (!input) return false;
+  let input = null;
+  for (let i = 0; i < 5; i++) {
+    input = footer.querySelector('[contenteditable="true"], [role="textbox"], [data-lexical-editor="true"]');
+    if (input) break;
+    await new Promise(r => setTimeout(r, 500));
+  }
+  
+  if (!input) {
+    setStatus("Erro: Campo de texto não encontrado");
+    return false;
+  }
 
   input.focus();
   document.execCommand('selectAll', false, null);
@@ -303,7 +356,7 @@ async function injectAndSendWhatsApp(text) {
   input.dispatchEvent(new Event('input', { bubbles: true }));
   
   await new Promise(r => setTimeout(r, 1000));
-  const sendBtn = document.querySelector('span[data-icon="send"]')?.closest('button') || document.querySelector('[data-testid="send"]');
+  const sendBtn = footer.querySelector('span[data-icon="send"]')?.closest('button') || footer.querySelector('[data-testid="send"]');
   if (sendBtn) {
     sendBtn.click();
     return true;
