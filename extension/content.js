@@ -187,14 +187,36 @@ function startResponsePolling() {
            }
         }
       }
-    } catch (e) {
-      if (e.message.includes("context invalidated")) {
-        console.warn("CRM: Contexto invalidado. Por favor, recarregue a página do WhatsApp (F5).");
-        return; // Stretches out of the infinite loop
+      } catch (e) {
+        if (e.message.includes("context invalidated")) return;
+        console.error("CRM Error:", e);
       }
-      console.error("CRM Error:", e);
-    }
-  }, 4500);
+    }, 4500);
+
+    // REAL-TIME AUTO-SYNC: Scrape open chat every 15s
+    setInterval(async () => {
+        try {
+            if (isWorking) return;
+            const openChatHeader = document.querySelector('#main header');
+            if (!openChatHeader) return;
+
+            // Attempt to identify the current lead from the header
+            const headerName = openChatHeader.innerText.trim().split('\n')[0];
+            const headerPhone = openChatHeader.innerText.match(/\+\d[\d\s-]{8,}/)?.[0]?.replace(/\D/g, '');
+
+            // Find match in our leads table (using activeLead cache if possible)
+            const { data: leads } = await supabase.from('leads').select('id, name, phone');
+            const currentLead = leads.find(l => 
+                (headerPhone && l.phone?.replace(/\D/g, '').endsWith(headerPhone)) ||
+                (headerName && l.name?.toLowerCase() === headerName.toLowerCase())
+            );
+
+            if (currentLead) {
+                console.log("CRM: Auto-syncing chat for", currentLead.name);
+                await scrapeMessages(currentLead.id);
+            }
+        } catch (e) {}
+    }, 15000);
 }
 
 async function checkIfLeadIsOpenStrict(id, name, phone) {

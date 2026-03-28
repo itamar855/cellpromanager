@@ -29,8 +29,9 @@ const roleConfig: Record<string, { label: string; color: string; icon: typeof Sh
 
 const MODULES = [
   { key: "dashboard", label: "Dashboard" },
-  { key: "vendas", label: "Vendas" },
-  { key: "estoque", label: "Estoque" },
+  {key: "vendas", label: "Vendas"},
+  {key: "leads", label: "CRM (Leads)"},
+  {key: "estoque", label: "Estoque"},
   { key: "os", label: "Ordens de Serviço" },
   { key: "clientes", label: "Clientes" },
   { key: "transacoes", label: "Transações" },

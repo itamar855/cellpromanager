@@ -16,7 +16,7 @@ import {
 import { toast } from "sonner";
 import { 
   Trash2, MoreVertical, MessageSquare, ChevronRight, Download,
-  MessageCircle, Phone, Plus, Users, Mail, Search
+  MessageCircle, Phone, Plus, Users, Mail, Search, Shield
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 // Placeholder for Instagram if not in lucide-react
@@ -38,7 +38,19 @@ const statusConfig: Record<LeadStatus, { label: string; color: string }> = {
 const allStatuses: LeadStatus[] = ['novo', 'atendimento', 'negociacao', 'concluido', 'perdido'];
 
 const Leads = () => {
-  const { user } = useAuth();
+  const { user, userRole, userPermissions } = useAuth();
+  
+  if (userRole !== "admin" && !userPermissions?.leads) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[70vh] text-muted-foreground">
+        <Shield className="h-12 w-12 mb-4 opacity-20" />
+        <h2 className="text-xl font-semibold">Acesso Restrito</h2>
+        <p>Você não tem permissão para acessar o CRM.</p>
+      </div>
+    );
+  }
+
+  const isAdmin = userRole === "admin" || userRole === "gerente";
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -422,14 +434,16 @@ const Leads = () => {
                         >
                           <MessageSquare className="h-3 w-3" />
                         </Button>
-                        <Button 
-                          size="icon" 
-                          variant="ghost"
-                          className="h-7 w-7 rounded-full hover:bg-primary/10 hover:text-primary transition-colors"
-                          onClick={() => handleEditLead(lead)}
-                        >
-                          <ChevronRight className="h-3 w-3" />
-                        </Button>
+                        {isAdmin && (
+                          <Button 
+                            size="icon" 
+                            variant="ghost"
+                            className="h-7 w-7 rounded-full hover:bg-primary/10 hover:text-primary transition-colors"
+                            onClick={() => handleEditLead(lead)}
+                          >
+                            <ChevronRight className="h-3 w-3" />
+                          </Button>
+                        )}
                         <Button 
                           size="icon" 
                           variant="ghost"
