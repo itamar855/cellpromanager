@@ -187,7 +187,13 @@ function startResponsePolling() {
            }
         }
       }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      if (e.message.includes("context invalidated")) {
+        console.warn("CRM: Contexto invalidado. Por favor, recarregue a página do WhatsApp (F5).");
+        return; // Stretches out of the infinite loop
+      }
+      console.error("CRM Error:", e);
+    }
   }, 4500);
 }
 
