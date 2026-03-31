@@ -17,7 +17,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
-  Plus, Store, MapPin, Landmark, Trash2, FileText, Phone,
+  Plus, Store, MapPin, Landmark, Trash2, FileText, Phone, Edit2,
   Upload, CheckCircle, Building, Camera, RefreshCw, ArrowDownRight, Tag, AlertCircle
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
