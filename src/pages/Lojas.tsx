@@ -43,12 +43,12 @@ type BankAccount = {
 };
 
 type StoreDetails = {
-  cnpj: string; phone: string; whatsapp: string;
+  name: string; cnpj: string; phone: string; whatsapp: string;
   instagram: string; website: string; logo_url: string; pdf_footer: string;
 };
 
 const emptyDetails: StoreDetails = {
-  cnpj: "", phone: "", whatsapp: "", instagram: "", website: "", logo_url: "", pdf_footer: "",
+  name: "", cnpj: "", phone: "", whatsapp: "", instagram: "", website: "", logo_url: "", pdf_footer: "",
 };
 
 const Lojas = () => {
@@ -161,8 +161,8 @@ const Lojas = () => {
 
   // ── Detalhes da loja ──────────────────────────────────────────────────────
   const openDetailsDialog = (store: any) => {
-    setSelectedStoreId(store.id);
     setDetailsForm({
+      name:       store.name       ?? "",
       cnpj:       store.cnpj       ?? "",
       phone:      store.phone      ?? "",
       whatsapp:   store.whatsapp   ?? "",
@@ -191,6 +191,7 @@ const Lojas = () => {
     if (!selectedStoreId) return;
     setLoading(true);
     const { error } = await supabase.from("stores").update({
+      name:       detailsForm.name,
       cnpj:       detailsForm.cnpj       || null,
       phone:      detailsForm.phone      || null,
       whatsapp:   detailsForm.whatsapp   || null,
@@ -667,6 +668,11 @@ const Lojas = () => {
                 <Building className="h-3 w-3" /> Dados da Empresa
               </p>
               <div className="space-y-1.5">
+                <Label className="text-xs">Nome da Loja</Label>
+                <Input value={detailsForm.name} onChange={e => setDetailsForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="Ex: Cell Manager Centro" className="h-10" />
+              </div>
+              <div className="space-y-1.5">
                 <Label className="text-xs">CNPJ</Label>
                 <Input value={detailsForm.cnpj} onChange={e => setDetailsForm(f => ({ ...f, cnpj: e.target.value }))}
                   placeholder="00.000.000/0000-00" className="h-10" />
@@ -721,7 +727,7 @@ const Lojas = () => {
                   </div>
                 )}
                 <div>
-                  <p className="text-sm font-bold">{stores.find(s => s.id === selectedStoreId)?.name ?? "Nome da Loja"}</p>
+                  <p className="text-sm font-bold">{detailsForm.name || "Nome da Loja"}</p>
                   {detailsForm.cnpj && <p className="text-[10px] text-muted-foreground">CNPJ: {detailsForm.cnpj}</p>}
                   {detailsForm.phone && <p className="text-[10px] text-muted-foreground">Tel: {detailsForm.phone}</p>}
                   {detailsForm.instagram && <p className="text-[10px] text-muted-foreground">📸 {detailsForm.instagram}</p>}
