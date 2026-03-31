@@ -128,7 +128,8 @@ const Caixa = () => {
   useEffect(() => { if (selectedStore) fetchRegister(selectedStore); }, [selectedStore]);
 
   const uploadReceipt = async (file: File, path: string): Promise<string | null> => {
-    const { data, error } = await supabase.storage.from("comprovantes").upload(path, file, { upsert: true });
+    const safePath = path.replace(/[^a-zA-Z0-9.\-_/]/g, "_");
+    const { data, error } = await supabase.storage.from("comprovantes").upload(safePath, file, { upsert: true });
     if (error) { toast.error("Erro no upload: " + error.message); return null; }
     const { data: urlData } = supabase.storage.from("comprovantes").getPublicUrl(data.path);
     return urlData.publicUrl;

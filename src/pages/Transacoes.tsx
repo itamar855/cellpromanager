@@ -69,7 +69,8 @@ const Transacoes = () => {
   });
 
   const uploadReceipt = async (file: File): Promise<string | null> => {
-    const fileName = `${user?.id}-${Date.now()}-${file.name}`;
+    const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+    const fileName = `${user?.id}-${Date.now()}-${safeName}`;
     const { data, error } = await supabase.storage.from("comprovantes").upload(`transacoes/${fileName}`, file, { upsert: true });
     if (error) { toast.error("Erro no upload: " + error.message); return null; }
     const { data: urlData } = supabase.storage.from("comprovantes").getPublicUrl(data.path);
