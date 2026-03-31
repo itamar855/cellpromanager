@@ -46,9 +46,9 @@ type CartItem = { acc: Accessory; qty: number; price: number };
 
 const createPendingCashEntry = async (storeId: string, userId: string, amount: number, description: string, paymentMethod: string) => {
   const { data: register } = await supabase.from("cash_registers" as any).select("id").eq("store_id", storeId).eq("status", "open").maybeSingle();
-  if (!register) return;
+  const registerId = register ? (register as any).id : null;
   await supabase.from("cash_entries" as any).insert({
-    cash_register_id: (register as any).id, store_id: storeId,
+    cash_register_id: registerId, store_id: storeId,
     type: "entrada", amount, description,
     payment_method: paymentMethod, receipt_url: null, confirmed: false, created_by: userId,
   });

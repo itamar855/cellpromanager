@@ -191,7 +191,11 @@ const Transacoes = () => {
       // Toggle off without dialog
       const { error } = await supabase.from("transactions").update({ reconciled: false }).eq("id", tx.id);
       if (error) toast.error("Erro ao remover conciliação");
-      else { toast.success("Conciliação removida"); fetchData(); }
+      else { 
+        toast.success("Conciliação removida");
+        setTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, reconciled: false } : t));
+        fetchData(); 
+      }
       return;
     }
     
@@ -206,26 +210,34 @@ const Transacoes = () => {
     if (!reconcilingTx) return;
     setLoading(true);
 
-    let finalUrL = existingReceiptUrl;
-    if (receiptFile) {
-      const url = await uploadReceipt(receiptFile);
-      if (url) finalUrL = url;
-    }
+    try {
+      let finalUrL = existingReceiptUrl;
+      if (receiptFile) {
+        const url = await uploadReceipt(receiptFile);
+        if (url) finalUrL = url;
+      }
 
-    const { error } = await supabase
-      .from("transactions")
-      .update({ reconciled: true, receipt_url: finalUrL })
-      .eq("id", reconcilingTx.id);
+      const { error } = await supabase
+        .from("transactions")
+        .update({ reconciled: true, receipt_url: finalUrL } as any)
+        .eq("id", reconcilingTx.id);
 
-    if (error) { toast.error(error.message); }
-    else {
-      toast.success("Transação conciliada!");
-      setReconcileDialogOpen(false);
-      setReconcilingTx(null);
-      setReceiptFile(null);
-      fetchData();
+      if (error) { toast.error(error.message); }
+      else {
+        // Optimistic update
+        setTransactions(prev => prev.map(t => t.id === reconcilingTx.id ? { ...t, reconciled: true, receipt_url: finalUrL } : t));
+        
+        toast.success("Transação conciliada!");
+        setReconcileDialogOpen(false);
+        setReconcilingTx(null);
+        setReceiptFile(null);
+        fetchData();
+      }
+    } catch (err: any) {
+      toast.error("Erro ao conciliar: " + err.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const storeMap = new Map(stores.map((s) => [s.id, s.name]));

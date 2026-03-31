@@ -162,22 +162,33 @@ const Caixa = () => {
     if (!confirmFile) { toast.error("Anexe o comprovante para confirmar!"); return; }
     setLoading(true);
 
-    const receiptUrl = await uploadReceipt(confirmFile, `confirmacao/${confirmEntry.id}-${Date.now()}-${confirmFile.name}`);
-    if (!receiptUrl) { setLoading(false); return; }
+    try {
+      const receiptUrl = await uploadReceipt(confirmFile, `confirmacao/${confirmEntry.id}-${Date.now()}-${confirmFile.name}`);
+      if (!receiptUrl) { setLoading(false); return; }
 
-    const { error } = await supabase
-      .from("cash_entries" as any)
-      .update({ confirmed: true, receipt_url: receiptUrl })
-      .eq("id", confirmEntry.id);
+      const { data: updatedData, error } = await supabase
+        .from("cash_entries" as any)
+        .update({ confirmed: true, receipt_url: receiptUrl })
+        .eq("id", confirmEntry.id)
+        .select();
 
-    if (error) { toast.error(error.message); setLoading(false); return; }
+      if (error) { toast.error(error.message); setLoading(false); return; }
 
-    toast.success("Lançamento confirmado!");
-    setConfirmDialog(false);
-    setConfirmEntry(null);
-    setConfirmFile(null);
-    fetchRegister(selectedStore);
-    setLoading(false);
+      // Optimistic update to UI immediately
+      setEntries(prev => prev.map(e => e.id === confirmEntry.id ? { ...e, confirmed: true, receipt_url: receiptUrl } : e));
+      
+      toast.success("Lançamento confirmado!");
+      setConfirmDialog(false);
+      setConfirmEntry(null);
+      setConfirmFile(null);
+      
+      // Still fetch to ensure total sync but the UI is already updated
+      fetchRegister(selectedStore);
+    } catch (err: any) {
+      toast.error("Erro ao confirmar: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ── Abrir caixa ───────────────────────────────────────────────────────────

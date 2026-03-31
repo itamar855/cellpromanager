@@ -59,7 +59,7 @@ const paymentLabels: Record<string, string> = {
   cartao_debito: "Cartão Débito", pix: "PIX", outro: "Outro",
 };
 
-// ── Cria cash_entry pendente no caixa aberto ──────────────────────────────
+// ── Cria cash_entry pendente no caixa aberto ou solto na loja ──────────────────────────────
 const createPendingCashEntry = async (
   storeId: string, userId: string, amount: number, description: string,
 ) => {
@@ -67,9 +67,10 @@ const createPendingCashEntry = async (
   const { data: register } = await supabase
     .from("cash_registers" as any).select("id")
     .eq("store_id", storeId).eq("status", "open").maybeSingle();
-  if (!register) return;
+  
+  const registerId = register ? (register as any).id : null;
   await supabase.from("cash_entries" as any).insert({
-    cash_register_id: (register as any).id, store_id: storeId,
+    cash_register_id: registerId, store_id: storeId,
     type: "entrada", amount, description,
     payment_method: "dinheiro", receipt_url: null,
     confirmed: false, created_by: userId,
