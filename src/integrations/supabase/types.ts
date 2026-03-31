@@ -142,6 +142,8 @@ export type Database = {
           status: string | null
           store_id: string | null
           updated_at: string
+          assigned_to: string | null
+          last_message_at: string | null
         }
         Insert: {
           created_at?: string
@@ -155,6 +157,8 @@ export type Database = {
           status?: string | null
           store_id?: string | null
           updated_at?: string
+          assigned_to?: string | null
+          last_message_at?: string | null
         }
         Update: {
           created_at?: string
@@ -168,6 +172,8 @@ export type Database = {
           status?: string | null
           store_id?: string | null
           updated_at?: string
+          assigned_to?: string | null
+          last_message_at?: string | null
         }
         Relationships: [
           {
@@ -193,6 +199,9 @@ export type Database = {
           id: string
           lead_id: string | null
           sender: string | null
+          sender_user_id: string | null
+          message_type: string | null
+          media_url: string | null
         }
         Insert: {
           content?: string | null
@@ -200,6 +209,9 @@ export type Database = {
           id?: string
           lead_id?: string | null
           sender?: string | null
+          sender_user_id?: string | null
+          message_type?: string | null
+          media_url?: string | null
         }
         Update: {
           content?: string | null
@@ -207,6 +219,9 @@ export type Database = {
           id?: string
           lead_id?: string | null
           sender?: string | null
+          sender_user_id?: string | null
+          message_type?: string | null
+          media_url?: string | null
         }
         Relationships: [
           {
@@ -282,6 +297,101 @@ export type Database = {
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_config: {
+        Row: {
+          id: string
+          store_id: string | null
+          api_url: string
+          api_key: string
+          instance_name: string
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          store_id?: string | null
+          api_url: string
+          api_key: string
+          instance_name: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          store_id?: string | null
+          api_url?: string
+          api_key?: string
+          instance_name?: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_config_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fixed_expenses: {
+        Row: {
+          id: string
+          description: string
+          amount: number
+          category: string | null
+          due_day: number | null
+          is_pf: boolean
+          store_id: string | null
+          active: boolean
+          created_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          description: string
+          amount: number
+          category?: string | null
+          due_day?: number | null
+          is_pf?: boolean
+          store_id?: string | null
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          description?: string
+          amount?: number
+          category?: string | null
+          due_day?: number | null
+          is_pf?: boolean
+          store_id?: string | null
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fixed_expenses_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixed_expenses_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]

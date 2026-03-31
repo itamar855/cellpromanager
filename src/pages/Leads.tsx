@@ -16,9 +16,12 @@ import {
 import { toast } from "sonner";
 import { 
   Trash2, MoreVertical, MessageSquare, ChevronRight, Download,
-  MessageCircle, Phone, Plus, Users, Mail, Search, Shield
+  MessageCircle, Phone, Plus, Users, Mail, Search, Shield,
+  Image as ImageIcon, Mic, Send, Paperclip, UserPlus, Filter,
+  Play, Pause, X, CheckCheck, Clock
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 // Placeholder for Instagram if not in lucide-react
 const Instagram = ({ className }: { className?: string }) => (
   <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>
@@ -58,21 +61,42 @@ const Leads = () => {
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [responseText, setResponseText] = useState("");
   const [form, setForm] = useState({
-    name: "", phone: "", email: "", source: "whatsapp", status: "novo" as LeadStatus, notes: "", store_id: ""
+    name: "", phone: "", email: "", source: "whatsapp", status: "novo" as LeadStatus, notes: "", store_id: "", assigned_to: ""
   });
   const [stores, setStores] = useState<any[]>([]);
+  const [vendedores, setVendedores] = useState<any[]>([]);
   const [chatModalOpen, setChatModalOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStore, setFilterStore] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
+  const [filterVendedor, setFilterVendedor] = useState("all");
   const [editModalOpen, setEditModalOpen] = useState(false);
+  
+  // Media states
+  const [recording, setRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
 
   const fetchData = async () => {
-    const { data: leadsData } = await supabase.from("leads").select("*").order("created_at", { ascending: false });
+    let query = supabase.from("leads").select(`
+      *,
+      assigned_user:profiles!leads_assigned_to_fkey(display_name)
+    `).order("last_message_at", { ascending: false, nullsFirst: false });
+
+    // Multi-agent filtering: only see assigned leads if not admin/gerente
+    if (userRole !== "admin" && userRole !== "gerente") {
+      query = query.eq("assigned_to", user?.id);
+    }
+
+    const { data: leadsData } = await query;
     const { data: storesData } = await supabase.from("stores").select("*");
+    const { data: profilesData } = await supabase.from("profiles").select("user_id, display_name");
+
     setLeads(leadsData ?? []);
     setStores(storesData ?? []);
+    setVendedores(profilesData ?? []);
   };
 
   const fetchMessages = async (leadId: string) => {
@@ -132,7 +156,7 @@ const Leads = () => {
     } else {
       toast.success("Lead cadastrado!");
       setDialogOpen(false);
-      setForm({ name: "", phone: "", email: "", source: "whatsapp", status: "novo", notes: "", store_id: "" });
+      setForm({ name: "", phone: "", email: "", source: "whatsapp", status: "novo", notes: "", store_id: "", assigned_to: "" });
       fetchData();
     }
     setLoading(false);
@@ -168,7 +192,8 @@ const Leads = () => {
       source: lead.source,
       status: lead.status,
       notes: lead.notes || "",
-      store_id: lead.store_id || ""
+      store_id: lead.store_id || "",
+      assigned_to: lead.assigned_to || ""
     });
     setEditModalOpen(true);
   };
@@ -183,7 +208,8 @@ const Leads = () => {
       email: form.email,
       source: form.source,
       notes: form.notes,
-      store_id: form.store_id || null
+      store_id: form.store_id || null,
+      assigned_to: form.assigned_to || null
     }).eq("id", selectedLead.id);
 
     if (error) {
@@ -201,12 +227,14 @@ const Leads = () => {
                           (lead.phone && lead.phone.includes(searchTerm));
     const matchesStore = filterStore === "all" || lead.store_id === filterStore;
     const matchesSource = filterSource === "all" || lead.source === filterSource;
-    return matchesSearch && matchesStore && matchesSource;
+    const matchesVendedor = filterVendedor === "all" || lead.assigned_to === filterVendedor;
+    return matchesSearch && matchesStore && matchesSource && matchesVendedor;
   });
 
   const kpis = {
     total: leads.length,
     newToday: leads.filter(l => new Date(l.created_at) > new Date(Date.now() - 24 * 60 * 60 * 1000)).length,
+    atendimento: leads.filter(l => l.status === 'atendimento').length,
     concluded: leads.filter(l => l.status === 'concluido').length,
     conversion: leads.length > 0 ? Math.round((leads.filter(l => l.status === 'concluido').length / leads.length) * 100) : 0
   };
@@ -235,7 +263,6 @@ const Leads = () => {
     
     setLoading(true);
     try {
-      // 1. Update phone if it was missing and user provided it
       let currentPhone = selectedLead.phone;
       if (!currentPhone && form.phone) {
         const { data: updatedLead } = await supabase
@@ -250,17 +277,57 @@ const Leads = () => {
         }
       }
 
-      // 2. Queue the message for the extension
-      const { error: queueError } = await (supabase as any).from("lead_responses")
-        .insert({
-          lead_id: selectedLead.id,
-          content: responseText,
-          status: 'pending'
+      if (!currentPhone) throw new Error("Telefone do lead é necessário.");
+
+      // Check for direct WhatsApp API config
+      const { data: waConfig } = await supabase.from("whatsapp_config").select("id").eq("is_active", true).maybeSingle();
+
+      if (waConfig) {
+        // Use Direct API
+        let mediaUrlToUpload = null;
+        let finalMessageType = 'text';
+
+        if (imageFile) {
+          const path = `chat/${Date.now()}_${imageFile.name}`;
+          const { data: uploadData, error: uploadError } = await supabase.storage.from("chat_media").upload(path, imageFile);
+          if (uploadError) throw uploadError;
+          const { data: urlData } = supabase.storage.from("chat_media").getPublicUrl(uploadData.path);
+          mediaUrlToUpload = urlData.publicUrl;
+          finalMessageType = 'image';
+        } else if (audioBlob) {
+          const path = `chat/${Date.now()}.ogg`;
+          const { data: uploadData, error: uploadError } = await supabase.storage.from("chat_media").upload(path, audioBlob);
+          if (uploadError) throw uploadError;
+          const { data: urlData } = supabase.storage.from("chat_media").getPublicUrl(uploadData.path);
+          mediaUrlToUpload = urlData.publicUrl;
+          finalMessageType = 'audio';
+        }
+
+        const { data: callRes, error: callError } = await supabase.functions.invoke('whatsapp-send', {
+          body: {
+            phone: currentPhone,
+            content: responseText,
+            messageType: finalMessageType,
+            mediaUrl: mediaUrlToUpload,
+            leadId: selectedLead.id,
+            userId: user?.id
+          }
         });
 
-      if (queueError) throw queueError;
+        if (callError) throw callError;
+        toast.success("Mensagem enviada via API!");
+      } else {
+        // Fallback or old logic (Lead Responses table for extension)
+        const { error: queueError } = await (supabase as any).from("lead_responses")
+          .insert({
+            lead_id: selectedLead.id,
+            content: responseText,
+            status: 'pending'
+          });
 
-      toast.success("Mensagem enviada para a fila! A extensão irá processar em instantes.");
+        if (queueError) throw queueError;
+        toast.success("Enviado para a fila da extensão.");
+      }
       
       // 3. Mark as atendimento if it was novo
       if (selectedLead.status === 'novo') {
@@ -302,13 +369,23 @@ const Leads = () => {
                     <div className="space-y-1.5"><Label className="text-xs">Telefone</Label><Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="(87) 99999-9999" className="h-10" /></div>
                     <div className="space-y-1.5"><Label className="text-xs">E-mail</Label><Input value={form.email} onChange={e => setForm({...form, email: e.target.value})} type="email" className="h-10" /></div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Origem</Label>
-                      <Select value={form.source} onValueChange={v => setForm({...form, source: v})}>
-                        <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                        <SelectContent><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="instagram">Instagram</SelectItem><SelectItem value="trafego_pago">Tráfego Pago</SelectItem><SelectItem value="indicacao">Indicação</SelectItem><SelectItem value="outro">Outro</SelectItem></SelectContent>
-                      </Select>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Origem</Label>
+                        <Select value={form.source} onValueChange={v => setForm({...form, source: v})}>
+                          <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="instagram">Instagram</SelectItem><SelectItem value="trafego_pago">Tráfego Pago</SelectItem><SelectItem value="indicacao">Indicação</SelectItem><SelectItem value="outro">Outro</SelectItem></SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Responsável</Label>
+                        <Select value={form.assigned_to} onValueChange={v => setForm({...form, assigned_to: v})}>
+                          <SelectTrigger className="h-10"><SelectValue placeholder="Atribuir a..." /></SelectTrigger>
+                          <SelectContent>
+                            {vendedores.map(v => <SelectItem key={v.user_id} value={v.user_id}>{v.display_name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Loja</Label>
@@ -317,7 +394,6 @@ const Leads = () => {
                         <SelectContent>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
-                  </div>
                   <div className="space-y-1.5"><Label className="text-xs">Observações</Label><Textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} className="min-h-[80px]" /></div>
                   <Button type="submit" className="w-full h-11" disabled={loading}>{loading ? "Salvando..." : "Cadastrar Lead"}</Button>
                 </form>
@@ -346,6 +422,13 @@ const Leads = () => {
             />
           </div>
           <div className="flex gap-2">
+            <Select value={filterVendedor} onValueChange={setFilterVendedor}>
+              <SelectTrigger className="w-[140px] h-10 bg-muted/20 border-border/40"><SelectValue placeholder="Vendedor" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos Vendedores</SelectItem>
+                {vendedores.map(v => <SelectItem key={v.user_id} value={v.user_id}>{v.display_name}</SelectItem>)}
+              </SelectContent>
+            </Select>
             <Select value={filterStore} onValueChange={setFilterStore}>
               <SelectTrigger className="w-[140px] h-10 bg-muted/20 border-border/40"><SelectValue placeholder="Loja" /></SelectTrigger>
               <SelectContent><SelectItem value="all">Todas Lojas</SelectItem>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
@@ -418,6 +501,10 @@ const Leads = () => {
                       {lead.source === 'whatsapp' ? <MessageCircle className="h-3 w-3 text-green-500" /> : <Instagram className="h-3 w-3 text-pink-500" />}
                     </div>
                     {lead.phone && <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Phone className="h-2.5 w-2.5" /> {lead.phone}</div>}
+                    <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground mt-1">
+                      <Users className="h-2.5 w-2.5" /> 
+                      {lead.assigned_user?.display_name || "Sem Responsável"}
+                    </div>
                     {lead.notes && <p className="text-[10px] text-muted-foreground line-clamp-2 italic">"{lead.notes}"</p>}
                     
                     <div className="flex items-center justify-between pt-2 border-t border-border/40">
@@ -541,12 +628,21 @@ const Leads = () => {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Loja</Label>
-                <Select value={form.store_id} onValueChange={v => setForm({...form, store_id: v})}>
-                  <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                <Label className="text-xs">Responsável</Label>
+                <Select value={form.assigned_to} onValueChange={v => setForm({...form, assigned_to: v})}>
+                  <SelectTrigger className="h-10"><SelectValue placeholder="Atribuir a..." /></SelectTrigger>
+                  <SelectContent>
+                    {vendedores.map(v => <SelectItem key={v.user_id} value={v.user_id}>{v.display_name}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Loja</Label>
+              <Select value={form.store_id} onValueChange={v => setForm({...form, store_id: v})}>
+                <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5"><Label className="text-xs">Observações</Label><Textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} className="min-h-[80px]" /></div>
             <Button type="submit" className="w-full h-11" disabled={loading}>{loading ? "Salvando..." : "Salvar Alterações"}</Button>
@@ -581,15 +677,29 @@ const Leads = () => {
                 </div>
               ) : (
                 chatMessages.map(msg => (
-                  <div key={msg.id} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
-                      msg.sender === 'me' 
-                      ? 'bg-[#dcf8c6] text-slate-800 rounded-tr-none border border-[#c7eba6]' 
-                      : 'bg-white border text-slate-700 rounded-tl-none'
+                  <div key={msg.id} className={`flex ${msg.sender === 'vendedor' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm relative group ${
+                      msg.sender === 'vendedor' 
+                      ? 'bg-primary/20 text-foreground rounded-tr-none border border-primary/20' 
+                      : 'bg-muted border text-slate-700 rounded-tl-none'
                     }`}>
-                      {msg.content}
-                      <div className={`text-[9px] mt-1 opacity-70 ${msg.sender === 'me' ? 'text-right' : ''}`}>
+                      {msg.message_type === 'image' ? (
+                        <div className="space-y-1">
+                          <img src={msg.media_url} className="rounded-lg max-h-60 object-cover cursor-pointer hover:opacity-90" onClick={() => window.open(msg.media_url, '_blank')} />
+                          {msg.content && <p>{msg.content}</p>}
+                        </div>
+                      ) : msg.message_type === 'audio' ? (
+                        <div className="flex items-center gap-2 bg-black/5 p-2 rounded-lg min-w-[200px]">
+                          <Mic className="h-4 w-4 text-primary" />
+                          <audio controls src={msg.media_url} className="h-8 max-w-full" />
+                        </div>
+                      ) : (
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                      )}
+                      
+                      <div className={`text-[8px] mt-1 opacity-60 flex items-center gap-1 ${msg.sender === 'vendedor' ? 'justify-end' : ''}`}>
                         {new Date(msg.created_at).toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' })}
+                        {msg.sender === 'vendedor' && <CheckCheck className="h-2.5 w-2.5 text-blue-500" />}
                       </div>
                     </div>
                   </div>
@@ -598,14 +708,75 @@ const Leads = () => {
             </div>
           </ScrollArea>
 
-          <div className="p-4 border-t bg-muted/30 flex gap-2">
-            <Button className="flex-1 h-10 gap-2 font-bold" onClick={() => {
-              setChatModalOpen(false);
-              handleResponse(selectedLead);
-            }}>
-              Responder agora
-            </Button>
-          </div>
+          <footer className="p-3 border-t bg-muted/20">
+            <div className="flex flex-col gap-2">
+              {imageFile && (
+                <div className="flex items-center gap-2 bg-primary/10 p-2 rounded-lg text-xs">
+                  <ImageIcon className="h-4 w-4" /> 
+                  <span className="truncate">{imageFile.name}</span>
+                  <Button variant="ghost" size="icon" className="h-5 w-5 ml-auto" onClick={() => setImageFile(null)}><X className="h-3 w-3" /></Button>
+                </div>
+              )}
+              {audioBlob && (
+                <div className="flex items-center gap-2 bg-primary/10 p-2 rounded-lg text-xs">
+                  <Mic className="h-4 w-4" /> 
+                  <span>Áudio gravado pronto p/ envio</span>
+                  <Button variant="ghost" size="icon" className="h-5 w-5 ml-auto" onClick={() => setAudioBlob(null)}><X className="h-3 w-3" /></Button>
+                </div>
+              )}
+              
+              <div className="flex items-center gap-2">
+                <input type="file" id="chat-img" className="hidden" accept="image/*" onChange={e => setImageFile(e.target.files?.[0] || null)} />
+                <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground" onClick={() => document.getElementById('chat-img')?.click()}>
+                  <Paperclip className="h-5 w-5" />
+                </Button>
+                
+                <Input 
+                  placeholder="Escrava uma mensagem..." 
+                  value={responseText} 
+                  onChange={e => setResponseText(e.target.value)} 
+                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendResponse()}
+                  className="flex-1"
+                />
+                
+                <Button 
+                  variant={recording ? "destructive" : "ghost"} 
+                  size="icon" 
+                  className={`h-9 w-9 ${recording ? 'animate-pulse' : 'text-muted-foreground'}`}
+                  onClick={() => {
+                    if (recording) {
+                      mediaRecorder?.stop();
+                      setRecording(false);
+                    } else {
+                      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                        const mr = new MediaRecorder(stream);
+                        const chunks: any = [];
+                        mr.ondataavailable = e => chunks.push(e.data);
+                        mr.onstop = () => {
+                          const blob = new Blob(chunks, { type: 'audio/ogg; codecs=opus' });
+                          setAudioBlob(blob);
+                        };
+                        mr.start();
+                        setMediaRecorder(mr);
+                        setRecording(true);
+                      });
+                    }
+                  }}
+                >
+                  <Mic className="h-5 w-5" />
+                </Button>
+                
+                <Button 
+                  size="icon" 
+                  className="h-9 w-9" 
+                  disabled={loading || (!responseText.trim() && !imageFile && !audioBlob)}
+                  onClick={sendResponse}
+                >
+                  {loading ? <Clock className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+          </footer>
         </DialogContent>
       </Dialog>
     </div>

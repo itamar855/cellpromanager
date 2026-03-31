@@ -18,8 +18,9 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
   Plus, Store, MapPin, Landmark, Trash2, FileText, Phone,
-  Upload, CheckCircle, Building, Camera,
+  Upload, CheckCircle, Building, Camera, RefreshCw, ArrowDownRight, Tag, AlertCircle
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import type { Tables } from "@/integrations/supabase/types";
 
 const statusLabels: Record<string, string> = {
@@ -54,12 +55,15 @@ const Lojas = () => {
   const { userRole, userPermissions } = useAuth();
   const [stores, setStores] = useState<any[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [fixedExpenses, setFixedExpenses] = useState<Tables<"fixed_expenses">[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bankDialogOpen, setBankDialogOpen] = useState(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [fixedDialogOpen, setFixedDialogOpen] = useState(false);
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [editingFixedId, setEditingFixedId] = useState<string | null>(null);
 
   const [form, setForm] = useState({ name: "", address: "", status: "active" });
   const [bankForm, setBankForm] = useState({
@@ -71,16 +75,26 @@ const Lojas = () => {
     pix_fee_percent: "0", pix_settlement_days: "0"
   });
   const [detailsForm, setDetailsForm] = useState<StoreDetails>(emptyDetails);
+  
+  const [fixedForm, setFixedForm] = useState({
+    description: "",
+    amount: "",
+    category: "",
+    due_day: "1",
+    active: true
+  });
 
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   const fetchData = async () => {
-    const [storesRes, bankRes] = await Promise.all([
+    const [storesRes, bankRes, fixedRes] = await Promise.all([
       supabase.from("stores").select("*").order("created_at"),
       supabase.from("store_bank_accounts").select("*"),
+      supabase.from("fixed_expenses").select("*").eq("is_pf", false).order("due_day"),
     ]);
     setStores(storesRes.data ?? []);
     setBankAccounts((bankRes.data as BankAccount[]) ?? []);
+    setFixedExpenses(fixedRes.data ?? []);
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -195,6 +209,88 @@ const Lojas = () => {
     setLoading(false);
   };
 
+  // ── Gastos Fixos ──────────────────────────────────────────────────────────
+  const handleSaveFixedExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStoreId || !supabase.auth.getUser()) return;
+    setLoading(true);
+
+    const userRes = await supabase.auth.getUser();
+    const userId = userRes.data.user?.id;
+
+    const payload = {
+      description: fixedForm.description,
+      amount: parseFloat(fixedForm.amount) || 0,
+      category: fixedForm.category || null,
+      due_day: parseInt(fixedForm.due_day) || 1,
+      is_pf: false,
+      store_id: selectedStoreId,
+      active: fixedForm.active,
+      created_by: userId,
+    };
+
+    if (editingFixedId) {
+      const { error } = await supabase.from("fixed_expenses").update(payload).eq("id", editingFixedId);
+      if (error) toast.error(error.message);
+      else {
+        toast.success("Gasto fixo atualizado!");
+        setFixedDialogOpen(false);
+        setEditingFixedId(null);
+        fetchData();
+      }
+    } else {
+      const { error } = await supabase.from("fixed_expenses").insert(payload);
+      if (error) toast.error(error.message);
+      else {
+        toast.success("Gasto fixo cadastrado!");
+        setFixedDialogOpen(false);
+        fetchData();
+      }
+    }
+    setLoading(false);
+  };
+
+  const deleteFixedExpense = async (id: string) => {
+    const { error } = await supabase.from("fixed_expenses").delete().eq("id", id);
+    if (error) toast.error("Erro: " + error.message);
+    else { toast.success("Gasto removido!"); fetchData(); }
+  };
+
+  const handleLaunchStoreFixedExpenses = async (storeId: string) => {
+    const storeExpenses = fixedExpenses.filter(e => e.store_id === storeId && e.active);
+    if (storeExpenses.length === 0) {
+      toast.error("Não há gastos fixos ativos para esta loja.");
+      return;
+    }
+
+    const now = new Date();
+    const monthName = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(now);
+    
+    if (!window.confirm(`Deseja lançar os ${storeExpenses.length} gastos fixos desta loja para o mês de ${monthName}?`)) return;
+
+    setLoading(true);
+    const userRes = await supabase.auth.getUser();
+    const userId = userRes.data.user?.id;
+
+    const transactionsToInsert = storeExpenses.map(e => ({
+      type: "expense_pj",
+      store_id: storeId,
+      amount: e.amount,
+      description: `[Fixo] ${e.description}`,
+      category: e.category,
+      created_by: userId,
+      expected_settlement_date: new Date(now.getFullYear(), now.getMonth(), Math.min(e.due_day || 1, 28)).toISOString(),
+      reconciled: false,
+      net_amount: e.amount
+    }));
+
+    const { error } = await supabase.from("transactions").insert(transactionsToInsert as any);
+
+    if (error) toast.error("Erro ao lançar: " + error.message);
+    else { toast.success("Gastos fixos lançados com sucesso!"); fetchData(); }
+    setLoading(false);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -302,6 +398,9 @@ const Lojas = () => {
                     <TabsTrigger value="pdf" className="flex-1 text-[10px] h-6">
                       <FileText className="h-3 w-3 mr-1" /> Detalhes PDF
                     </TabsTrigger>
+                    <TabsTrigger value="fixed" className="flex-1 text-[10px] h-6 font-bold text-primary">
+                      <RefreshCw className="h-3 w-3 mr-1" /> Gastos Fixos
+                    </TabsTrigger>
                   </TabsList>
 
                   {/* Aba Banco */}
@@ -359,6 +458,52 @@ const Lojas = () => {
                         <Building className="h-3.5 w-3.5" />
                         {store.cnpj || store.phone ? "Editar Detalhes" : "Configurar Detalhes do PDF"}
                       </Button>
+                    )}
+                  </TabsContent>
+
+                  {/* Aba Gastos Fixos */}
+                  <TabsContent value="fixed" className="mt-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] text-muted-foreground">Custos recorrentes da loja</p>
+                      {isAdmin && (
+                        <div className="flex gap-1">
+                          <Button className="h-6 text-[10px] px-2 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20"
+                            onClick={() => handleLaunchStoreFixedExpenses(store.id)} disabled={loading}>
+                            <ArrowDownRight className="h-3 w-3 mr-1" /> Lançar Mês
+                          </Button>
+                          <Button className="h-6 text-[10px] px-2 bg-transparent text-primary hover:bg-primary/10"
+                            onClick={() => { setSelectedStoreId(store.id); setEditingFixedId(null); setFixedForm({ description: "", amount: "", category: "", due_day: "1", active: true }); setFixedDialogOpen(true); }}>
+                            <Plus className="h-3 w-3 mr-1" /> Adicionar
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    {fixedExpenses.filter(e => e.store_id === store.id).length > 0 ? (
+                      <div className="space-y-1.5">
+                        {fixedExpenses.filter(e => e.store_id === store.id).map((e) => (
+                          <div key={e.id} className={`rounded-lg p-2 text-xs flex items-center justify-between gap-2 ${e.active ? "bg-muted/50" : "bg-muted/20 opacity-60"}`}>
+                            <div className="min-w-0">
+                              <p className="font-medium truncate">{e.description}</p>
+                              <p className="text-[9px] text-muted-foreground">Dia {e.due_day} · {e.category}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <p className="font-bold text-destructive">R$ {e.amount.toFixed(2)}</p>
+                              {isAdmin && (
+                                <div className="flex gap-0.5">
+                                  <Button className="h-5 w-5 p-0 bg-transparent hover:bg-muted" onClick={() => { setSelectedStoreId(store.id); setEditingFixedId(e.id); setFixedForm({ description: e.description, amount: e.amount.toString(), category: e.category || "", due_day: (e.due_day || 1).toString(), active: e.active || false }); setFixedDialogOpen(true); }}>
+                                    <Edit2 className="h-3 w-3 text-muted-foreground" />
+                                  </Button>
+                                  <Button className="h-5 w-5 p-0 bg-transparent hover:bg-destructive/10" onClick={() => deleteFixedExpense(e.id)}>
+                                    <Trash2 className="h-3 w-3 text-destructive" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">Nenhum gasto fixo configurado</p>
                     )}
                   </TabsContent>
                 </Tabs>
@@ -591,6 +736,71 @@ const Lojas = () => {
               {loading ? "Salvando..." : "Salvar Detalhes"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog Gastos Fixos ─────────────────────────────────────────── */}
+      <Dialog open={fixedDialogOpen} onOpenChange={setFixedDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <RefreshCw className="h-4 w-4 text-primary" /> 
+              {editingFixedId ? "Editar Gasto Fixo" : "Novo Gasto Fixo"}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSaveFixedExpense} className="space-y-4">
+            <div className="rounded bg-primary/5 p-3 text-[10px] text-primary flex items-start gap-2 border border-primary/10">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              Gastos fixos são modelos que você "lança" no financeiro da loja todo mês com um clique.
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Descrição do Gasto</Label>
+              <Input value={fixedForm.description} onChange={e => setFixedForm({ ...fixedForm, description: e.target.value })}
+                placeholder="Ex: Aluguel da Loja, Internet, MEI..." required className="h-10" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Valor (R$)</Label>
+                <Input type="number" step="0.01" value={fixedForm.amount} onChange={e => setFixedForm({ ...fixedForm, amount: e.target.value })}
+                  placeholder="0.00" required className="h-10" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Dia do Vencimento</Label>
+                <Input type="number" min="1" max="31" value={fixedForm.due_day} onChange={e => setFixedForm({ ...fixedForm, due_day: e.target.value })}
+                  required className="h-10" />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Categoria</Label>
+              <Select value={fixedForm.category} onValueChange={v => setFixedForm({ ...fixedForm, category: v })}>
+                <SelectTrigger className="h-10"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Aluguel">🏠 Aluguel</SelectItem>
+                  <SelectItem value="Energia/Água">⚡ Energia/Água</SelectItem>
+                  <SelectItem value="Internet">🌐 Internet</SelectItem>
+                  <SelectItem value="Salários">👥 Salários</SelectItem>
+                  <SelectItem value="Impostos">📄 Impostos / MEI</SelectItem>
+                  <SelectItem value="Assinaturas">💳 Assinaturas / Softwares</SelectItem>
+                  <SelectItem value="Outros">📦 Outros</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2 border-t mt-4">
+              <div className="flex-1">
+                <Label className="text-xs font-bold">Ativo para lançamento?</Label>
+                <p className="text-[10px] text-muted-foreground">Se desativado, não será listado no lançamento mensal.</p>
+              </div>
+              <Switch checked={fixedForm.active} onCheckedChange={v => setFixedForm({ ...fixedForm, active: v })} />
+            </div>
+
+            <Button type="submit" className="w-full h-11 font-bold shadow-lg" disabled={loading}>
+              {loading ? "Processando..." : editingFixedId ? "Salvar Alterações" : "Cadastrar Gasto Fixo"}
+            </Button>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

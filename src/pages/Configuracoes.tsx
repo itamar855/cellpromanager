@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Webhook, Trash2, Plus, Send, ExternalLink, Info } from "lucide-react";
+import { Webhook, Trash2, Plus, Send, ExternalLink, Info, MessageSquare, ShieldCheck, Globe } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 const eventLabels: Record<string, string> = {
@@ -20,16 +20,22 @@ const Configuracoes = () => {
   const { user } = useAuth();
   const [webhooks, setWebhooks] = useState<Tables<"webhooks">[]>([]);
   const [stores, setStores] = useState<Tables<"stores">[]>([]);
+  const [whatsappConfig, setWhatsappConfig] = useState<Partial<Tables<"whatsapp_config">>>({
+    api_url: "", api_key: "", instance_name: "", is_active: true
+  });
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ store_id: "", event_type: "os_status_changed", url: "" });
 
   const fetchData = async () => {
-    const [wbRes, storesRes] = await Promise.all([
+    const [wbRes, storesRes, waRes] = await Promise.all([
       supabase.from("webhooks").select("*").order("created_at", { ascending: false }),
       supabase.from("stores").select("*"),
+      supabase.from("whatsapp_config").select("*").maybeSingle(),
     ]);
     setWebhooks(wbRes.data ?? []);
     setStores(storesRes.data ?? []);
+    if (waRes.data) setWhatsappConfig(waRes.data);
+    
     if (storesRes.data && storesRes.data.length > 0 && !form.store_id) {
       setForm(f => ({ ...f, store_id: storesRes.data[0].id }));
     }
@@ -90,6 +96,34 @@ const Configuracoes = () => {
 
   const storeMap = new Map(stores.map(s => [s.id, s.name]));
 
+  const handleSaveWhatsappConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!whatsappConfig.api_url || !whatsappConfig.api_key || !whatsappConfig.instance_name) {
+      toast.error("Preencha todos os campos da API.");
+      return;
+    }
+    setLoading(true);
+    
+    const payload = {
+      api_url: whatsappConfig.api_url,
+      api_key: whatsappConfig.api_key,
+      instance_name: whatsappConfig.instance_name,
+      is_active: whatsappConfig.is_active,
+      store_id: form.store_id || (stores.length > 0 ? stores[0].id : null)
+    };
+
+    const { error } = whatsappConfig.id 
+      ? await (supabase.from("whatsapp_config") as any).update(payload).eq("id", whatsappConfig.id)
+      : await (supabase.from("whatsapp_config") as any).insert(payload);
+
+    if (error) toast.error("Erro ao salvar configuração: " + error.message);
+    else {
+      toast.success("Configuração do WhatsApp salva!");
+      fetchData();
+    }
+    setLoading(false);
+  };
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
@@ -137,6 +171,88 @@ const Configuracoes = () => {
                 <Plus className="h-4 w-4 mr-1.5" /> Adicionar
               </Button>
             </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/50 shadow-sm overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-emerald-500 to-green-600" />
+        <CardHeader>
+          <CardTitle className="font-display text-lg flex items-center gap-2">
+            <MessageSquare className="h-5 w-5 text-emerald-500" />
+            Configuração WhatsApp Profissional (Evolution API)
+          </CardTitle>
+          <CardDescription>
+            Integre sua instância da Evolution API para gerenciar leads diretamente pelo CRM com suporte a áudio e imagem.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSaveWhatsappConfig} className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold flex items-center gap-1">
+                  <Globe className="h-3 w-3" /> URL da API
+                </Label>
+                <Input 
+                  value={whatsappConfig.api_url} 
+                  onChange={e => setWhatsappConfig({...whatsappConfig, api_url: e.target.value})} 
+                  placeholder="https://sua-api.com" className="h-10 text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold flex items-center gap-1">
+                  <ShieldCheck className="h-3 w-3" /> API Key (Global ou Instance)
+                </Label>
+                <Input 
+                  type="password"
+                  value={whatsappConfig.api_key} 
+                  onChange={e => setWhatsappConfig({...whatsappConfig, api_key: e.target.value})} 
+                  placeholder="Seu Token" className="h-10 text-sm"
+                />
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Nome da Instância</Label>
+                <Input 
+                  value={whatsappConfig.instance_name} 
+                  onChange={e => setWhatsappConfig({...whatsappConfig, instance_name: e.target.value})} 
+                  placeholder="ex: LeadManager" className="h-10 text-sm"
+                />
+              </div>
+              <div className="flex items-center gap-3 pt-6">
+                <Switch 
+                  checked={whatsappConfig.is_active} 
+                  onCheckedChange={v => setWhatsappConfig({...whatsappConfig, is_active: v})}
+                />
+                <Label className="text-sm font-medium">Integração Ativa</Label>
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/20 p-3 space-y-2 mt-4">
+              <p className="text-[11px] font-bold text-emerald-700 uppercase flex items-center gap-1">
+                <Info className="h-3 w-3" /> Configuração Obrigatória no Painel Evolution
+              </p>
+              <p className="text-xs text-emerald-800/80 leading-relaxed">
+                Para que o CRM receba as mensagens, você deve configurar o <b>Webhook</b> na sua instância da Evolution API apontando para:
+              </p>
+              <div className="flex items-center gap-2 bg-white/50 p-2 rounded border border-emerald-200">
+                <code className="text-[10px] flex-1 break-all text-emerald-900">
+                  {`https://${window.location.hostname.split('.')[0]}.supabase.co/functions/v1/whatsapp-webhook`}
+                </code>
+                <Button type="button" variant="outline" className="h-7 px-2 text-[10px] border-emerald-200 text-emerald-700 font-bold" onClick={() => {
+                  navigator.clipboard.writeText(`https://${window.location.hostname.split('.')[0]}.supabase.co/functions/v1/whatsapp-webhook`);
+                  toast.success("Link copiado!");
+                }}>Copiar</Button>
+              </div>
+              <p className="text-[10px] text-emerald-700/60 mt-1">
+                Eventos necessários: <b>MESSAGES_UPSERT</b>
+              </p>
+            </div>
+
+            <Button type="submit" className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 shadow-lg text-white font-bold" disabled={loading}>
+              {loading ? "Salvando..." : (whatsappConfig as any).id ? "Atualizar Integração" : "Salvar Configurações API"}
+            </Button>
           </form>
         </CardContent>
       </Card>
