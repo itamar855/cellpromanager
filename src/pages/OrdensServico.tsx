@@ -82,245 +82,310 @@ const generateOSPdf = async (order: any, store: any, techName: string, publicUrl
   const { default: jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const W = 210;
-  const pad = 14;
+  const ML = 14;   // margin left
+  const MR = 14;   // margin right
+  const CW = W - ML - MR; // content width
   let y = 0;
 
-  const BRAND_GREEN: [number, number, number] = [16, 185, 129];
-  const BRAND_DARK: [number, number, number] = [6, 78, 59];
-  const TEXT_DARK: [number, number, number] = [17, 24, 39];
-  const TEXT_MID: [number, number, number] = [75, 85, 99];
-  const TEXT_LIGHT: [number, number, number] = [156, 163, 175];
-  const BG_LIGHT: [number, number, number] = [249, 250, 251];
-  const BORDER: [number, number, number] = [209, 213, 219];
-
-  const checkPage = (needed = 25) => {
-    if (y + needed > 272) { doc.addPage(); y = pad; }
+  // ── PALETTE ──────────────────────────────────────────────────
+  const C = {
+    brand:    [16, 185, 129]  as [number,number,number],
+    brandDk:  [6,  78,  59]   as [number,number,number],
+    textH:    [15, 23, 42]    as [number,number,number],  // headings
+    textB:    [30, 41, 59]    as [number,number,number],  // body
+    textM:    [100,116,139]   as [number,number,number],  // muted
+    textL:    [148,163,184]   as [number,number,number],  // light
+    bgSoft:   [248,250,252]   as [number,number,number],  // section bg
+    border:   [226,232,240]   as [number,number,number],
+    white:    [255,255,255]   as [number,number,number],
+    priceBg:  [236,253,245]   as [number,number,number],
+    warnBg:   [255,251,235]   as [number,number,number],
+    warnBdr:  [245,158,11]    as [number,number,number],
+    linkBg:   [239,246,255]   as [number,number,number],
+    linkBdr:  [59,130,246]    as [number,number,number],
+    linkTxt:  [37,99,235]     as [number,number,number],
   };
 
-  const storeName = store?.name ?? "Assistência Técnica";
+  const ensureSpace = (needed = 25) => {
+    if (y + needed > 275) { doc.addPage(); y = ML; }
+  };
 
-  // ── HEADER ──────────────────────────────────────────────────────────────
-  // Gradient-like header using two rects
-  doc.setFillColor(...BRAND_DARK); doc.rect(0, 0, W, 32, "F");
-  doc.setFillColor(...BRAND_GREEN); doc.rect(0, 0, W, 26, "F");
+  const storeName = store?.name ?? "Assistencia Tecnica";
 
-  let logoX = pad;
+  // ══════════════════════════════════════════════════════════════
+  // 1. HEADER (green bar with store info + OS number)
+  // ══════════════════════════════════════════════════════════════
+  doc.setFillColor(...C.brandDk); doc.rect(0, 0, W, 30, "F");
+  doc.setFillColor(...C.brand);  doc.rect(0, 0, W, 24, "F");
+
+  let cx = ML;
   if (store?.logo_url) {
-    try { doc.addImage(store.logo_url, "PNG", pad, 5, 16, 16); logoX = pad + 20; } catch (_) {}
+    try { doc.addImage(store.logo_url, "PNG", ML, 4, 16, 16); cx = ML + 20; } catch (_) {}
   }
 
-  doc.setFontSize(15); doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold");
-  doc.text(storeName, logoX, 13);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(...C.white);
+  doc.text(storeName, cx, 12);
 
-  const hInfo: string[] = [];
-  if (store?.cnpj)     hInfo.push(`CNPJ: ${store.cnpj}`);
-  if (store?.phone)    hInfo.push(`Tel: ${store.phone}`);
-  if (store?.address)  hInfo.push(store.address);
-  if (store?.instagram) hInfo.push(store.instagram);
-  doc.setFontSize(7); doc.setFont("helvetica", "normal");
-  if (hInfo.length > 0) doc.text(hInfo.slice(0, 3).join("  ·  "), logoX, 19);
-  if (hInfo.length > 3) doc.text(hInfo.slice(3).join("  ·  "), logoX, 23.5);
+  const infoParts: string[] = [];
+  if (store?.cnpj)      infoParts.push(`CNPJ: ${store.cnpj}`);
+  if (store?.phone)     infoParts.push(store.phone);
+  if (store?.address)   infoParts.push(store.address);
+  if (store?.instagram) infoParts.push(store.instagram);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(220, 255, 240);
+  if (infoParts.length) doc.text(infoParts.join("  |  "), cx, 18);
 
-  // OS number box (right side of header)
-  doc.setFillColor(0, 0, 0); doc.setGState(new (doc as any).GState({ opacity: 0.2 }));
-  doc.roundedRect(W - pad - 36, 6, 36, 15, 2, 2, "F");
+  // OS badge (right)
+  doc.setFillColor(0,0,0); doc.setGState(new (doc as any).GState({ opacity: 0.25 }));
+  doc.roundedRect(W - MR - 38, 5, 38, 16, 3, 3, "F");
   doc.setGState(new (doc as any).GState({ opacity: 1 }));
-  doc.setFontSize(7.5); doc.setFont("helvetica", "normal"); doc.setTextColor(200, 255, 230);
-  doc.text("ORDEM DE SERVIÇO", W - pad - 18, 12, { align: "center" });
-  doc.setFontSize(13); doc.setFont("helvetica", "bold"); doc.setTextColor(255, 255, 255);
-  doc.text(`#${order.order_number}`, W - pad - 18, 19, { align: "center" });
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(200, 255, 230);
+  doc.text("ORDEM DE SERVICO", W - MR - 19, 12, { align: "center" });
+  doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(...C.white);
+  doc.text(`#${order.order_number}`, W - MR - 19, 19, { align: "center" });
 
   y = 34;
 
-  // ── STATUS BADGE ────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════
+  // 2. STATUS PILL
+  // ══════════════════════════════════════════════════════════════
   const statusLabel = statusConfig[order.status]?.label ?? order.status;
   const isDelivered = order.status === "delivered";
-  const badgeColor: [number, number, number] = isDelivered ? [16, 185, 129] : [59, 130, 246];
-  doc.setFillColor(...badgeColor);
-  doc.roundedRect(pad, y, W - pad * 2, 9, 2, 2, "F");
-  doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(255, 255, 255);
-  const dateStr = new Date(order.created_at).toLocaleString("pt-BR");
-  doc.text(`● ${statusLabel.toUpperCase()}`, pad + 4, y + 6);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(8);
-  doc.text(`Emitida em ${dateStr}`, W - pad - 4, y + 6, { align: "right" });
+  const pillColor: [number,number,number] = isDelivered ? C.brand : [59, 130, 246];
+  doc.setFillColor(...pillColor);
+  doc.roundedRect(ML, y, CW, 9, 2, 2, "F");
+  doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(...C.white);
+  doc.text(statusLabel.toUpperCase(), ML + 5, y + 6);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
+  doc.text(`Emitida em ${new Date(order.created_at).toLocaleString("pt-BR")}`, W - MR - 4, y + 6, { align: "right" });
   y += 14;
 
-  // ── SECTION helper ──────────────────────────────────────────────────────
-  const section = (title: string, iconChar = "▸") => {
-    checkPage(18);
-    doc.setFillColor(...BG_LIGHT);
-    doc.roundedRect(pad, y, W - pad * 2, 8, 1.5, 1.5, "F");
-    doc.setDrawColor(...BORDER);
-    doc.roundedRect(pad, y, W - pad * 2, 8, 1.5, 1.5, "S");
-    // Left accent bar
-    doc.setFillColor(...BRAND_GREEN);
-    doc.rect(pad, y, 3, 8, "F");
-    doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(...TEXT_DARK);
-    doc.text(title.toUpperCase(), pad + 6, y + 5.5);
+  // ── HELPERS ──────────────────────────────────────────────────
+  const sectionHeader = (title: string) => {
+    ensureSpace(20);
+    doc.setFillColor(...C.bgSoft);
+    doc.roundedRect(ML, y, CW, 8, 1.5, 1.5, "F");
+    doc.setDrawColor(...C.border);
+    doc.roundedRect(ML, y, CW, 8, 1.5, 1.5, "S");
+    doc.setFillColor(...C.brand);
+    doc.rect(ML, y, 3, 8, "F"); // accent
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(...C.textH);
+    doc.text(title.toUpperCase(), ML + 7, y + 5.5);
     y += 12;
-    doc.setFont("helvetica", "normal"); doc.setTextColor(...TEXT_DARK);
   };
 
-  const field = (label: string, value: string, xOff = 0, maxW = W - pad * 2) => {
-    if (!value || value === "—") return;
-    checkPage(10);
-    doc.setFontSize(7); doc.setTextColor(...TEXT_MID); doc.setFont("helvetica", "normal");
-    doc.text(label, pad + xOff, y);
-    doc.setFontSize(9); doc.setTextColor(...TEXT_DARK);
-    const lines = doc.splitTextToSize(value, maxW - xOff - 2);
-    doc.text(lines, pad + xOff, y + 4.5);
-    y += 6.5 + (lines.length - 1) * 4.5;
+  // Prints a label + value pair at given x, with a max width for text wrapping
+  const printField = (label: string, value: string, x: number, fieldWidth: number) => {
+    if (!value || value === "-") return 0;
+    const startY = y;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(...C.textM);
+    doc.text(label, x, y);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...C.textB);
+    const lines = doc.splitTextToSize(String(value), fieldWidth - 2);
+    doc.text(lines, x, y + 4.5);
+    const consumed = 6 + (lines.length - 1) * 4;
+    return consumed;
   };
 
-  const col2 = (l1: string, v1: string, l2: string, v2: string) => {
-    const half = (W - pad * 2) / 2 - 4;
-    const ySnap = y;
-    field(l1, v1, 0, half);
-    const yAfter = y; y = ySnap;
-    field(l2, v2, half + 8, half);
-    y = Math.max(yAfter, y) + 1;
+  // Two-column row
+  const row2 = (l1: string, v1: string, l2: string, v2: string) => {
+    ensureSpace(14);
+    const colW = CW / 2;
+    const yBefore = y;
+    const h1 = printField(l1, v1, ML, colW - 4);
+    const yA = y + h1;
+    y = yBefore;
+    const h2 = printField(l2, v2, ML + colW, colW - 4);
+    const yB = y + h2;
+    y = Math.max(yA, yB) + 2;
   };
 
-  const col3 = (l1: string, v1: string, l2: string, v2: string, l3: string, v3: string) => {
-    const third = (W - pad * 2) / 3 - 3;
-    const ySnap = y;
-    field(l1, v1, 0, third);
-    const y1 = y; y = ySnap;
-    field(l2, v2, third + 4, third);
-    const y2 = y; y = ySnap;
-    field(l3, v3, (third + 4) * 2, third);
-    y = Math.max(y1, y2, y) + 1;
+  // Three-column row
+  const row3 = (l1: string, v1: string, l2: string, v2: string, l3: string, v3: string) => {
+    ensureSpace(14);
+    const colW = CW / 3;
+    const yBefore = y;
+    const h1 = printField(l1, v1, ML, colW - 2);
+    const yA = y + h1;
+    y = yBefore;
+    const h2 = printField(l2, v2, ML + colW, colW - 2);
+    const yB = y + h2;
+    y = yBefore;
+    const h3 = printField(l3, v3, ML + colW * 2, colW - 2);
+    const yC = y + h3;
+    y = Math.max(yA, yB, yC) + 2;
   };
 
-  // ── CLIENTE ──────────────────────────────────────────────────────────────
-  section("Cliente");
-  col2("Nome", order.customer_name, "Telefone", order.customer_phone ?? "");
-  if (order.customer_cpf) field("CPF", order.customer_cpf);
-  y += 3;
+  // Single full-width field
+  const rowFull = (label: string, value: string) => {
+    if (!value) return;
+    ensureSpace(12);
+    const h = printField(label, value, ML, CW);
+    y += h + 1;
+  };
 
-  // ── APARELHO ─────────────────────────────────────────────────────────────
-  section("Aparelho");
-  col2("Marca", order.device_brand, "Modelo", order.device_model);
-  col3("Cor", order.device_color ?? "—", "IMEI", order.device_imei ?? "—", "Acessórios", order.device_accessories ?? "—");
+  // ══════════════════════════════════════════════════════════════
+  // 3. CLIENTE
+  // ══════════════════════════════════════════════════════════════
+  sectionHeader("Cliente");
+  row2("Nome", order.customer_name || "", "Telefone", order.customer_phone || "");
+  if (order.customer_cpf) rowFull("CPF", order.customer_cpf);
+  y += 2;
+
+  // ══════════════════════════════════════════════════════════════
+  // 4. APARELHO
+  // ══════════════════════════════════════════════════════════════
+  sectionHeader("Aparelho");
+  row2("Marca", order.device_brand || "", "Modelo", order.device_model || "");
+  row3(
+    "Cor", order.device_color || "-",
+    "IMEI", order.device_imei || "-",
+    "Acessorios", order.device_accessories || "-"
+  );
+
+  // Password highlight box
   if (order.device_password) {
-    // Password highlight box
-    checkPage(12);
-    doc.setFillColor(254, 243, 199); doc.roundedRect(pad, y, W - pad * 2, 10, 1.5, 1.5, "F");
-    doc.setDrawColor(245, 158, 11); doc.roundedRect(pad, y, W - pad * 2, 10, 1.5, 1.5, "S");
-    doc.setFontSize(7); doc.setTextColor(120, 80, 0); doc.setFont("helvetica", "bold");
-    doc.text("🔒  SENHA / PADRÃO DE DESBLOQUEIO:", pad + 3, y + 4);
-    doc.setFontSize(9.5); doc.setTextColor(17, 24, 39); doc.setFont("helvetica", "normal");
-    doc.text(order.device_password, pad + 3, y + 8.5);
-    y += 14;
+    ensureSpace(14);
+    doc.setFillColor(...C.warnBg);
+    doc.roundedRect(ML, y, CW, 12, 2, 2, "F");
+    doc.setDrawColor(...C.warnBdr);
+    doc.roundedRect(ML, y, CW, 12, 2, 2, "S");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(120, 80, 0);
+    doc.text("SENHA / PADRAO DE DESBLOQUEIO:", ML + 4, y + 5);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(...C.textH);
+    doc.text(String(order.device_password), ML + 4, y + 10);
+    y += 16;
   }
-  if (order.device_condition) field("Condição Física", order.device_condition);
+
+  if (order.device_condition) rowFull("Condicao Fisica", order.device_condition);
+  y += 2;
+
+  // ══════════════════════════════════════════════════════════════
+  // 5. SERVICO
+  // ══════════════════════════════════════════════════════════════
+  sectionHeader("Servico");
+  rowFull("Defeito Relatado", order.reported_defect);
+  rowFull("Servico Solicitado", order.requested_service);
+  if (techName) rowFull("Tecnico Responsavel", techName);
+
+  // Price box
+  ensureSpace(20);
+  doc.setFillColor(...C.priceBg);
+  doc.roundedRect(ML, y, CW, 16, 2, 2, "F");
+  doc.setDrawColor(...C.brand);
+  doc.roundedRect(ML, y, CW, 16, 2, 2, "S");
+  const halfCW = CW / 2;
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...C.textM);
+  doc.text("Valor Estimado", ML + 5, y + 5.5);
+  doc.text("Valor Final", ML + halfCW + 5, y + 5.5);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(...C.brand);
+  doc.text(formatCurrency(Number(order.estimated_price || 0)), ML + 5, y + 13);
+  const fpColor = order.final_price ? C.textH : C.textM;
+  doc.setTextColor(...fpColor);
+  doc.text(order.final_price ? formatCurrency(Number(order.final_price)) : "-", ML + halfCW + 5, y + 13);
+  y += 20;
+
+  if (order.estimated_completion) {
+    rowFull("Previsao de Entrega", new Date(order.estimated_completion).toLocaleString("pt-BR"));
+  }
   y += 3;
 
-  // ── SERVIÇO ───────────────────────────────────────────────────────────────
-  section("Serviço");
-  field("Defeito Relatado", order.reported_defect);
-  field("Serviço Solicitado", order.requested_service);
-  if (techName) field("Técnico Responsável", techName);
-
-  // Valor box
-  checkPage(18);
-  doc.setFillColor(240, 253, 244); doc.roundedRect(pad, y, W - pad * 2, 14, 2, 2, "F");
-  doc.setDrawColor(...BRAND_GREEN); doc.roundedRect(pad, y, W - pad * 2, 14, 2, 2, "S");
-  const half2 = (W - pad * 2) / 2;
-  doc.setFontSize(7.5); doc.setTextColor(...TEXT_MID); doc.setFont("helvetica", "normal");
-  doc.text("Valor Estimado", pad + 4, y + 5);
-  doc.text("Valor Final", pad + half2 + 4, y + 5);
-  doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(...BRAND_GREEN);
-  doc.text(formatCurrency(Number(order.estimated_price || 0)), pad + 4, y + 11.5);
-  doc.setTextColor(order.final_price ? TEXT_DARK[0] : TEXT_MID[0], order.final_price ? TEXT_DARK[1] : TEXT_MID[1], order.final_price ? TEXT_DARK[2] : TEXT_MID[2]);
-  doc.text(order.final_price ? formatCurrency(Number(order.final_price)) : "—", pad + half2 + 4, y + 11.5);
-  y += 18;
-
-  if (order.estimated_completion) { field("Previsão de Entrega", new Date(order.estimated_completion).toLocaleString("pt-BR")); }
-  y += 3;
-
-  // ── PAGAMENTO ─────────────────────────────────────────────────────────────
-  const hasPay = Number(order.payment_cash) > 0 || Number(order.payment_card) > 0 || Number(order.payment_pix) > 0 || Number(order.payment_other) > 0;
+  // ══════════════════════════════════════════════════════════════
+  // 6. PAGAMENTO
+  // ══════════════════════════════════════════════════════════════
+  const hasPay = [order.payment_cash, order.payment_card, order.payment_pix, order.payment_other].some(v => Number(v) > 0);
   if (hasPay) {
-    section("Pagamento Recebido");
-    const payments: [string, number][] = [];
-    if (Number(order.payment_cash) > 0)  payments.push(["Dinheiro", Number(order.payment_cash)]);
-    if (Number(order.payment_card) > 0)  payments.push(["Cartão", Number(order.payment_card)]);
-    if (Number(order.payment_pix) > 0)   payments.push(["PIX", Number(order.payment_pix)]);
-    if (Number(order.payment_other) > 0) payments.push(["Outro", Number(order.payment_other)]);
-    const total = payments.reduce((s, [, v]) => s + v, 0);
-    payments.forEach(([label, val]) => {
-      checkPage(8);
-      doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(...TEXT_DARK);
-      doc.text(label, pad + 4, y);
+    sectionHeader("Pagamento Recebido");
+    const pays: [string, number][] = [];
+    if (Number(order.payment_cash)  > 0) pays.push(["Dinheiro", Number(order.payment_cash)]);
+    if (Number(order.payment_card)  > 0) pays.push(["Cartao",   Number(order.payment_card)]);
+    if (Number(order.payment_pix)   > 0) pays.push(["PIX",      Number(order.payment_pix)]);
+    if (Number(order.payment_other) > 0) pays.push(["Outro",    Number(order.payment_other)]);
+    const total = pays.reduce((s, [, v]) => s + v, 0);
+
+    pays.forEach(([label, val]) => {
+      ensureSpace(8);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...C.textB);
+      doc.text(label, ML + 5, y);
       doc.setFont("helvetica", "bold");
-      doc.text(formatCurrency(val), W - pad - 4, y, { align: "right" });
+      doc.text(formatCurrency(val), W - MR - 5, y, { align: "right" });
       y += 6;
     });
-    // Total line
-    doc.setDrawColor(...BORDER); doc.line(pad + 4, y, W - pad - 4, y); y += 4;
-    doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(...BRAND_GREEN);
-    doc.text("Total pago", pad + 4, y);
-    doc.text(formatCurrency(total), W - pad - 4, y, { align: "right" });
+
+    doc.setDrawColor(...C.border); doc.line(ML + 5, y, W - MR - 5, y); y += 5;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...C.brand);
+    doc.text("Total pago", ML + 5, y);
+    doc.text(formatCurrency(total), W - MR - 5, y, { align: "right" });
     y += 8;
-    if (order.payment_notes) field("Obs. Pgto", order.payment_notes);
+    if (order.payment_notes) rowFull("Obs. Pgto", order.payment_notes);
     y += 3;
   }
 
-  // ── TERMOS E ASSINATURA (nova página se necessário) ───────────────────────
-  checkPage(60);
-  section("Termos e Condições");
-  doc.setFontSize(7.5); doc.setTextColor(...TEXT_MID);
-  const termsLines = doc.splitTextToSize(TERMS_TEXT, W - pad * 2 - 4);
-  checkPage(termsLines.length * 4 + 6);
-  doc.text(termsLines, pad + 2, y);
-  y += termsLines.length * 4 + 8;
+  // ══════════════════════════════════════════════════════════════
+  // 7. TERMOS E CONDICOES
+  // ══════════════════════════════════════════════════════════════
+  ensureSpace(50);
+  sectionHeader("Termos e Condicoes");
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...C.textM);
+  const termsLines = doc.splitTextToSize(TERMS_TEXT, CW - 6);
+  ensureSpace(termsLines.length * 3.5 + 8);
+  doc.text(termsLines, ML + 3, y);
+  y += termsLines.length * 3.5 + 8;
 
-  // ── ASSINATURA ────────────────────────────────────────────────────────────
-  checkPage(38);
+  // ══════════════════════════════════════════════════════════════
+  // 8. ASSINATURA
+  // ══════════════════════════════════════════════════════════════
+  ensureSpace(40);
   if (order.signature_data) {
-    doc.setFontSize(8); doc.setTextColor(...TEXT_MID); doc.setFont("helvetica", "bold");
-    doc.text("Assinatura do Cliente:", pad, y); y += 4;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(...C.textM);
+    doc.text("Assinatura do Cliente:", ML, y); y += 4;
     try {
-      doc.addImage(order.signature_data, "PNG", pad, y, 75, 28);
-      y += 31;
+      doc.addImage(order.signature_data, "PNG", ML, y, 70, 26);
+      y += 29;
     } catch (_) {}
-    doc.setDrawColor(...BORDER); doc.line(pad, y, pad + 80, y); y += 4;
-    doc.setFontSize(7.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...TEXT_LIGHT);
-    doc.text(order.customer_name || "Cliente", pad, y); y += 8;
+    doc.setDrawColor(...C.border); doc.line(ML, y, ML + 75, y); y += 4;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...C.textL);
+    doc.text(order.customer_name || "Cliente", ML, y); y += 8;
   } else {
-    // Blank signature lines
-    doc.setDrawColor(...BORDER);
-    doc.line(pad, y + 20, pad + 75, y + 20);
-    doc.line(W - pad - 75, y + 20, W - pad, y + 20);
-    doc.setFontSize(7.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...TEXT_LIGHT);
-    doc.text("Assinatura do Cliente", pad, y + 25);
-    doc.text("Assinatura da Loja", W - pad - 75, y + 25);
-    y += 32;
+    doc.setDrawColor(...C.border);
+    doc.line(ML, y + 18, ML + 75, y + 18);
+    doc.line(W - MR - 75, y + 18, W - MR, y + 18);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...C.textL);
+    doc.text("Assinatura do Cliente", ML, y + 23);
+    doc.text("Assinatura da Loja", W - MR - 75, y + 23);
+    y += 30;
   }
 
-  // ── LINK ACOMPANHAMENTO ───────────────────────────────────────────────────
-  checkPage(20);
-  doc.setFillColor(239, 246, 255); doc.roundedRect(pad, y, W - pad * 2, 12, 2, 2, "F");
-  doc.setDrawColor(59, 130, 246); doc.roundedRect(pad, y, W - pad * 2, 12, 2, 2, "S");
-  doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(30, 64, 175);
-  doc.text("Acompanhe sua OS em:", pad + 4, y + 5);
-  doc.setFont("helvetica", "normal"); doc.setTextColor(37, 99, 235);
-  doc.text(publicUrl, pad + 4, y + 10);
-  y += 16;
+  // ══════════════════════════════════════════════════════════════
+  // 9. LINK DE ACOMPANHAMENTO
+  // ══════════════════════════════════════════════════════════════
+  ensureSpace(18);
+  doc.setFillColor(...C.linkBg);
+  doc.roundedRect(ML, y, CW, 14, 2, 2, "F");
+  doc.setDrawColor(...C.linkBdr);
+  doc.roundedRect(ML, y, CW, 14, 2, 2, "S");
+  doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(30, 64, 175);
+  doc.text("Acompanhe sua OS em:", ML + 5, y + 5.5);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...C.linkTxt);
+  doc.text(publicUrl, ML + 5, y + 10.5);
+  y += 18;
 
-  // ── RODAPÉ ────────────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════
+  // 10. RODAPE (todas as paginas)
+  // ══════════════════════════════════════════════════════════════
   const pageCount = (doc as any).internal.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
-    doc.setDrawColor(...BORDER); doc.line(pad, 285, W - pad, 285);
-    doc.setFontSize(7); doc.setTextColor(...TEXT_LIGHT);
+    doc.setDrawColor(...C.border); doc.line(ML, 285, W - MR, 285);
+    doc.setFontSize(7); doc.setTextColor(...C.textL);
     if (store?.pdf_footer) {
-      doc.setTextColor(...TEXT_MID);
-      doc.text(store.pdf_footer, W / 2, 289, { align: "center", maxWidth: W - pad * 2 });
+      doc.setTextColor(...C.textM);
+      doc.text(store.pdf_footer, W / 2, 289, { align: "center", maxWidth: CW });
     }
-    doc.setTextColor(...TEXT_LIGHT);
-    doc.text(`${storeName}  ·  Gerado em ${new Date().toLocaleString("pt-BR")}  ·  CellManager  ·  Página ${i}/${pageCount}`, W / 2, 293, { align: "center" });
+    doc.setTextColor(...C.textL);
+    doc.text(
+      `${storeName}  |  Gerado em ${new Date().toLocaleString("pt-BR")}  |  CellManager  |  Pagina ${i}/${pageCount}`,
+      W / 2, 293, { align: "center" }
+    );
   }
 
   return doc;

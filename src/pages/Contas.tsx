@@ -2,8 +2,26 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Landmark, Clock, Building, User, Briefcase, ArrowUpRight, TrendingUp, PieChart, History } from "lucide-react";
+import { Landmark, Clock, Building, User, Briefcase, ArrowUpRight, TrendingUp, PieChart, History, Plus, PlusCircle, CreditCard, PiggyBank, PlusCircle as PlusIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogTrigger 
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 type AccountBalance = {
@@ -21,7 +39,28 @@ export default function Contas() {
   const [balances, setBalances] = useState<AccountBalance[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [stores, setStores] = useState<Map<string, string>>(new Map());
+  const [rawStores, setRawStores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("pj");
+  const [bankDialogOpen, setBankDialogOpen] = useState(false);
+  const [bankForm, setBankForm] = useState({
+    bank_name: "",
+    account_type: "corrente",
+    agency: "",
+    account_number: "",
+    pix_key: "",
+    holder_name: "",
+    holder_cpf_cnpj: "",
+    owner_type: "PJ",
+    store_id: "",
+    credit_fee_percent: "0",
+    credit_settlement_days: "30",
+    debit_fee_percent: "0",
+    debit_settlement_days: "1",
+    pix_fee_percent: "0",
+    pix_settlement_days: "0"
+  });
+
   const fetchData = async () => {
     setLoading(true);
     const [accountsRes, storesRes, transactionsRes] = await Promise.all([
@@ -31,6 +70,7 @@ export default function Contas() {
     ]);
     const accounts = accountsRes.data || [];
     const storesData = storesRes.data || [];
+    setRawStores(storesData);
     const allTxs = transactionsRes.data || [];
     setTransactions(allTxs);
     setStores(new Map<string, string>(storesData.map((s) => [s.id, s.name])));
@@ -64,6 +104,48 @@ export default function Contas() {
     setBalances(computed);
     setLoading(false);
   };
+
+  const handleBankSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (bankForm.owner_type === "PJ" && !bankForm.store_id) {
+      toast.error("Para contas empresariais, selecione uma loja.");
+      return;
+    }
+    setLoading(true);
+    const { error } = await supabase.from("store_bank_accounts").insert({
+      store_id: bankForm.owner_type === "PJ" ? bankForm.store_id : rawStores[0]?.id, // Default to first store for PF tracking
+      bank_name: bankForm.bank_name,
+      account_type: bankForm.account_type,
+      agency: bankForm.agency || null,
+      account_number: bankForm.account_number || null,
+      pix_key: bankForm.pix_key || null,
+      holder_name: bankForm.holder_name || null,
+      holder_cpf_cnpj: bankForm.holder_cpf_cnpj || null,
+      owner_type: bankForm.owner_type,
+      credit_fee_percent: parseFloat(bankForm.credit_fee_percent) || 0,
+      credit_settlement_days: parseInt(bankForm.credit_settlement_days) || 30,
+      debit_fee_percent: parseFloat(bankForm.debit_fee_percent) || 0,
+      debit_settlement_days: parseInt(bankForm.debit_settlement_days) || 1,
+      pix_fee_percent: parseFloat(bankForm.pix_fee_percent) || 0,
+      pix_settlement_days: parseInt(bankForm.pix_settlement_days) || 0,
+    } as any);
+
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Conta cadastrada com sucesso!");
+      setBankDialogOpen(false);
+      setBankForm({
+        bank_name: "", account_type: "corrente", agency: "", account_number: "", pix_key: "",
+        holder_name: "", holder_cpf_cnpj: "", owner_type: "PJ", store_id: "",
+        credit_fee_percent: "0", credit_settlement_days: "30", debit_fee_percent: "0",
+        debit_settlement_days: "1", pix_fee_percent: "0", pix_settlement_days: "0"
+      });
+      fetchData();
+    }
+    setLoading(false);
+  };
+
   useEffect(() => { fetchData(); }, []);
   const pj = balances.filter((a) => !a.owner_type || a.owner_type === "PJ");
   const pf = balances.filter((a) => a.owner_type === "PF");
@@ -159,11 +241,24 @@ export default function Contas() {
     );
   };
   const EmptyState = ({ isPF = false }) => (
-    <Card className="border-dashed bg-transparent border-primary/20 py-12">
+    <Card className="border-dashed bg-transparent border-primary/20 py-12 w-full">
       <CardContent className="flex flex-col items-center justify-center text-center">
-        {isPF ? <User className="h-10 w-10 text-muted-foreground/30 mb-3" /> : <Briefcase className="h-10 w-10 text-muted-foreground/30 mb-3" />}
-        <h3 className="font-semibold">{isPF ? "Nenhuma conta pessoal" : "Nenhuma conta empresarial"}</h3>
-        <p className="text-sm text-muted-foreground mt-1 max-w-sm">Adicione suas contas em "Lojas" para começar a rastrear seu dinheiro.</p>
+        <div className="bg-muted/30 p-4 rounded-full mb-4">
+          {isPF ? <User className="h-10 w-10 text-violet-500/50" /> : <Briefcase className="h-10 w-10 text-emerald-500/50" />}
+        </div>
+        <h3 className="font-bold text-lg">{isPF ? "Nenhuma conta pessoal" : "Nenhuma conta empresarial"}</h3>
+        <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto mb-6">
+          {isPF ? "Cadastre suas contas particulares para rastrear gastos pessoais e pro-labore." : "Cadastre as contas bancárias das suas lojas para controlar o fluxo de caixa."}
+        </p>
+        <Button 
+          onClick={() => {
+            setBankForm(prev => ({ ...prev, owner_type: isPF ? "PF" : "PJ" }));
+            setBankDialogOpen(true);
+          }}
+          className={`gap-2 h-11 px-8 font-bold shadow-lg ${isPF ? "bg-violet-600 hover:bg-violet-700" : "bg-emerald-600 hover:bg-emerald-700"}`}
+        >
+          <PlusCircle className="h-4 w-4" /> Cadastrar Agora
+        </Button>
       </CardContent>
     </Card>
   );
@@ -175,8 +270,17 @@ export default function Contas() {
           <h1 className="font-display text-2xl md:text-4xl font-black text-foreground tracking-tight">Fluxo Bancário</h1>
           <p className="text-muted-foreground text-sm font-medium">Controle granular PJ & PF</p>
         </div>
+        <Button 
+          onClick={() => {
+            setBankForm(prev => ({ ...prev, owner_type: activeTab.toUpperCase() }));
+            setBankDialogOpen(true);
+          }}
+          className="gap-2 h-11 font-bold shadow-lg bg-primary hover:bg-primary/90"
+        >
+          <PlusIcon className="h-5 w-5" /> Nova Conta
+        </Button>
       </div>
-      <Tabs defaultValue="pj" className="w-full">
+      <Tabs defaultValue="pj" className="w-full" onValueChange={setActiveTab}>
         <TabsList className="bg-muted/50 p-1">
           <TabsTrigger value="pj" className="data-[state=active]:bg-background data-[state=active]:shadow-sm px-6">
             <Briefcase className="h-4 w-4 mr-2" /> Comercial (PJ)
@@ -266,6 +370,95 @@ export default function Contas() {
           {pf.length === 0 && <EmptyState isPF={true} />}
         </TabsContent>
       </Tabs>
+
+      {/* ── Dialog Cadastrar Conta Bancária ────────────────────────────────── */}
+      <Dialog open={bankDialogOpen} onOpenChange={setBankDialogOpen}>
+        <DialogContent className="max-w-xl max-h-[95dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display text-xl font-bold flex items-center gap-2">
+              <PiggyBank className="h-5 w-5 text-primary" /> Cadastrar Conta Bancária
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleBankSubmit} className="space-y-4 pt-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider">Tipo de Dono</Label>
+                <Select value={bankForm.owner_type} onValueChange={(v) => setBankForm({ ...bankForm, owner_type: v })}>
+                  <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PJ">🏢 Empresarial (PJ)</SelectItem>
+                    <SelectItem value="PF">👤 Pessoal (PF)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider">Loja / Vínculo</Label>
+                <Select value={bankForm.store_id} onValueChange={(v) => setBankForm({ ...bankForm, store_id: v })}>
+                  <SelectTrigger className="h-11"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    {rawStores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider">Nome do Banco</Label>
+                <Input value={bankForm.bank_name} onChange={(e) => setBankForm({ ...bankForm, bank_name: e.target.value })} 
+                  placeholder="Ex: Nubank, Itaú..." required className="h-11 font-medium" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider">Tipo de Conta</Label>
+                <Select value={bankForm.account_type} onValueChange={(v) => setBankForm({ ...bankForm, account_type: v })}>
+                  <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="corrente">Corrente</SelectItem>
+                    <SelectItem value="poupanca">Poupança</SelectItem>
+                    <SelectItem value="pagamento">Pagamento</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider">Agência</Label>
+                <Input value={bankForm.agency} onChange={(e) => setBankForm({ ...bankForm, agency: e.target.value })} 
+                  placeholder="0001" className="h-11 font-medium" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider">Número da Conta</Label>
+                <Input value={bankForm.account_number} onChange={(e) => setBankForm({ ...bankForm, account_number: e.target.value })} 
+                  placeholder="12345-6" className="h-11 font-medium" />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider">Chave PIX (Opcional)</Label>
+              <Input value={bankForm.pix_key} onChange={(e) => setBankForm({ ...bankForm, pix_key: e.target.value })} 
+                placeholder="E-mail, CPF, Telefone ou Aleatória" className="h-11 font-medium" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 border-t pt-4 mt-2">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Crédito - Taxa (%)</Label>
+                <Input type="number" step="0.01" value={bankForm.credit_fee_percent} 
+                  onChange={(e) => setBankForm({ ...bankForm, credit_fee_percent: e.target.value })} className="h-10" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Débito - Taxa (%)</Label>
+                <Input type="number" step="0.01" value={bankForm.debit_fee_percent} 
+                  onChange={(e) => setBankForm({ ...bankForm, debit_fee_percent: e.target.value })} className="h-10" />
+              </div>
+            </div>
+
+            <Button type="submit" className="w-full h-12 font-black text-lg shadow-xl mt-4" disabled={loading}>
+              {loading ? "Processando..." : "Finalizar Cadastro"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
