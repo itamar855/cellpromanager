@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, ArrowUpDown, ArrowUpRight, ArrowDownRight, Tag, Trash2, Edit2 } from "lucide-react";
+import { Plus, ArrowUpDown, ArrowUpRight, ArrowDownRight, Tag, Trash2, Edit2, Camera, Upload, Receipt, CheckCircle, Loader2 } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -50,6 +50,14 @@ const Transacoes = () => {
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+  
+  const [reconcileDialogOpen, setReconcileDialogOpen] = useState(false);
+  const [reconcilingTx, setReconcilingTx] = useState<Tables<"transactions"> | null>(null);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [existingReceiptUrl, setExistingReceiptUrl] = useState<string | null>(null);
   const [form, setForm] = useState({ 
     type: "sale", 
     amount: "", 
@@ -59,6 +67,14 @@ const Transacoes = () => {
     source_account_id: "", 
     destination_account_id: "" 
   });
+
+  const uploadReceipt = async (file: File): Promise<string | null> => {
+    const fileName = `${user?.id}-${Date.now()}-${file.name}`;
+    const { data, error } = await supabase.storage.from("comprovantes").upload(`transacoes/${fileName}`, file, { upsert: true });
+    if (error) { toast.error("Erro no upload: " + error.message); return null; }
+    const { data: urlData } = supabase.storage.from("comprovantes").getPublicUrl(data.path);
+    return urlData.publicUrl;
+  };
 
   const fetchData = async () => {
     const [txRes, storesRes, accountsRes] = await Promise.all([
@@ -91,7 +107,13 @@ const Transacoes = () => {
       source_account_id: form.source_account_id || null,
       destination_account_id: form.destination_account_id || null,
       net_amount: parseFloat(form.amount),
+      receipt_url: existingReceiptUrl
     };
+
+    if (receiptFile) {
+      const url = await uploadReceipt(receiptFile);
+      if (url) payload.receipt_url = url;
+    }
 
     if (editingId) {
       const { error } = await supabase
@@ -104,6 +126,8 @@ const Transacoes = () => {
         toast.success("Transação atualizada!");
         setDialogOpen(false);
         setEditingId(null);
+        setReceiptFile(null);
+        setExistingReceiptUrl(null);
         setForm({ type: "sale", amount: "", description: "", category: "", store_id: "", source_account_id: "", destination_account_id: "" });
         fetchData();
       }
@@ -119,6 +143,8 @@ const Transacoes = () => {
       else {
         toast.success("Transação registrada!");
         setDialogOpen(false);
+        setReceiptFile(null);
+        setExistingReceiptUrl(null);
         setForm({ type: "sale", amount: "", description: "", category: "", store_id: "", source_account_id: "", destination_account_id: "" });
         fetchData();
       }
@@ -137,6 +163,8 @@ const Transacoes = () => {
       source_account_id: tx.source_account_id || "",
       destination_account_id: tx.destination_account_id || "",
     });
+    setExistingReceiptUrl(tx.receipt_url || null);
+    setReceiptFile(null);
     setDialogOpen(true);
   };
 
@@ -158,11 +186,46 @@ const Transacoes = () => {
     setLoading(false);
   };
 
-  const handleReconcile = async (id: string, current: boolean) => {
-    const { error } = await supabase.from("transactions" as any).update({ reconciled: !current }).eq("id", id);
-    if (error) toast.error("Erro ao conciliar");
-    else toast.success(current ? "Conciliação removida" : "Transação conciliada com sucesso!");
-    fetchData();
+  const handleReconcile = async (tx: Tables<"transactions">) => {
+    if (tx.reconciled) {
+      // Toggle off without dialog
+      const { error } = await supabase.from("transactions").update({ reconciled: false }).eq("id", tx.id);
+      if (error) toast.error("Erro ao remover conciliação");
+      else { toast.success("Conciliação removida"); fetchData(); }
+      return;
+    }
+    
+    // Open dialog to confirm with receipt
+    setReconcilingTx(tx);
+    setReceiptFile(null);
+    setExistingReceiptUrl(tx.receipt_url || null);
+    setReconcileDialogOpen(true);
+  };
+
+  const handleConfirmReconcile = async () => {
+    if (!reconcilingTx) return;
+    setLoading(true);
+
+    let finalUrL = existingReceiptUrl;
+    if (receiptFile) {
+      const url = await uploadReceipt(receiptFile);
+      if (url) finalUrL = url;
+    }
+
+    const { error } = await supabase
+      .from("transactions")
+      .update({ reconciled: true, receipt_url: finalUrL })
+      .eq("id", reconcilingTx.id);
+
+    if (error) { toast.error(error.message); }
+    else {
+      toast.success("Transação conciliada!");
+      setReconcileDialogOpen(false);
+      setReconcilingTx(null);
+      setReceiptFile(null);
+      fetchData();
+    }
+    setLoading(false);
   };
 
   const storeMap = new Map(stores.map((s) => [s.id, s.name]));
@@ -171,6 +234,12 @@ const Transacoes = () => {
 
   return (
     <div className="space-y-4">
+      {/* Hidden file inputs */}
+      <input ref={fileInputRef} type="file" accept="image/*,application/pdf" className="hidden"
+        onChange={e => { if (e.target.files?.[0]) setReceiptFile(e.target.files[0]); e.target.value = ""; }} />
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
+        onChange={e => { if (e.target.files?.[0]) setReceiptFile(e.target.files[0]); e.target.value = ""; }} />
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="font-display text-xl md:text-3xl font-bold tracking-tight">Transações</h1>
@@ -262,6 +331,40 @@ const Transacoes = () => {
                   </Select>
                 </div>
               )}
+
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold flex items-center gap-1">
+                  <Receipt className="h-3 w-3" /> Comprovante (Opcional)
+                </Label>
+                {receiptFile ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
+                    <CheckCircle className="h-4 w-4 text-primary shrink-0" />
+                    <p className="text-xs text-primary truncate flex-1">{receiptFile.name}</p>
+                    <Button type="button" variant="ghost" className="h-6 text-[10px] hover:bg-muted px-2" onClick={() => setReceiptFile(null)}>Remover</Button>
+                  </div>
+                ) : existingReceiptUrl ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/5 p-2.5">
+                    <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
+                    <p className="text-xs text-green-500 truncate flex-1">Comprovante já enviado</p>
+                    <div className="flex gap-1">
+                      <Button type="button" variant="ghost" className="h-6 text-[10px] hover:bg-muted px-2" onClick={() => window.open(existingReceiptUrl, "_blank")}>Ver</Button>
+                      <Button type="button" variant="ghost" className="h-6 text-[10px] text-destructive hover:bg-destructive/10 px-2" onClick={() => setExistingReceiptUrl(null)}>Trocar</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button type="button" className="h-10 gap-2 text-xs bg-transparent border border-border text-foreground hover:bg-muted"
+                      onClick={() => cameraInputRef.current?.click()}>
+                      <Camera className="h-4 w-4" /> Tirar Foto
+                    </Button>
+                    <Button type="button" className="h-10 gap-2 text-xs bg-transparent border border-border text-foreground hover:bg-muted"
+                      onClick={() => fileInputRef.current?.click()}>
+                      <Upload className="h-4 w-4" /> Galeria
+                    </Button>
+                  </div>
+                )}
+              </div>
+
               <Button type="submit" className="w-full h-11 font-bold shadow-lg" disabled={loading}>
                 {loading ? "Processando..." : "Confirmar Lançamento"}
               </Button>
@@ -299,6 +402,13 @@ const Transacoes = () => {
                         {tx.destination_account_id ? accountMap.get(tx.destination_account_id) : ""}
                       </span>
                     )}
+                    {tx.receipt_url && (
+                      <a href={tx.receipt_url} target="_blank" rel="noreferrer"
+                         className="text-[10px] text-primary underline flex items-center gap-0.5"
+                         onClick={e => e.stopPropagation()}>
+                        <Receipt className="h-2.5 w-2.5" /> Ver Comprovante
+                      </a>
+                    )}
                     <span className="text-[10px] text-muted-foreground ml-auto">{new Date(tx.created_at).toLocaleDateString("pt-BR")}</span>
                   </div>
                 </div>
@@ -309,7 +419,7 @@ const Transacoes = () => {
                     {tx.type === "transfer" ? "" : isIncome(tx.type) ? "+" : "-"}{formatCurrency(Number(tx.amount))}
                   </p>
                   <button 
-                    onClick={() => handleReconcile(tx.id, tx.reconciled || false)}
+                    onClick={() => handleReconcile(tx)}
                     className={`mt-1 h-5 px-1.5 rounded text-[9px] font-bold border transition-all ${
                       tx.reconciled 
                         ? "bg-green-500/10 text-green-600 border-green-500/20" 
@@ -366,6 +476,54 @@ const Transacoes = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Confirmation Dialog with Receipt */}
+      <Dialog open={reconcileDialogOpen} onOpenChange={setReconcileDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle className="font-display flex items-center gap-2">Confirmar Transação</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            {reconcilingTx && (
+              <div className="rounded-lg bg-muted/50 p-3 text-xs space-y-1">
+                <div className="flex justify-between"><span className="text-muted-foreground">Descrição</span><span className="font-medium">{reconcilingTx.description || "-"}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Valor</span><span className="font-bold">{formatCurrency(Number(reconcilingTx.amount))}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Data</span><span>{new Date(reconcilingTx.created_at).toLocaleDateString("pt-BR")}</span></div>
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Label className="text-[10px] font-semibold flex items-center gap-1">
+                <Receipt className="h-3 w-3" /> Anexar Comprovante
+              </Label>
+              {receiptFile ? (
+                <div className="flex items-center gap-2 rounded bg-primary/10 p-2 text-[10px] text-primary border border-primary/20 font-medium font-display">
+                  <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate flex-1">{receiptFile.name}</span>
+                  <button onClick={() => setReceiptFile(null)} className="hover:underline">Remover</button>
+                </div>
+              ) : existingReceiptUrl ? (
+                <div className="flex items-center gap-2 rounded bg-green-500/10 p-2 text-[10px] text-green-600 border border-green-500/20 font-medium font-display">
+                  <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate flex-1">Comprovante já enviado</span>
+                  <button onClick={() => setExistingReceiptUrl(null)} className="text-destructive hover:underline">Trocar</button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button type="button" variant="outline" className="h-10 text-xs gap-1.5" onClick={() => cameraInputRef.current?.click()}>
+                    <Camera className="h-4 w-4" /> Tirar Foto
+                  </Button>
+                  <Button type="button" variant="outline" className="h-10 text-xs gap-1.5" onClick={() => fileInputRef.current?.click()}>
+                    <Upload className="h-4 w-4" /> Galeria
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <Button className="w-full h-11 font-bold" onClick={handleConfirmReconcile} disabled={loading}>
+              {loading ? "Processando..." : "Confirmar e Conciliar"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

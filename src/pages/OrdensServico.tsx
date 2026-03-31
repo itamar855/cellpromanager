@@ -20,13 +20,13 @@ import { toast } from "sonner";
 import {
   Plus, Wrench, Search, Clock, CheckCircle2, AlertCircle, Package,
   Phone, User, FileText, MessageCircle, Banknote, CreditCard, QrCode, DollarSign,
+  Printer, ChevronRight, ChevronLeft, Camera, Upload, Receipt,
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { OsChecklist, ChecklistData } from "@/components/OsChecklist";
 import { OsPhotoGallery } from "@/components/OsPhotoGallery";
 import { OsParts } from "@/components/OsParts";
-import { Printer } from "lucide-react";
 import { triggerWebhook } from "@/utils/webhookSender";
 import { logAction } from "@/utils/auditLogger";
 
@@ -388,6 +388,11 @@ const OrdensServico = () => {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "kanban">("kanban");
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [existingReceiptUrl, setExistingReceiptUrl] = useState<string | null>(null);
+
   // Update service form (shown in detail dialog)
   const [updateForm, setUpdateForm] = useState({
     final_price: "", technician_id: "",
@@ -421,6 +426,14 @@ const OrdensServico = () => {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  const uploadReceipt = async (file: File): Promise<string | null> => {
+    const fileName = `${detailOrder?.order_number}-${Date.now()}-${file.name}`;
+    const { data, error } = await supabase.storage.from("comprovantes").upload(`os-pagamentos/${fileName}`, file, { upsert: true });
+    if (error) { toast.error("Erro no upload: " + error.message); return null; }
+    const { data: urlData } = supabase.storage.from("comprovantes").getPublicUrl(data.path);
+    return urlData.publicUrl;
+  };
 
   useEffect(() => {
     const channel = supabase.channel("service_orders_changes")
@@ -539,6 +552,13 @@ const OrdensServico = () => {
     if (updateForm.payment_notes) updates.payment_notes = updateForm.payment_notes;
     updates.exit_checklist = updateForm.exit_checklist;
     if (updateForm.warranty_end_date) updates.warranty_end_date = new Date(updateForm.warranty_end_date).toISOString();
+    
+    updates.receipt_url = existingReceiptUrl;
+
+    if (receiptFile) {
+      const url = await uploadReceipt(receiptFile);
+      if (url) updates.receipt_url = url;
+    }
 
     const { error } = await supabase.from("service_orders").update(updates).eq("id", detailOrder.id);
     if (error) { toast.error(error.message); }
@@ -647,6 +667,12 @@ const OrdensServico = () => {
 
   return (
     <div className="space-y-4">
+      {/* Hidden file inputs */}
+      <input ref={fileInputRef} type="file" accept="image/*,application/pdf" className="hidden"
+        onChange={e => { if (e.target.files?.[0]) setReceiptFile(e.target.files[0]); e.target.value = ""; }} />
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
+        onChange={e => { if (e.target.files?.[0]) setReceiptFile(e.target.files[0]); e.target.value = ""; }} />
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="font-display text-xl md:text-3xl font-bold tracking-tight">Ordens de Serviço</h1>
@@ -1013,6 +1039,15 @@ const OrdensServico = () => {
                     {Number(detailOrder.payment_other) > 0 && <p><span className="text-muted-foreground">Outro:</span> {formatCurrency(Number(detailOrder.payment_other))}</p>}
                     <p className="font-bold text-primary">Total: {formatCurrency(totalPaid(detailOrder))}</p>
                     {detailOrder.payment_notes && <p className="text-muted-foreground">{detailOrder.payment_notes}</p>}
+                    
+                    {detailOrder.receipt_url && (
+                      <div className="mt-2 pt-2 border-t border-border/50">
+                        <a href={detailOrder.receipt_url} target="_blank" rel="noreferrer"
+                           className="text-[10px] text-primary underline flex items-center gap-1 font-semibold">
+                          <Receipt className="h-3 w-3" /> Ver Comprovante de Pagamento
+                        </a>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1097,6 +1132,34 @@ const OrdensServico = () => {
                     <div className="space-y-1.5">
                       <Label className="text-xs">Obs. de Pagamento</Label>
                       <Input value={updateForm.payment_notes} onChange={e => setUpdateForm(f => ({ ...f, payment_notes: e.target.value }))} placeholder="Ex: Parte em dinheiro, parte no cartão" className="h-9" />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-semibold flex items-center gap-1">
+                        <Receipt className="h-3 w-3" /> Anexar Comprovante
+                      </Label>
+                      {receiptFile ? (
+                        <div className="flex items-center gap-2 rounded bg-primary/10 p-2 text-[10px] text-primary border border-primary/20 font-medium">
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate flex-1">{receiptFile.name}</span>
+                          <button onClick={() => setReceiptFile(null)} className="hover:underline">Remover</button>
+                        </div>
+                      ) : existingReceiptUrl ? (
+                        <div className="flex items-center gap-2 rounded bg-green-500/10 p-2 text-[10px] text-green-600 border border-green-500/20 font-medium">
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate flex-1">Comprovante já enviado</span>
+                          <button onClick={() => setExistingReceiptUrl(null)} className="text-destructive hover:underline">Trocar</button>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button type="button" variant="outline" className="h-8 text-[10px] gap-1.5" onClick={() => cameraInputRef.current?.click()}>
+                            <Camera className="h-3 w-3" /> Tirar Foto
+                          </Button>
+                          <Button type="button" variant="outline" className="h-8 text-[10px] gap-1.5" onClick={() => fileInputRef.current?.click()}>
+                            <Upload className="h-3 w-3" /> Galeria
+                          </Button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Total pago preview */}

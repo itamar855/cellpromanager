@@ -496,6 +496,7 @@ export type Database = {
           terms_text: string | null
           updated_at: string
           warranty_end_date: string | null
+          receipt_url: string | null
         }
         Insert: {
           completed_at?: string | null
@@ -531,6 +532,7 @@ export type Database = {
           terms_text?: string | null
           updated_at?: string
           warranty_end_date?: string | null
+          receipt_url?: string | null
         }
         Update: {
           completed_at?: string | null
@@ -568,6 +570,7 @@ export type Database = {
           terms_text?: string | null
           updated_at?: string
           warranty_end_date?: string | null
+          receipt_url?: string | null
         }
         Relationships: [
           {
@@ -706,6 +709,7 @@ export type Database = {
           source_account_id: string | null
           store_id: string | null
           type: string
+          receipt_url: string | null
         }
         Insert: {
           amount: number
@@ -722,6 +726,7 @@ export type Database = {
           source_account_id?: string | null
           store_id?: string | null
           type: string
+          receipt_url?: string | null
         }
         Update: {
           amount?: number
@@ -738,6 +743,7 @@ export type Database = {
           source_account_id?: string | null
           store_id?: string | null
           type?: string
+          receipt_url?: string | null
         }
         Relationships: [
           {

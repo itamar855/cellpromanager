@@ -162,7 +162,7 @@ const Caixa = () => {
     if (!confirmFile) { toast.error("Anexe o comprovante para confirmar!"); return; }
     setLoading(true);
 
-    const receiptUrl = await uploadReceipt(confirmFile, `confirmacao/${confirmEntry.id}-${Date.now()}`);
+    const receiptUrl = await uploadReceipt(confirmFile, `confirmacao/${confirmEntry.id}-${Date.now()}-${confirmFile.name}`);
     if (!receiptUrl) { setLoading(false); return; }
 
     const { error } = await supabase
@@ -185,7 +185,7 @@ const Caixa = () => {
     if (!user || !selectedStore) return;
     setLoading(true);
     let receiptUrl: string | null = null;
-    if (openForm.receipt) receiptUrl = await uploadReceipt(openForm.receipt, `abertura/${selectedStore}-${Date.now()}`);
+    if (openForm.receipt) receiptUrl = await uploadReceipt(openForm.receipt, `abertura/${selectedStore}-${Date.now()}-${openForm.receipt.name}`);
 
     const { data: reg, error } = await supabase.from("cash_registers" as any).insert({
       store_id: selectedStore, opened_by: user.id,
@@ -231,7 +231,7 @@ const Caixa = () => {
     }
     setLoading(true);
     let receiptUrl: string | null = null;
-    if (closeForm.receipt) receiptUrl = await uploadReceipt(closeForm.receipt, `fechamento/${selectedStore}-${Date.now()}`);
+    if (closeForm.receipt) receiptUrl = await uploadReceipt(closeForm.receipt, `fechamento/${selectedStore}-${Date.now()}-${closeForm.receipt.name}`);
 
     await supabase.from("cash_registers" as any).update({
       closed_by: user.id, closing_amount: closingAmount,
