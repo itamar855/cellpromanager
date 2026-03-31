@@ -82,309 +82,371 @@ const generateOSPdf = async (order: any, store: any, techName: string, publicUrl
   const { default: jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const W = 210;
-  const ML = 14;   // margin left
-  const MR = 14;   // margin right
-  const CW = W - ML - MR; // content width
+  const M = 12; // margins
+  const CW = W - M * 2; // content width
   let y = 0;
 
-  // ── PALETTE ──────────────────────────────────────────────────
-  const C = {
-    brand:    [16, 185, 129]  as [number,number,number],
-    brandDk:  [6,  78,  59]   as [number,number,number],
-    textH:    [15, 23, 42]    as [number,number,number],  // headings
-    textB:    [30, 41, 59]    as [number,number,number],  // body
-    textM:    [100,116,139]   as [number,number,number],  // muted
-    textL:    [148,163,184]   as [number,number,number],  // light
-    bgSoft:   [248,250,252]   as [number,number,number],  // section bg
-    border:   [226,232,240]   as [number,number,number],
-    white:    [255,255,255]   as [number,number,number],
-    priceBg:  [236,253,245]   as [number,number,number],
-    warnBg:   [255,251,235]   as [number,number,number],
-    warnBdr:  [245,158,11]    as [number,number,number],
-    linkBg:   [239,246,255]   as [number,number,number],
-    linkBdr:  [59,130,246]    as [number,number,number],
-    linkTxt:  [37,99,235]     as [number,number,number],
+  // ── B&W PALETTE ─────────────────────────────────────────────
+  const BLACK: [number, number, number] = [0, 0, 0];
+  const DARK: [number, number, number] = [33, 33, 33];
+  const MID: [number, number, number] = [100, 100, 100];
+  const SOFT: [number, number, number] = [160, 160, 160];
+  const LIGHT: [number, number, number] = [220, 220, 220];
+  const BG: [number, number, number] = [245, 245, 245];
+  const WHITE: [number, number, number] = [255, 255, 255];
+
+  const ensureSpace = (needed: number) => {
+    if (y + needed > 278) { doc.addPage(); y = M; }
   };
 
-  const ensureSpace = (needed = 25) => {
-    if (y + needed > 275) { doc.addPage(); y = ML; }
-  };
+  const storeName = store?.name || "Assistencia Tecnica";
 
-  const storeName = store?.name ?? "Assistencia Tecnica";
+  // ══════════════════════════════════════════════════════════════════════════
+  //  HEADER — Solid black bar with white text
+  // ══════════════════════════════════════════════════════════════════════════
+  doc.setFillColor(...BLACK);
+  doc.rect(0, 0, W, 28, "F");
 
-  // ══════════════════════════════════════════════════════════════
-  // 1. HEADER (green bar with store info + OS number)
-  // ══════════════════════════════════════════════════════════════
-  doc.setFillColor(...C.brandDk); doc.rect(0, 0, W, 30, "F");
-  doc.setFillColor(...C.brand);  doc.rect(0, 0, W, 24, "F");
-
-  let cx = ML;
+  let tx = M;
   if (store?.logo_url) {
-    try { doc.addImage(store.logo_url, "PNG", ML, 4, 16, 16); cx = ML + 20; } catch (_) {}
+    try {
+      // White circle behind logo
+      doc.setFillColor(...WHITE);
+      doc.circle(M + 8, 14, 9, "F");
+      doc.addImage(store.logo_url, "PNG", M + 1.5, 7.5, 13, 13);
+      tx = M + 22;
+    } catch (_) {}
   }
 
-  doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(...C.white);
-  doc.text(storeName, cx, 12);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(...WHITE);
+  doc.text(storeName.toUpperCase(), tx, 13);
 
-  const infoParts: string[] = [];
-  if (store?.cnpj)      infoParts.push(`CNPJ: ${store.cnpj}`);
-  if (store?.phone)     infoParts.push(store.phone);
-  if (store?.address)   infoParts.push(store.address);
-  if (store?.instagram) infoParts.push(store.instagram);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(220, 255, 240);
-  if (infoParts.length) doc.text(infoParts.join("  |  "), cx, 18);
+  // Sub-info line
+  const hParts: string[] = [];
+  if (store?.cnpj) hParts.push(`CNPJ: ${store.cnpj}`);
+  if (store?.phone) hParts.push(store.phone);
+  if (store?.address) hParts.push(store.address);
+  if (store?.instagram) hParts.push(store.instagram);
+  if (hParts.length) {
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(180, 180, 180);
+    doc.text(hParts.join("   |   "), tx, 19);
+  }
 
-  // OS badge (right)
-  doc.setFillColor(0,0,0); doc.setGState(new (doc as any).GState({ opacity: 0.25 }));
-  doc.roundedRect(W - MR - 38, 5, 38, 16, 3, 3, "F");
-  doc.setGState(new (doc as any).GState({ opacity: 1 }));
-  doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(200, 255, 230);
-  doc.text("ORDEM DE SERVICO", W - MR - 19, 12, { align: "center" });
-  doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(...C.white);
-  doc.text(`#${order.order_number}`, W - MR - 19, 19, { align: "center" });
+  // OS number badge (right side)
+  doc.setFillColor(...WHITE);
+  doc.roundedRect(W - M - 40, 5, 40, 18, 2, 2, "F");
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(...MID);
+  doc.text("ORDEM DE SERVICO", W - M - 20, 12, { align: "center" });
+  doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(...BLACK);
+  doc.text(`#${order.order_number}`, W - M - 20, 20, { align: "center" });
 
-  y = 34;
+  y = 32;
 
-  // ══════════════════════════════════════════════════════════════
-  // 2. STATUS PILL
-  // ══════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
+  //  STATUS + DATE ROW
+  // ══════════════════════════════════════════════════════════════════════════
   const statusLabel = statusConfig[order.status]?.label ?? order.status;
-  const isDelivered = order.status === "delivered";
-  const pillColor: [number,number,number] = isDelivered ? C.brand : [59, 130, 246];
-  doc.setFillColor(...pillColor);
-  doc.roundedRect(ML, y, CW, 9, 2, 2, "F");
-  doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(...C.white);
-  doc.text(statusLabel.toUpperCase(), ML + 5, y + 6);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
-  doc.text(`Emitida em ${new Date(order.created_at).toLocaleString("pt-BR")}`, W - MR - 4, y + 6, { align: "right" });
+  const dateStr = new Date(order.created_at).toLocaleString("pt-BR");
+
+  // Status pill (left)
+  doc.setFillColor(...BLACK);
+  const statusW = doc.getStringUnitWidth(statusLabel.toUpperCase()) * 9 / doc.internal.scaleFactor + 12;
+  doc.roundedRect(M, y, Math.max(statusW, 40), 8, 1.5, 1.5, "F");
+  doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(...WHITE);
+  doc.text(statusLabel.toUpperCase(), M + 5, y + 5.5);
+
+  // Date (right)
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...MID);
+  doc.text(`Emitida em ${dateStr}`, W - M, y + 5.5, { align: "right" });
+
   y += 14;
 
-  // ── HELPERS ──────────────────────────────────────────────────
-  const sectionHeader = (title: string) => {
-    ensureSpace(20);
-    doc.setFillColor(...C.bgSoft);
-    doc.roundedRect(ML, y, CW, 8, 1.5, 1.5, "F");
-    doc.setDrawColor(...C.border);
-    doc.roundedRect(ML, y, CW, 8, 1.5, 1.5, "S");
-    doc.setFillColor(...C.brand);
-    doc.rect(ML, y, 3, 8, "F"); // accent
-    doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(...C.textH);
-    doc.text(title.toUpperCase(), ML + 7, y + 5.5);
-    y += 12;
-  };
+  // ══════════════════════════════════════════════════════════════════════════
+  //  HELPERS
+  // ══════════════════════════════════════════════════════════════════════════
 
-  // Prints a label + value pair at given x, with a max width for text wrapping
-  const printField = (label: string, value: string, x: number, fieldWidth: number) => {
-    if (!value || value === "-") return 0;
+  // Section box with solid top border
+  const sectionBox = (title: string, contentFn: () => void) => {
+    ensureSpace(30);
     const startY = y;
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(...C.textM);
-    doc.text(label, x, y);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...C.textB);
-    const lines = doc.splitTextToSize(String(value), fieldWidth - 2);
-    doc.text(lines, x, y + 4.5);
-    const consumed = 6 + (lines.length - 1) * 4;
-    return consumed;
+
+    // Title bar
+    doc.setFillColor(...BLACK);
+    doc.rect(M, y, CW, 7, "F");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(...WHITE);
+    doc.text(title.toUpperCase(), M + 4, y + 5);
+    y += 10;
+
+    // Content
+    contentFn();
+
+    // Draw box border around content
+    const boxH = y - startY - 7;
+    doc.setDrawColor(...LIGHT);
+    doc.setLineWidth(0.3);
+    doc.rect(M, startY + 7, CW, boxH);
+    doc.setLineWidth(0.1);
+
+    y += 4;
   };
 
-  // Two-column row
-  const row2 = (l1: string, v1: string, l2: string, v2: string) => {
+  // Field renderer
+  const printVal = (label: string, value: string, x: number, maxW: number) => {
+    if (!value || value === "-") return 0;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(...SOFT);
+    doc.text(label.toUpperCase(), x, y);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.setTextColor(...DARK);
+    const lines = doc.splitTextToSize(String(value), maxW);
+    doc.text(lines, x, y + 4);
+    return 5.5 + (lines.length - 1) * 4;
+  };
+
+  // Two-column layout
+  const twoCol = (l1: string, v1: string, l2: string, v2: string) => {
     ensureSpace(14);
-    const colW = CW / 2;
-    const yBefore = y;
-    const h1 = printField(l1, v1, ML, colW - 4);
-    const yA = y + h1;
-    y = yBefore;
-    const h2 = printField(l2, v2, ML + colW, colW - 4);
-    const yB = y + h2;
-    y = Math.max(yA, yB) + 2;
+    const colW = (CW - 8) / 2;
+    const yB = y;
+    const h1 = printVal(l1, v1, M + 4, colW);
+    y = yB;
+    const h2 = printVal(l2, v2, M + 4 + colW + 4, colW);
+    y = yB + Math.max(h1, h2) + 2;
   };
 
-  // Three-column row
-  const row3 = (l1: string, v1: string, l2: string, v2: string, l3: string, v3: string) => {
+  // Three-column layout
+  const threeCol = (l1: string, v1: string, l2: string, v2: string, l3: string, v3: string) => {
     ensureSpace(14);
-    const colW = CW / 3;
-    const yBefore = y;
-    const h1 = printField(l1, v1, ML, colW - 2);
-    const yA = y + h1;
-    y = yBefore;
-    const h2 = printField(l2, v2, ML + colW, colW - 2);
-    const yB = y + h2;
-    y = yBefore;
-    const h3 = printField(l3, v3, ML + colW * 2, colW - 2);
-    const yC = y + h3;
-    y = Math.max(yA, yB, yC) + 2;
+    const colW = (CW - 12) / 3;
+    const yB = y;
+    const h1 = printVal(l1, v1, M + 4, colW);
+    y = yB;
+    const h2 = printVal(l2, v2, M + 4 + colW + 4, colW);
+    y = yB;
+    const h3 = printVal(l3, v3, M + 4 + (colW + 4) * 2, colW);
+    y = yB + Math.max(h1, h2, h3) + 2;
   };
 
-  // Single full-width field
-  const rowFull = (label: string, value: string) => {
+  // Full-width field
+  const fullField = (label: string, value: string) => {
     if (!value) return;
     ensureSpace(12);
-    const h = printField(label, value, ML, CW);
+    const h = printVal(label, value, M + 4, CW - 8);
     y += h + 1;
   };
 
-  // ══════════════════════════════════════════════════════════════
-  // 3. CLIENTE
-  // ══════════════════════════════════════════════════════════════
-  sectionHeader("Cliente");
-  row2("Nome", order.customer_name || "", "Telefone", order.customer_phone || "");
-  if (order.customer_cpf) rowFull("CPF", order.customer_cpf);
-  y += 2;
+  // Divider line inside a section
+  const divider = () => {
+    doc.setDrawColor(...LIGHT); doc.setLineWidth(0.15);
+    doc.line(M + 4, y, W - M - 4, y);
+    doc.setLineWidth(0.1);
+    y += 3;
+  };
 
-  // ══════════════════════════════════════════════════════════════
-  // 4. APARELHO
-  // ══════════════════════════════════════════════════════════════
-  sectionHeader("Aparelho");
-  row2("Marca", order.device_brand || "", "Modelo", order.device_model || "");
-  row3(
-    "Cor", order.device_color || "-",
-    "IMEI", order.device_imei || "-",
-    "Acessorios", order.device_accessories || "-"
-  );
+  // ══════════════════════════════════════════════════════════════════════════
+  //  SECTION 1: CLIENTE
+  // ══════════════════════════════════════════════════════════════════════════
+  sectionBox("DADOS DO CLIENTE", () => {
+    twoCol("Nome Completo", order.customer_name || "", "Telefone", order.customer_phone || "");
+    if (order.customer_cpf) {
+      divider();
+      fullField("CPF / Documento", order.customer_cpf);
+    }
+  });
 
-  // Password highlight box
-  if (order.device_password) {
-    ensureSpace(14);
-    doc.setFillColor(...C.warnBg);
-    doc.roundedRect(ML, y, CW, 12, 2, 2, "F");
-    doc.setDrawColor(...C.warnBdr);
-    doc.roundedRect(ML, y, CW, 12, 2, 2, "S");
-    doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(120, 80, 0);
-    doc.text("SENHA / PADRAO DE DESBLOQUEIO:", ML + 4, y + 5);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(...C.textH);
-    doc.text(String(order.device_password), ML + 4, y + 10);
-    y += 16;
-  }
+  // ══════════════════════════════════════════════════════════════════════════
+  //  SECTION 2: APARELHO
+  // ══════════════════════════════════════════════════════════════════════════
+  sectionBox("APARELHO RECEBIDO", () => {
+    twoCol("Marca", order.device_brand || "", "Modelo", order.device_model || "");
+    divider();
+    threeCol(
+      "Cor", order.device_color || "-",
+      "IMEI", order.device_imei || "-",
+      "Acessorios", order.device_accessories || "-"
+    );
 
-  if (order.device_condition) rowFull("Condicao Fisica", order.device_condition);
-  y += 2;
+    if (order.device_password) {
+      divider();
+      // Password highlighted box
+      doc.setFillColor(...BG);
+      doc.roundedRect(M + 3, y - 1, CW - 6, 11, 1, 1, "F");
+      doc.setDrawColor(...DARK); doc.setLineWidth(0.4);
+      doc.roundedRect(M + 3, y - 1, CW - 6, 11, 1, 1, "S");
+      doc.setLineWidth(0.1);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(...MID);
+      doc.text("SENHA / PADRAO DE DESBLOQUEIO", M + 7, y + 3);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...BLACK);
+      doc.text(String(order.device_password), M + 7, y + 8);
+      y += 13;
+    }
 
-  // ══════════════════════════════════════════════════════════════
-  // 5. SERVICO
-  // ══════════════════════════════════════════════════════════════
-  sectionHeader("Servico");
-  rowFull("Defeito Relatado", order.reported_defect);
-  rowFull("Servico Solicitado", order.requested_service);
-  if (techName) rowFull("Tecnico Responsavel", techName);
+    if (order.device_condition) {
+      divider();
+      fullField("Condicao Fisica do Aparelho", order.device_condition);
+    }
+  });
 
-  // Price box
-  ensureSpace(20);
-  doc.setFillColor(...C.priceBg);
-  doc.roundedRect(ML, y, CW, 16, 2, 2, "F");
-  doc.setDrawColor(...C.brand);
-  doc.roundedRect(ML, y, CW, 16, 2, 2, "S");
-  const halfCW = CW / 2;
-  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...C.textM);
-  doc.text("Valor Estimado", ML + 5, y + 5.5);
-  doc.text("Valor Final", ML + halfCW + 5, y + 5.5);
-  doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(...C.brand);
-  doc.text(formatCurrency(Number(order.estimated_price || 0)), ML + 5, y + 13);
-  const fpColor = order.final_price ? C.textH : C.textM;
-  doc.setTextColor(...fpColor);
-  doc.text(order.final_price ? formatCurrency(Number(order.final_price)) : "-", ML + halfCW + 5, y + 13);
-  y += 20;
+  // ══════════════════════════════════════════════════════════════════════════
+  //  SECTION 3: SERVICO SOLICITADO
+  // ══════════════════════════════════════════════════════════════════════════
+  sectionBox("SERVICO SOLICITADO", () => {
+    fullField("Defeito Relatado pelo Cliente", order.reported_defect || "");
+    divider();
+    fullField("Servico a Realizar", order.requested_service || "");
+    if (techName) {
+      divider();
+      fullField("Tecnico Responsavel", techName);
+    }
+    if (order.internal_notes) {
+      divider();
+      fullField("Observacoes Internas", order.internal_notes);
+    }
+  });
 
-  if (order.estimated_completion) {
-    rowFull("Previsao de Entrega", new Date(order.estimated_completion).toLocaleString("pt-BR"));
-  }
-  y += 3;
+  // ══════════════════════════════════════════════════════════════════════════
+  //  SECTION 4: VALORES (ORCAMENTO)
+  // ══════════════════════════════════════════════════════════════════════════
+  sectionBox("ORCAMENTO / VALORES", () => {
+    // Big price display
+    const halfW = (CW - 8) / 2;
 
-  // ══════════════════════════════════════════════════════════════
-  // 6. PAGAMENTO
-  // ══════════════════════════════════════════════════════════════
+    // Estimated price
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(...SOFT);
+    doc.text("VALOR ESTIMADO", M + 4, y);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(...DARK);
+    doc.text(formatCurrency(Number(order.estimated_price || 0)), M + 4, y + 7);
+
+    // Final price
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(...SOFT);
+    doc.text("VALOR FINAL", M + 4 + halfW + 4, y);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(...BLACK);
+    doc.text(order.final_price ? formatCurrency(Number(order.final_price)) : "-", M + 4 + halfW + 4, y + 7);
+
+    // Vertical separator
+    doc.setDrawColor(...LIGHT); doc.setLineWidth(0.3);
+    doc.line(M + halfW + 4, y - 2, M + halfW + 4, y + 9);
+    doc.setLineWidth(0.1);
+
+    y += 11;
+
+    if (order.estimated_completion) {
+      divider();
+      fullField("Previsao de Entrega", new Date(order.estimated_completion).toLocaleString("pt-BR"));
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  SECTION 5: PAGAMENTO (se houver)
+  // ══════════════════════════════════════════════════════════════════════════
   const hasPay = [order.payment_cash, order.payment_card, order.payment_pix, order.payment_other].some(v => Number(v) > 0);
   if (hasPay) {
-    sectionHeader("Pagamento Recebido");
-    const pays: [string, number][] = [];
-    if (Number(order.payment_cash)  > 0) pays.push(["Dinheiro", Number(order.payment_cash)]);
-    if (Number(order.payment_card)  > 0) pays.push(["Cartao",   Number(order.payment_card)]);
-    if (Number(order.payment_pix)   > 0) pays.push(["PIX",      Number(order.payment_pix)]);
-    if (Number(order.payment_other) > 0) pays.push(["Outro",    Number(order.payment_other)]);
-    const total = pays.reduce((s, [, v]) => s + v, 0);
+    sectionBox("PAGAMENTO RECEBIDO", () => {
+      const pays: [string, number][] = [];
+      if (Number(order.payment_cash) > 0)  pays.push(["Dinheiro", Number(order.payment_cash)]);
+      if (Number(order.payment_card) > 0)  pays.push(["Cartao",   Number(order.payment_card)]);
+      if (Number(order.payment_pix) > 0)   pays.push(["PIX",      Number(order.payment_pix)]);
+      if (Number(order.payment_other) > 0) pays.push(["Outro",    Number(order.payment_other)]);
+      const total = pays.reduce((s, [, v]) => s + v, 0);
 
-    pays.forEach(([label, val]) => {
-      ensureSpace(8);
-      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...C.textB);
-      doc.text(label, ML + 5, y);
-      doc.setFont("helvetica", "bold");
-      doc.text(formatCurrency(val), W - MR - 5, y, { align: "right" });
-      y += 6;
+      pays.forEach(([label, val]) => {
+        doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...DARK);
+        doc.text(label, M + 6, y);
+        doc.setFont("helvetica", "bold");
+        doc.text(formatCurrency(val), W - M - 6, y, { align: "right" });
+        y += 5.5;
+      });
+
+      // Total
+      doc.setDrawColor(...BLACK); doc.setLineWidth(0.5);
+      doc.line(M + 4, y, W - M - 4, y);
+      doc.setLineWidth(0.1);
+      y += 5;
+      doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(...BLACK);
+      doc.text("TOTAL", M + 6, y);
+      doc.text(formatCurrency(total), W - M - 6, y, { align: "right" });
+      y += 4;
+
+      if (order.payment_notes) {
+        divider();
+        fullField("Observacao de Pagamento", order.payment_notes);
+      }
     });
-
-    doc.setDrawColor(...C.border); doc.line(ML + 5, y, W - MR - 5, y); y += 5;
-    doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...C.brand);
-    doc.text("Total pago", ML + 5, y);
-    doc.text(formatCurrency(total), W - MR - 5, y, { align: "right" });
-    y += 8;
-    if (order.payment_notes) rowFull("Obs. Pgto", order.payment_notes);
-    y += 3;
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // 7. TERMOS E CONDICOES
-  // ══════════════════════════════════════════════════════════════
-  ensureSpace(50);
-  sectionHeader("Termos e Condicoes");
-  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...C.textM);
-  const termsLines = doc.splitTextToSize(TERMS_TEXT, CW - 6);
-  ensureSpace(termsLines.length * 3.5 + 8);
-  doc.text(termsLines, ML + 3, y);
-  y += termsLines.length * 3.5 + 8;
+  // ══════════════════════════════════════════════════════════════════════════
+  //  SECTION 6: TERMOS E CONDICOES
+  // ══════════════════════════════════════════════════════════════════════════
+  ensureSpace(55);
+  sectionBox("TERMOS E CONDICOES", () => {
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(...MID);
+    const termsLines = doc.splitTextToSize(TERMS_TEXT, CW - 10);
+    ensureSpace(termsLines.length * 3 + 4);
+    doc.text(termsLines, M + 5, y);
+    y += termsLines.length * 3 + 2;
+  });
 
-  // ══════════════════════════════════════════════════════════════
-  // 8. ASSINATURA
-  // ══════════════════════════════════════════════════════════════
-  ensureSpace(40);
+  // ══════════════════════════════════════════════════════════════════════════
+  //  SECTION 7: ASSINATURA
+  // ══════════════════════════════════════════════════════════════════════════
+  ensureSpace(45);
   if (order.signature_data) {
-    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(...C.textM);
-    doc.text("Assinatura do Cliente:", ML, y); y += 4;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(...MID);
+    doc.text("ASSINATURA DO CLIENTE:", M, y); y += 3;
     try {
-      doc.addImage(order.signature_data, "PNG", ML, y, 70, 26);
-      y += 29;
+      doc.addImage(order.signature_data, "PNG", M, y, 65, 24);
+      y += 27;
     } catch (_) {}
-    doc.setDrawColor(...C.border); doc.line(ML, y, ML + 75, y); y += 4;
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...C.textL);
-    doc.text(order.customer_name || "Cliente", ML, y); y += 8;
+    doc.setDrawColor(...BLACK); doc.setLineWidth(0.5);
+    doc.line(M, y, M + 70, y);
+    doc.setLineWidth(0.1);
+    y += 4;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...MID);
+    doc.text(order.customer_name || "Cliente", M, y);
+    y += 8;
   } else {
-    doc.setDrawColor(...C.border);
-    doc.line(ML, y + 18, ML + 75, y + 18);
-    doc.line(W - MR - 75, y + 18, W - MR, y + 18);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...C.textL);
-    doc.text("Assinatura do Cliente", ML, y + 23);
-    doc.text("Assinatura da Loja", W - MR - 75, y + 23);
+    // Two blank signature areas
+    const sigW = (CW - 20) / 2;
+    doc.setDrawColor(...BLACK); doc.setLineWidth(0.5);
+    doc.line(M, y + 20, M + sigW, y + 20);
+    doc.line(W - M - sigW, y + 20, W - M, y + 20);
+    doc.setLineWidth(0.1);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(...MID);
+    doc.text("Assinatura do Cliente", M, y + 25);
+    doc.text("Assinatura / Carimbo da Loja", W - M - sigW, y + 25);
     y += 30;
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // 9. LINK DE ACOMPANHAMENTO
-  // ══════════════════════════════════════════════════════════════
-  ensureSpace(18);
-  doc.setFillColor(...C.linkBg);
-  doc.roundedRect(ML, y, CW, 14, 2, 2, "F");
-  doc.setDrawColor(...C.linkBdr);
-  doc.roundedRect(ML, y, CW, 14, 2, 2, "S");
-  doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(30, 64, 175);
-  doc.text("Acompanhe sua OS em:", ML + 5, y + 5.5);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...C.linkTxt);
-  doc.text(publicUrl, ML + 5, y + 10.5);
-  y += 18;
+  // ══════════════════════════════════════════════════════════════════════════
+  //  LINK DE ACOMPANHAMENTO
+  // ══════════════════════════════════════════════════════════════════════════
+  ensureSpace(16);
+  doc.setDrawColor(...BLACK); doc.setLineWidth(0.5);
+  doc.roundedRect(M, y, CW, 12, 1.5, 1.5, "S");
+  doc.setLineWidth(0.1);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(...BLACK);
+  doc.text("ACOMPANHE SUA OS ONLINE:", M + 5, y + 5);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...MID);
+  doc.text(publicUrl, M + 5, y + 9.5);
+  y += 16;
 
-  // ══════════════════════════════════════════════════════════════
-  // 10. RODAPE (todas as paginas)
-  // ══════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
+  //  RODAPE (todas as paginas)
+  // ══════════════════════════════════════════════════════════════════════════
   const pageCount = (doc as any).internal.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
-    doc.setDrawColor(...C.border); doc.line(ML, 285, W - MR, 285);
-    doc.setFontSize(7); doc.setTextColor(...C.textL);
+    doc.setDrawColor(...BLACK); doc.setLineWidth(0.3);
+    doc.line(M, 286, W - M, 286);
+    doc.setLineWidth(0.1);
+
     if (store?.pdf_footer) {
-      doc.setTextColor(...C.textM);
-      doc.text(store.pdf_footer, W / 2, 289, { align: "center", maxWidth: CW });
+      doc.setFont("helvetica", "italic"); doc.setFontSize(6.5); doc.setTextColor(...MID);
+      doc.text(store.pdf_footer, W / 2, 290, { align: "center", maxWidth: CW });
     }
-    doc.setTextColor(...C.textL);
+
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6); doc.setTextColor(...SOFT);
     doc.text(
-      `${storeName}  |  Gerado em ${new Date().toLocaleString("pt-BR")}  |  CellManager  |  Pagina ${i}/${pageCount}`,
-      W / 2, 293, { align: "center" }
+      `${storeName}  |  ${new Date().toLocaleString("pt-BR")}  |  CellManager PRO  |  ${i}/${pageCount}`,
+      W / 2, 294, { align: "center" }
     );
   }
 
