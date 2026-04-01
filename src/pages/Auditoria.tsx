@@ -33,6 +33,7 @@ const actionColors: Record<string, string> = {
 const Auditoria = () => {
   const { user, userRole, activeStoreId } = useAuth();
   const [logs, setLogs] = useState<any[]>([]);
+  const [profiles, setProfiles] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -40,7 +41,7 @@ const Auditoria = () => {
     setLoading(true);
     let query = supabase
       .from("audit_logs" as any)
-      .select(`*, profiles:user_id(display_name)`)
+      .select("*")
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -54,13 +55,15 @@ const Auditoria = () => {
       query = query.eq("store_id", activeStoreId);
     }
 
-    const { data, error } = await query;
+    const { data: logsData, error: logsError } = await query;
+    const { data: profilesData } = await supabase.from("profiles").select("user_id, display_name");
 
-    if (error) {
-      console.error("Erro ao buscar logs:", error);
-      toast.error("Erro ao carregar auditoria: " + error.message);
+    if (logsError) {
+      console.error("Erro ao buscar logs:", logsError);
+      toast.error("Erro ao carregar auditoria: " + logsError.message);
     } else {
-      setLogs(data || []);
+      setLogs(logsData || []);
+      setProfiles(profilesData || []);
     }
     setLoading(false);
   };
@@ -69,10 +72,13 @@ const Auditoria = () => {
     if (activeStoreId) fetchLogs();
   }, [activeStoreId]);
 
+  const profileMap = new Map(profiles.map(p => [p.user_id, p.display_name]));
+
   const filteredLogs = logs.filter(log => {
     const actionMatch = (log.action || "").toLowerCase().includes(search.toLowerCase());
     const entityMatch = (log.entity_type || "").toLowerCase().includes(search.toLowerCase());
-    const userMatch = (log.profiles?.display_name || "").toLowerCase().includes(search.toLowerCase());
+    const userName = profileMap.get(log.user_id) || "Sistema";
+    const userMatch = userName.toLowerCase().includes(search.toLowerCase());
     return actionMatch || entityMatch || userMatch;
   });
 
@@ -129,7 +135,7 @@ const Auditoria = () => {
                         <div className="flex items-center gap-3 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <User className="h-3 w-3" />
-                            {log.profiles?.display_name || "Sistema"}
+                            {profileMap.get(log.user_id) || "Sistema"}
                           </span>
                           <span className="flex items-center gap-1">
                             <Calendar className="h-3 w-3" />
