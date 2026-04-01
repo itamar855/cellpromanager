@@ -120,31 +120,34 @@ const Caixa = () => {
     }));
 
     // Admin always gets all open registers regardless of activeStoreId to monitor teams
-    if (userRole === "admin") {
-      const { data: allOpen } = await supabase.from("cash_registers" as any).select("*").eq("status", "open");
-      const mappedAll = (allOpen || []).map((reg: any) => ({
-        ...reg,
-        profiles: { display_name: profileMap.get(reg.opened_by) },
-        stores: { name: storeMap.get(reg.store_id) }
-      }));
-      setAllOpenRegisters(mappedAll);
-    }
-
-    if (storeId !== "all") {
+    if (storeId === "all") {
+      setAllOpenRegisters(mappedOpenData);
+      // Se já temos um caixa selecionado manualmente, não mexemos nele
+      if (currentRegister) {
+        setLoading(false);
+        // Mas atualizamos os dados dele se ele ainda estiver na lista de abertos
+        const updatedReg = mappedOpenData.find(r => r.id === currentRegister.id);
+        if (updatedReg) setCurrentRegister(updatedReg);
+      }
+    } else {
       const activeOne = mappedOpenData.find((reg: any) => reg.store_id === storeId) || mappedOpenData[0];
       setCurrentRegister(activeOne || null);
     }
 
     const regToUse = currentRegister || (storeId !== "all" ? mappedOpenData[0] : null);
     if (regToUse) {
-       const { data: entriesData, error: entriesError } = await supabase
+       const txRes = await supabase
          .from("cash_entries" as any).select("*")
          .eq("cash_register_id", (regToUse as any).id)
          .order("confirmed", { ascending: true })
          .order("created_at", { ascending: false });
        
-       if (entriesError) console.error("Error fetching entries:", entriesError);
-       setEntries((entriesData as unknown as CashEntry[]) ?? []);
+       if (txRes.error) {
+        console.error("Transactions fetch error:", txRes.error);
+        toast.error("Erro ao carregar transações: " + txRes.error.message);
+      }
+      
+      setEntries(txRes.data ?? []);
     } else {
        setEntries([]);
     }
