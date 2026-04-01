@@ -1,104 +1,94 @@
-import { useEffect, useState, useRef } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { supabase } from "@/integrations/supabase/client";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { toast } from "sonner";
 import { 
-  Plus, Search, Wallet, ArrowUpRight, ArrowDownRight, 
-  History, Calendar, Filter, Receipt, CheckCircle, 
-  Clock, AlertTriangle, MoreVertical, Trash2, Unlink, Lock, Unlock, Store, 
-  ArrowLeftRight, FileText, Minus, TrendingUp, TrendingDown, Camera, Upload
+  Wallet, RefreshCw, Plus, Minus, History, Trash2, CheckCircle, 
+  Clock, AlertTriangle, Filter, Store, User, Camera, Upload, Receipt, ArrowUpRight, Unlock
 } from "lucide-react";
+import { toast } from "sonner";
 import { logAction } from "@/utils/auditLogger";
-import type { Tables } from "@/integrations/supabase/types";
 
-const formatCurrency = (v: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+interface CashEntry {
+  id: string;
+  type: "entrada" | "saida" | "sangria" | "abertura";
+  amount: number;
+  description: string;
+  payment_method: string;
+  confirmed: boolean;
+  receipt_url: string | null;
+  created_at: string;
+}
 
-type CashRegister = {
-  id: string; store_id: string; opened_by: string; closed_by: string | null;
-  opening_amount: number; closing_amount: number | null; expected_amount: number | null;
-  difference: number | null; difference_reason: string | null;
-  status: "open" | "closed"; opening_note: string | null; closing_note: string | null;
-  opening_receipt_url: string | null; closing_receipt_url: string | null;
-  opened_at: string; closed_at: string | null;
-};
-
-type CashEntry = {
-  id: string; cash_register_id: string; store_id: string;
-  type: "entrada" | "saida" | "sangria" | "abertura" | "fechamento";
-  payment_method: string | null; amount: number; description: string;
-  receipt_url: string | null; created_by: string; created_at: string;
-  confirmed: boolean | null;
-};
-
-const typeConfig = {
-  entrada:    { label: "Entrada",    color: "text-primary",      bg: "bg-primary/10",      icon: TrendingUp  },
-  saida:      { label: "Saída",      color: "text-destructive",  bg: "bg-destructive/10",  icon: TrendingDown },
-  sangria:    { label: "Sangria",    color: "text-yellow-500",   bg: "bg-yellow-500/10",   icon: Minus       },
-  abertura:   { label: "Abertura",   color: "text-blue-500",     bg: "bg-blue-500/10",     icon: Unlock      },
-  fechamento: { label: "Fechamento", color: "text-purple-500",   bg: "bg-purple-500/10",   icon: Lock        },
-};
-
-const paymentLabels: Record<string, string> = {
-  dinheiro: "Dinheiro", cartao_credito: "Cartão Crédito", cartao_debito: "Cartão Débito",
-  pix: "PIX", transferencia: "Transferência", outro: "Outro",
-};
+interface CashRegister {
+  id: string;
+  store_id: string;
+  opened_by: string;
+  opened_at: string;
+  closed_at: string | null;
+  opening_amount: number;
+  closing_amount: number | null;
+  expected_amount: number | null;
+  difference: number | null;
+  status: "open" | "closed";
+  profiles?: { display_name: string };
+  stores?: { name: string };
+}
 
 const Caixa = () => {
-  const { user, activeStoreId, userRole, userPermissions } = useAuth();
+  const { user, userRole, userPermissions, activeStoreId, userStoreIds, setActiveTab: setGlobalActiveTab } = useAuth();
+  const [activeTab, setActiveTab] = useState("current");
   const [currentRegister, setCurrentRegister] = useState<CashRegister | null>(null);
+  const [allOpenRegisters, setAllOpenRegisters] = useState<CashRegister[]>([]);
   const [entries, setEntries] = useState<CashEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-  const canManageFinance = userRole === "admin" || userPermissions?.gerenciar_financeiro;
-
+  const [registersHistory, setRegistersHistory] = useState<CashRegister[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  
   // Dialogs
   const [openDialog, setOpenDialog] = useState(false);
-  const [closeDialog, setCloseDialog] = useState(false);
   const [entryDialog, setEntryDialog] = useState(false);
+  const [closeDialog, setCloseDialog] = useState(false);
   const [sangriaDialog, setSangriaDialog] = useState(false);
-  const [activeTab, setActiveTab] = useState<"current" | "history" | "all-open">("current");
-  const [registersHistory, setRegistersHistory] = useState<CashRegister[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [justification, setJustification] = useState("");
-  const [justDialogOpened, setJustDialogOpened] = useState(false);
-  const [pendingAction, setPendingAction] = useState<{ type: "delete" | "unconfirm" | "reopen", id: string } | null>(null);
-  const [allOpenRegisters, setAllOpenRegisters] = useState<any[]>([]);
-
-  // Confirm dialog
   const [confirmDialog, setConfirmDialog] = useState(false);
-  const [confirmEntry, setConfirmEntry] = useState<CashEntry | null>(null);
-  const [confirmFile, setConfirmFile] = useState<File | null>(null);
-
+  const [justDialogOpened, setJustDialogOpened] = useState(false);
+  
   // Forms
   const [openForm, setOpenForm] = useState({ amount: "", note: "", receipt: null as File | null });
+  const [entryForm, setEntryForm] = useState({ type: "entrada" as "entrada" | "saida", amount: "", description: "", payment_method: "dinheiro" });
   const [closeForm, setCloseForm] = useState({ amount: "", note: "", reason: "", receipt: null as File | null });
-  const [entryForm, setEntryForm] = useState({
-    type: "entrada" as "entrada" | "saida",
-    amount: "", description: "", payment_method: "dinheiro",
-  });
   const [sangriaForm, setSangriaForm] = useState({ amount: "", description: "" });
-
-  // File refs
+  const [confirmEntry, setConfirmEntry] = useState<CashEntry | null>(null);
+  const [confirmFile, setConfirmFile] = useState<File | null>(null);
+  const [justification, setJustification] = useState("");
+  const [pendingAction, setPendingAction] = useState<{type: "delete" | "unconfirm" | "reopen", id: string} | null>(null);
+  
+  // Media Upload Utilities
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [activeTarget, setActiveTarget] = useState<"open" | "close" | "confirm" | null>(null);
 
-  const fetchRegister = async (storeId: string) => {
+  const paymentLabels: Record<string, string> = {
+    dinheiro: "Dinheiro",
+    pix: "PIX",
+    cartao_credito: "Crédito",
+    cartao_debito: "Débito",
+    transferencia: "Transferência"
+  };
+
+  const fetchRegister = async (storeId: string | null) => {
     if (!storeId) return;
     setLoading(true);
     
-    // 1. Caixa Aberto
     // 1. Busca de Caixas Abertos
-    // Para Admins, buscamos SEMRE todos os caixas abertos do sistema para monitoramento global
     let openQuery = supabase.from("cash_registers" as any).select("*").eq("status", "open");
     
     // Se NÃO for admin, filtramos pela loja ativa
@@ -117,11 +107,8 @@ const Caixa = () => {
        supabase.from("stores").select("id, name")
     ]);
     
-    if (profilesRes.error) toast.error("Erro Perfis: " + profilesRes.error.message);
-    if (storesRes.error) toast.error("Erro Lojas: " + storesRes.error.message);
-
-    const profileMap = new Map(profilesRes.data?.map(p => [p.user_id, p.display_name]));
-    const storeMap = new Map(storesRes.data?.map(s => [s.id, s.name]));
+    const profileMap = new Map((profilesRes.data || []).map(p => [p.user_id, p.display_name]));
+    const storeMap = new Map((storesRes.data || []).map(s => [s.id, s.name]));
 
     const mappedOpenData = (openData || []).map((reg: any) => ({
       ...reg,
@@ -129,23 +116,24 @@ const Caixa = () => {
       stores: { name: storeMap.get(reg.store_id) }
     }));
 
-    // Admin always gets all open registers regardless of activeStoreId to monitor teams
+    // Admin always gets all open registers for monitoring
     if (userRole === "admin") {
       setAllOpenRegisters(mappedOpenData);
     }
 
     if (storeId !== "all") {
       const activeOne = mappedOpenData.find((reg: any) => reg.store_id === storeId);
-      // Se não temos um caixa selecionado manualmente para gerenciar, usamos o da loja atual
+      // Se não temos um caixa selecionado manualmente para administrar...
       if (!currentRegister || (currentRegister.store_id !== storeId && storeId !== "all")) {
         setCurrentRegister(activeOne || null);
       }
     } else if (currentRegister) {
+      // No modo "Todas as Unidades", atualizamos os dados se o caixa ainda estiver aberto
       const updatedReg = mappedOpenData.find(r => r.id === currentRegister.id);
       if (updatedReg) setCurrentRegister(updatedReg);
     }
 
-    const regToUse = currentRegister;
+    const regToUse = currentRegister || (storeId !== "all" ? mappedOpenData.find((reg: any) => reg.store_id === storeId) : null);
     if (regToUse) {
        const { data: entriesData, error: entriesError } = await supabase
          .from("cash_entries" as any).select("*")
@@ -153,18 +141,10 @@ const Caixa = () => {
          .order("confirmed", { ascending: true })
          .order("created_at", { ascending: false });
        
-       if (entriesError) {
-         console.error("Error fetching entries:", entriesError);
-         toast.error("Erro ao carregar lançamentos: " + entriesError.message);
-       }
+       if (entriesError) console.error("Error fetching entries:", entriesError);
        setEntries((entriesData as unknown as CashEntry[]) ?? []);
-    } else if (storeId !== "all") {
-       const { data: pendingData } = await supabase
-         .from("cash_entries" as any).select("*")
-         .eq("store_id", storeId)
-         .eq("confirmed", false)
-         .order("created_at", { ascending: false });
-       setEntries((pendingData as unknown as CashEntry[]) ?? []);
+    } else {
+       setEntries([]);
     }
 
     // 2. Histórico
@@ -215,81 +195,6 @@ const Caixa = () => {
   const pendingCount = entries.filter(e => !e.confirmed).length;
   const isBlind = userRole === "vendedor";
 
-  const openConfirmDialog = (entry: CashEntry) => {
-    setConfirmEntry(entry);
-    setConfirmFile(null);
-    setConfirmDialog(true);
-  };
-
-  const handleConfirmEntry = async () => {
-    if (!confirmEntry) return;
-    if (!confirmFile) { toast.error("Anexe o comprovante para confirmar!"); return; }
-    setLoading(true);
-
-    try {
-      const receiptUrl = await uploadReceipt(confirmFile, `confirmacao/${confirmEntry.id}-${Date.now()}-${confirmFile.name}`);
-      if (!receiptUrl) { setLoading(false); return; }
-
-      const { error } = await supabase
-        .from("cash_entries" as any)
-        .update({ confirmed: true, receipt_url: receiptUrl })
-        .eq("id", confirmEntry.id);
-
-      if (error) { toast.error(error.message); setLoading(false); return; }
-
-      toast.success("Lançamento confirmado!");
-      setConfirmDialog(false);
-      setConfirmEntry(null);
-      setConfirmFile(null);
-      if (activeStoreId) fetchRegister(activeStoreId);
-    } catch (err: any) {
-      toast.error("Erro ao confirmar: " + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUnconfirmEntry = async (id: string, reason: string) => {
-    setLoading(true);
-    const { error } = await supabase.from("cash_entries" as any).update({ confirmed: false, receipt_url: null }).eq("id", id);
-    if (error) toast.error(error.message);
-    else { 
-      logAction("UPDATE_RECORD" as any, "cash_entries", id, { status: "confirmed" }, { status: "unconfirmed", reason }, activeStoreId);
-      toast.success("Lançamento desconfirmado!"); 
-      if (activeStoreId) fetchRegister(activeStoreId); 
-    }
-    setLoading(false);
-  };
-
-  const handleDeleteEntry = async (id: string, reason: string) => {
-    setLoading(true);
-    const { error } = await supabase.from("cash_entries" as any).delete().eq("id", id);
-    if (error) toast.error(error.message);
-    else { 
-      logAction("DELETE_RECORD" as any, "cash_entries", id, null, { reason }, activeStoreId);
-      toast.success("Lançamento apagado!"); 
-      if (activeStoreId) fetchRegister(activeStoreId); 
-    }
-    setLoading(false);
-  };
-
-  const handleReopenRegister = async (id: string, reason: string) => {
-    if (userRole !== "admin") return;
-    setLoading(true);
-    const { error } = await supabase.from("cash_registers" as any).update({
-      status: "open", closed_at: null, closed_by: null, closing_amount: null,
-      expected_amount: null, difference: null, difference_reason: null,
-    }).eq("id", id);
-    if (error) { toast.error("Erro ao reabrir: " + error.message); }
-    else {
-      toast.success("Caixa reaberto com sucesso!");
-      logAction("UPDATE_RECORD" as any, "cash_registers", id, { status: "closed" }, { status: "open", reason }, activeStoreId);
-      if (activeStoreId) fetchRegister(activeStoreId);
-      setActiveTab("current");
-    }
-    setLoading(false);
-  };
-
   const handleOpenRegister = async () => {
     if (!user || !activeStoreId) return;
     setLoading(true);
@@ -297,46 +202,45 @@ const Caixa = () => {
     if (openForm.receipt) receiptUrl = await uploadReceipt(openForm.receipt, `abertura/${activeStoreId}-${Date.now()}-${openForm.receipt.name}`);
 
     const { data: reg, error } = await supabase.from("cash_registers" as any).insert({
-      store_id: activeStoreId, opened_by: user.id,
+      store_id: activeStoreId === "all" ? userStoreIds[0] : activeStoreId,
+      opened_by: user.id,
       opening_amount: parseFloat(openForm.amount) || 0,
-      opening_note: openForm.note || null,
-      opening_receipt_url: receiptUrl, status: "open",
-    }).select().single();
+      opening_receipt_url: receiptUrl,
+      status: "open",
+      opened_at: new Date().toISOString(),
+    } as any).select().single();
 
     if (error) { toast.error(error.message); setLoading(false); return; }
 
     await supabase.from("cash_entries" as any).insert({
-      cash_register_id: (reg as any).id, store_id: activeStoreId,
-      type: "abertura", amount: parseFloat(openForm.amount) || 0,
-      description: "Abertura de caixa", payment_method: "dinheiro",
-      receipt_url: receiptUrl, confirmed: true, created_by: user.id,
-    });
+      cash_register_id: (reg as any).id,
+      store_id: (reg as any).store_id,
+      type: "abertura",
+      amount: parseFloat(openForm.amount) || 0,
+      description: "Abertura de caixa",
+      payment_method: "dinheiro",
+      confirmed: true,
+      created_by: user.id,
+    } as any);
 
-    toast.success("Caixa aberto!");
-    logAction("LOGIN" as any, "cash_registers", (reg as any).id, null, { store_id: activeStoreId });
+    toast.success("Caixa aberto com sucesso!");
     setOpenDialog(false);
     setOpenForm({ amount: "", note: "", receipt: null });
     fetchRegister(activeStoreId);
-    setLoading(false);
   };
 
   const handleCloseRegister = async () => {
-    if (!user || !currentRegister) return;
-    if (pendingCount > 0) {
-      toast.error(`Confirme os ${pendingCount} lançamento(s) pendente(s) antes de fechar o caixa!`);
-      return;
-    }
-    if (!isBlind && Math.abs(difference) > 5 && !closeForm.reason) {
-      toast.error("Diferença maior que R$ 5,00 — informe o motivo!");
+    if (!currentRegister) return;
+    if (Math.abs(difference) > 5 && !closeForm.reason) {
+      toast.error("Informe o motivo da diferença!");
       return;
     }
     setLoading(true);
     let receiptUrl: string | null = null;
-    if (closeForm.receipt) receiptUrl = await uploadReceipt(closeForm.receipt, `fechamento/${activeStoreId}-${Date.now()}-${closeForm.receipt.name}`);
+    if (closeForm.receipt) receiptUrl = await uploadReceipt(closeForm.receipt, `fechamento/${currentRegister.id}-${Date.now()}`);
 
     await supabase.from("cash_registers" as any).update({
-      closed_by: user.id, closing_amount: closingAmount,
-      expected_amount: expectedAmount, difference,
+      closing_amount: closingAmount, expected_amount: expectedAmount, difference,
       difference_reason: closeForm.reason || null,
       closing_note: closeForm.note || null,
       closing_receipt_url: receiptUrl,
@@ -346,80 +250,86 @@ const Caixa = () => {
     toast.success("Caixa fechado!");
     logAction("DELETE_RECORD" as any, "cash_registers", currentRegister.id, { status: "open" }, { status: "closed", difference });
     setCloseDialog(false);
-    setCloseForm({ amount: "", note: "", reason: "", receipt: null });
+    setCurrentRegister(null);
     fetchRegister(activeStoreId);
-    setLoading(false);
   };
 
   const handleEntry = async () => {
-    if (!user || !currentRegister) return;
-    if (!entryForm.amount || !entryForm.description) { toast.error("Preencha todos os campos!"); return; }
+    if (!currentRegister || !user) return;
     setLoading(true);
-
     await supabase.from("cash_entries" as any).insert({
-      cash_register_id: currentRegister.id, store_id: activeStoreId,
+      cash_register_id: currentRegister.id, store_id: currentRegister.store_id,
       type: entryForm.type, amount: parseFloat(entryForm.amount) || 0,
       description: entryForm.description, payment_method: entryForm.payment_method,
-      receipt_url: null, confirmed: false, created_by: user.id,
+      confirmed: false, created_by: user.id,
     });
-
-    toast.success("Lançamento criado — confirme anexando o comprovante!");
     setEntryDialog(false);
-    setEntryForm({ type: "entrada", amount: "", description: "", payment_method: "dinheiro" });
+    toast.success("Lançamento registrado!");
     fetchRegister(activeStoreId);
-    setLoading(false);
   };
 
   const handleSangria = async () => {
-    if (!user || !currentRegister) return;
-    if (!sangriaForm.amount) { toast.error("Informe o valor da sangria!"); return; }
+    if (!currentRegister || !user) return;
     setLoading(true);
-
     await supabase.from("cash_entries" as any).insert({
-      cash_register_id: currentRegister.id, store_id: activeStoreId,
+      cash_register_id: currentRegister.id, store_id: currentRegister.store_id,
       type: "sangria", amount: parseFloat(sangriaForm.amount) || 0,
-      description: sangriaForm.description || "Sangria de caixa",
-      payment_method: "dinheiro", receipt_url: null,
-      confirmed: false, created_by: user.id,
+      description: "Sangria: " + sangriaForm.description, payment_method: "dinheiro",
+      confirmed: true, created_by: user.id,
     });
-
-    toast.success("Sangria criada — confirme anexando o comprovante!");
     setSangriaDialog(false);
-    setSangriaForm({ amount: "", description: "" });
+    toast.success("Sangria realizada!");
+    fetchRegister(activeStoreId);
+  };
+
+  const openConfirmDialog = (entry: CashEntry) => {
+    setConfirmEntry(entry);
+    setConfirmFile(null);
+    setConfirmDialog(true);
+  };
+
+  const handleConfirmEntry = async () => {
+    if (!confirmEntry || !confirmFile) return;
+    setLoading(true);
+    const url = await uploadReceipt(confirmFile, `confirmacao/${confirmEntry.id}-${Date.now()}`);
+    if (url) {
+      await supabase.from("cash_entries" as any).update({ confirmed: true, receipt_url: url }).eq("id", confirmEntry.id);
+      toast.success("Confirmado!");
+      setConfirmDialog(false);
+      fetchRegister(activeStoreId);
+    }
+    setLoading(false);
+  };
+
+  const handleDeleteEntry = async (id: string, reason: string) => {
+    setLoading(true);
+    await supabase.from("cash_entries" as any).delete().eq("id", id);
+    logAction("DELETE_RECORD" as any, "cash_entries", id, null, { reason });
+    toast.success("Lançamento apagado!");
     fetchRegister(activeStoreId);
     setLoading(false);
   };
 
-  const ReceiptUpload = ({ target, file }: { target: "open" | "close" | "confirm" | null; file: File | null }) => (
-    <div className="space-y-2">
-      <Label className="text-xs flex items-center gap-1">
-        <Receipt className="h-3 w-3" /> Comprovante
-        {target !== "open" && <span className="text-destructive ml-0.5">* obrigatório</span>}
-      </Label>
-      {file ? (
-        <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
-          <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-          <p className="text-xs text-primary truncate flex-1">{file.name}</p>
-          <Button type="button" className="h-6 text-[10px] bg-transparent text-foreground hover:bg-muted border-0 shadow-none px-2" onClick={() => {
-            if (target === "open")    setOpenForm(f => ({ ...f, receipt: null }));
-            if (target === "close")   setCloseForm(f => ({ ...f, receipt: null }));
-            if (target === "confirm") setConfirmFile(null);
-          }}>Remover</Button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-2">
-          <Button type="button" className="h-10 gap-2 text-xs bg-transparent border border-border text-foreground hover:bg-muted"
-            onClick={() => { setActiveTarget(target); cameraInputRef.current?.click(); }}>
-            <Camera className="h-4 w-4" /> Tirar Foto
-          </Button>
-          <Button type="button" className="h-10 gap-2 text-xs bg-transparent border border-border text-foreground hover:bg-muted"
-            onClick={() => { setActiveTarget(target); fileInputRef.current?.click(); }}>
-            <Upload className="h-4 w-4" /> Galeria
-          </Button>
-        </div>
-      )}
-    </div>
-  );
+  const handleUnconfirmEntry = async (id: string, reason: string) => {
+    setLoading(true);
+    await supabase.from("cash_entries" as any).update({ confirmed: false, receipt_url: null }).eq("id", id);
+    logAction("UPDATE_RECORD" as any, "cash_entries", id, { status: "confirmed" }, { status: "unconfirmed", reason });
+    toast.success("Lançamento desconfirmado!");
+    fetchRegister(activeStoreId);
+    setLoading(false);
+  };
+
+  const handleReopenRegister = async (id: string, reason: string) => {
+    setLoading(true);
+    await supabase.from("cash_registers" as any).update({ status: "open", closed_at: null }).eq("id", id);
+    logAction("UPDATE_RECORD" as any, "cash_registers", id, { status: "closed" }, { status: "open", reason });
+    toast.success("Caixa reaberto!");
+    setActiveTab("current");
+    fetchRegister(activeStoreId);
+    setLoading(false);
+  };
+
+  const formatCurrency = (val: number | null) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val || 0);
 
   return (
     <div className="space-y-4">
@@ -510,7 +420,7 @@ const Caixa = () => {
                 {pendingCount > 0 && (
                   <div className="flex items-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-500">
                     <Clock className="h-4 w-4 shrink-0" />
-                    {pendingCount} lançamento{pendingCount > 1 ? "s" : ""} pendente aguardando confirmação
+                    {pendingCount} lançamento(s) pendente(s) aguardando confirmação
                   </div>
                 )}
                 <Button className="gap-2" onClick={() => setOpenDialog(true)} disabled={!activeStoreId || activeStoreId === "all"}>
@@ -564,24 +474,6 @@ const Caixa = () => {
                 ))}
               </div>
 
-              {!isBlind && (
-                <Card className="border-border/50">
-                  <CardContent className="p-4 space-y-2">
-                    {["dinheiro","pix","cartao_credito","cartao_debito","transferencia"].map(method => {
-                      const ent = confirmedEntries.filter(e => ["entrada","abertura"].includes(e.type) && e.payment_method === method).reduce((s, e) => s + Number(e.amount), 0);
-                      const sai = confirmedEntries.filter(e => ["saida","sangria"].includes(e.type) && e.payment_method === method).reduce((s, e) => s + Number(e.amount), 0);
-                      if (ent === 0 && sai === 0) return null;
-                      return (
-                        <div key={method} className="flex justify-between text-xs">
-                          <span>{paymentLabels[method]}</span>
-                          <span className="font-bold">{formatCurrency(ent - sai)}</span>
-                        </div>
-                      );
-                    })}
-                  </CardContent>
-                </Card>
-              )}
-
               <Card className="border-border/50">
                 <CardHeader className="pb-2"><CardTitle className="text-sm">Lançamentos Recentes ({entries.length})</CardTitle></CardHeader>
                 <CardContent className="space-y-2">
@@ -618,7 +510,7 @@ const Caixa = () => {
                                 setJustification("");
                                 setJustDialogOpened(true);
                               }}>
-                              <Minus className="h-3 w-3" />
+                              <Trash2 className="h-3 w-3" />
                             </Button>
                           </div>
                         )}
@@ -684,7 +576,10 @@ const Caixa = () => {
           <div className="space-y-4 mt-2">
             <Label className="text-xs">Fundo inicial (R$)</Label>
             <Input type="number" step="0.01" value={openForm.amount} onChange={e => setOpenForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
-            <ReceiptUpload target="open" file={openForm.receipt} />
+            <div className="space-y-2">
+              <Label className="text-xs">Comprovante</Label>
+              <Input type="file" onChange={e => setOpenForm(f => ({ ...f, receipt: e.target.files?.[0] || null }))} />
+            </div>
             <Button className="w-full" onClick={handleOpenRegister} disabled={loading}>Abrir Caixa</Button>
           </div>
         </DialogContent>
@@ -695,7 +590,10 @@ const Caixa = () => {
           <DialogTitle>Confirmar Lançamento</DialogTitle>
           <div className="space-y-4 mt-2">
             <p className="text-xs">{confirmEntry?.description} - {confirmEntry && formatCurrency(Number(confirmEntry.amount))}</p>
-            <ReceiptUpload target="confirm" file={confirmFile} />
+            <div className="space-y-2">
+              <Label className="text-xs">Comprovante (obrigatório)</Label>
+              <Input type="file" onChange={e => setConfirmFile(e.target.files?.[0] || null)} />
+            </div>
             <Button className="w-full" onClick={handleConfirmEntry} disabled={loading || !confirmFile}>Confirmar</Button>
           </div>
         </DialogContent>
@@ -709,8 +607,11 @@ const Caixa = () => {
             <Input type="number" step="0.01" value={closeForm.amount} onChange={e => setCloseForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
             {!isBlind && <p className="text-xs">Diferença: {formatCurrency(difference)}</p>}
             {Math.abs(difference) > 5 && <Textarea value={closeForm.reason} onChange={e => setCloseForm(f => ({ ...f, reason: e.target.value }))} placeholder="Motivo da diferença..." />}
-            <ReceiptUpload target="close" file={closeForm.receipt} />
-            <Button className="w-full bg-destructive" onClick={handleCloseRegister} disabled={loading || !closeForm.amount}>Fechar Caixa</Button>
+            <div className="space-y-2">
+              <Label className="text-xs">Comprovante</Label>
+              <Input type="file" onChange={e => setCloseForm(f => ({ ...f, receipt: e.target.files?.[0] || null }))} />
+            </div>
+            <Button className="w-full bg-destructive text-white" onClick={handleCloseRegister} disabled={loading || !closeForm.amount}>Fechar Caixa</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -730,17 +631,6 @@ const Caixa = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={sangriaDialog} onOpenChange={setSangriaDialog}>
-        <DialogContent>
-          <DialogTitle>Sangria de Caixa</DialogTitle>
-          <div className="space-y-4 mt-2">
-            <Input type="number" step="0.01" value={sangriaForm.amount} onChange={e => setSangriaForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
-            <Input value={sangriaForm.description} onChange={e => setSangriaForm(f => ({ ...f, description: e.target.value }))} placeholder="Motivo" />
-            <Button className="w-full bg-yellow-500 hover:bg-yellow-600" onClick={handleSangria} disabled={loading}>Criar Sangria</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={justDialogOpened} onOpenChange={setJustDialogOpened}>
         <DialogContent>
           <DialogHeader>
@@ -756,20 +646,11 @@ const Caixa = () => {
             </p>
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-primary">Campo Obrigatório: Motivo</Label>
-              <Input 
-                value={justification} 
-                onChange={(e) => setJustification(e.target.value)} 
-                placeholder="Informe o motivo desta alteração..." 
-                required 
-                className="h-10"
-              />
+              <Input value={justification} onChange={(e) => setJustification(e.target.value)} placeholder="Informe o motivo desta alteração..." required className="h-10" />
             </div>
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1" onClick={() => setJustDialogOpened(false)}>Cancelar</Button>
-              <Button 
-                variant={pendingAction?.type === "delete" ? "destructive" : "default"}
-                className="flex-1" 
-                disabled={!justification || loading}
+              <Button variant={pendingAction?.type === "delete" ? "destructive" : "default"} className="flex-1" disabled={!justification || loading}
                 onClick={async () => {
                   if (!pendingAction) return;
                   if (pendingAction.type === "delete") await handleDeleteEntry(pendingAction.id, justification);
@@ -779,7 +660,7 @@ const Caixa = () => {
                   setPendingAction(null);
                 }}
               >
-                {loading ? "Processando..." : "Confirmar Ação"}
+                {loading ? "Processando..." : "Confirmar"}
               </Button>
             </div>
           </div>
