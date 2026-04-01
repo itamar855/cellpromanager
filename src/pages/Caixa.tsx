@@ -107,14 +107,18 @@ const Caixa = () => {
     }
     
     const { data: openData, error: openError } = await openQuery;
-    if (openError) console.error("Error fetching open registers:", openError);
+    if (openError) {
+      console.error("Error fetching open registers:", openError);
+      toast.error("Erro ao buscar caixas abertos: " + openError.message);
+    }
 
-    // Fetch dependencies manually if needed to avoid join failures
-    const profilesRes = await supabase.from("profiles").select("user_id, display_name");
-    const storesRes = await supabase.from("stores").select("id, name");
+    const [profilesRes, storesRes] = await Promise.all([
+       supabase.from("profiles").select("user_id, display_name"),
+       supabase.from("stores").select("id, name")
+    ]);
     
-    const profileMap = new Map(profilesRes.data?.map(p => [p.user_id, p.display_name]));
-    const storeMap = new Map(storesRes.data?.map(s => [s.id, s.name]));
+    if (profilesRes.error) toast.error("Erro Perfis: " + profilesRes.error.message);
+    if (storesRes.error) toast.error("Erro Lojas: " + storesRes.error.message);
 
     const mappedOpenData = (openData || []).map((reg: any) => ({
       ...reg,
