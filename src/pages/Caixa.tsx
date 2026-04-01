@@ -120,6 +120,9 @@ const Caixa = () => {
     if (profilesRes.error) toast.error("Erro Perfis: " + profilesRes.error.message);
     if (storesRes.error) toast.error("Erro Lojas: " + storesRes.error.message);
 
+    const profileMap = new Map(profilesRes.data?.map(p => [p.user_id, p.display_name]));
+    const storeMap = new Map(storesRes.data?.map(s => [s.id, s.name]));
+
     const mappedOpenData = (openData || []).map((reg: any) => ({
       ...reg,
       profiles: { display_name: profileMap.get(reg.opened_by) },
@@ -127,21 +130,20 @@ const Caixa = () => {
     }));
 
     // Admin always gets all open registers regardless of activeStoreId to monitor teams
-    if (storeId === "all") {
+    if (userRole === "admin") {
       setAllOpenRegisters(mappedOpenData);
-      // Se já temos um caixa selecionado manualmente, não mexemos nele
-      if (currentRegister) {
-        setLoading(false);
-        // Mas atualizamos os dados dele se ele ainda estiver na lista de abertos
-        const updatedReg = mappedOpenData.find(r => r.id === currentRegister.id);
-        if (updatedReg) setCurrentRegister(updatedReg);
-      }
-    } else {
-      const activeOne = mappedOpenData.find((reg: any) => reg.store_id === storeId) || mappedOpenData[0];
-      setCurrentRegister(activeOne || null);
     }
 
-    const regToUse = currentRegister || (storeId !== "all" ? mappedOpenData[0] : null);
+    if (storeId !== "all") {
+      const activeOne = mappedOpenData.find((reg: any) => reg.store_id === storeId);
+      setCurrentRegister(activeOne || null);
+    } else if (currentRegister) {
+      // No modo "Todas as Unidades", atualizamos os dados do caixa selecionado se ele ainda estiver aberto
+      const updatedReg = mappedOpenData.find(r => r.id === currentRegister.id);
+      if (updatedReg) setCurrentRegister(updatedReg);
+    }
+
+    const regToUse = currentRegister;
     if (regToUse) {
        const { data: entriesData, error: entriesError } = await supabase
          .from("cash_entries" as any).select("*")
