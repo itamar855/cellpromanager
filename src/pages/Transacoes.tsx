@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, ArrowUpDown, ArrowUpRight, ArrowDownRight, Tag, Trash2, Edit2, Camera, Upload, Receipt, CheckCircle, Loader2, AlertTriangle } from "lucide-react";
+import { Plus, ArrowUpDown, ArrowUpRight, ArrowDownRight, Tag, Trash2, Edit2, Camera, Upload, Receipt, CheckCircle, Loader2, AlertTriangle, Store } from "lucide-react";
 import { logAction } from "@/utils/auditLogger";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -46,6 +46,7 @@ const Transacoes = () => {
   const { user, userRole, activeStoreId } = useAuth();
   const [transactions, setTransactions] = useState<Tables<"transactions">[]>([]);
   const [stores, setStores] = useState<Tables<"stores">[]>([]);
+  const [selectedStoreId, setSelectedStoreId] = useState<string>(activeStoreId || "");
   const [accounts, setAccounts] = useState<Tables<"store_bank_accounts">[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -81,18 +82,26 @@ const Transacoes = () => {
   };
 
   const fetchData = async () => {
-    if (!activeStoreId) return;
+    let txQuery = supabase.from("transactions").select("*").order("created_at", { ascending: false });
+    if (selectedStoreId !== "all") {
+      txQuery = txQuery.eq("store_id", selectedStoreId);
+    }
+    
     const [txRes, storesRes, accountsRes] = await Promise.all([
-      supabase.from("transactions").select("*").eq("store_id", activeStoreId).order("created_at", { ascending: false }),
+      txQuery,
       supabase.from("stores").select("*"),
-      supabase.from("store_bank_accounts").select("*").eq("store_id", activeStoreId),
+      supabase.from("store_bank_accounts").select("*").eq("store_id", selectedStoreId === "all" ? "" : selectedStoreId),
     ]);
     setTransactions(txRes.data ?? []);
     setStores(storesRes.data ?? []);
     setAccounts(accountsRes.data ?? []);
   };
 
-  useEffect(() => { fetchData(); }, [activeStoreId]);
+  useEffect(() => {
+    if (activeStoreId && !selectedStoreId) setSelectedStoreId(activeStoreId);
+  }, [activeStoreId]);
+
+  useEffect(() => { fetchData(); }, [selectedStoreId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -268,10 +277,27 @@ const Transacoes = () => {
           <h1 className="font-display text-xl md:text-3xl font-bold tracking-tight">Transações</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Histórico financeiro completo</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 h-10"><Plus className="h-4 w-4" /> Nova Transação</Button>
-          </DialogTrigger>
+        <div className="flex flex-wrap items-center gap-3">
+          {userRole === "admin" && (
+            <div className="flex items-center gap-2">
+              <Store className="h-4 w-4 text-muted-foreground" />
+              <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
+                <SelectTrigger className="h-10 w-[200px] bg-background border-primary/20">
+                  <SelectValue placeholder="Selecionar Loja" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as Unidades</SelectItem>
+                  {stores.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2 h-10"><Plus className="h-4 w-4" /> Nova Transação</Button>
+            </DialogTrigger>
           <DialogContent className="max-h-[90dvh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="font-display">Registrar Transação</DialogTitle>
@@ -390,6 +416,7 @@ const Transacoes = () => {
           </DialogContent>
         </Dialog>
       </div>
+    </div>
 
       <div className="space-y-2">
         {transactions.map((tx) => (

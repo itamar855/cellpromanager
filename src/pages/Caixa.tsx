@@ -11,9 +11,11 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import {
-  Wallet, Plus, Minus, ArrowDownUp, Lock, Unlock, Camera,
-  Upload, AlertTriangle, CheckCircle, Receipt, TrendingUp, TrendingDown, Clock,
+import { 
+  Plus, Search, Wallet, ArrowUpRight, ArrowDownRight, 
+  History, Calendar, Filter, Receipt, CheckCircle, 
+  Clock, AlertTriangle, MoreVertical, Trash2, Unlink, Lock, Unlock, Store, 
+  ArrowLeftRight, FileText, Minus, TrendingUp, TrendingDown, Camera, Upload
 } from "lucide-react";
 import { logAction } from "@/utils/auditLogger";
 import type { Tables } from "@/integrations/supabase/types";
@@ -63,12 +65,13 @@ const Caixa = () => {
   const [closeDialog, setCloseDialog] = useState(false);
   const [entryDialog, setEntryDialog] = useState(false);
   const [sangriaDialog, setSangriaDialog] = useState(false);
-  const [activeTab, setActiveTab] = useState<"current" | "history">("current");
+  const [activeTab, setActiveTab] = useState<"current" | "history" | "all-open">("current");
   const [registersHistory, setRegistersHistory] = useState<CashRegister[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [justification, setJustification] = useState("");
   const [justDialogOpened, setJustDialogOpened] = useState(false);
   const [pendingAction, setPendingAction] = useState<{ type: "delete" | "unconfirm" | "reopen", id: string } | null>(null);
+  const [allOpenRegisters, setAllOpenRegisters] = useState<any[]>([]);
 
   // Confirm dialog
   const [confirmDialog, setConfirmDialog] = useState(false);
@@ -94,31 +97,38 @@ const Caixa = () => {
     setLoading(true);
     
     // 1. Caixa Aberto
-    let openQuery = supabase.from("cash_registers" as any).select("*").eq("status", "open");
+    let openQuery = supabase.from("cash_registers" as any)
+      .select("*, profiles:opened_by(display_name), stores:store_id(name)")
+      .eq("status", "open");
+    
     if (storeId !== "all") {
       openQuery = openQuery.eq("store_id", storeId);
     }
-    const { data: openData } = await openQuery.maybeSingle();
-    setCurrentRegister(openData as unknown as CashRegister | null);
-
-    if (openData) {
-      const registerId = (openData as any).id;
-      const { data: entriesData } = await supabase
-        .from("cash_entries" as any).select("*")
-        .eq("cash_register_id", registerId)
-        .order("confirmed", { ascending: true })
-        .order("created_at", { ascending: false });
-
-      setEntries((entriesData as unknown as CashEntry[]) ?? []);
-    } else if (storeId !== "all") {
-      const { data: pendingData } = await supabase
-        .from("cash_entries" as any).select("*")
-        .eq("store_id", storeId)
-        .eq("confirmed", false)
-        .order("created_at", { ascending: false });
-      setEntries((pendingData as unknown as CashEntry[]) ?? []);
+    
+    const { data: openData } = await openQuery;
+    
+    if (storeId === "all") {
+      setAllOpenRegisters(openData ?? []);
+      if (!currentRegister) {
+        setLoading(false);
+        return;
+      }
     } else {
-      setEntries([]);
+      const activeOne = openData?.find((reg: any) => reg.store_id === storeId) || openData?.[0];
+      setCurrentRegister(activeOne as any || null);
+    }
+
+    if (currentRegister || (openData && openData.length > 0)) {
+      const regToUse = currentRegister || openData?.[0];
+      if (regToUse) {
+        const { data: entriesData } = await supabase
+          .from("cash_entries" as any).select("*")
+          .eq("cash_register_id", (regToUse as any).id)
+          .order("confirmed", { ascending: true })
+          .order("created_at", { ascending: false });
+
+        setEntries((entriesData as unknown as CashEntry[]) ?? []);
+      }
     }
 
     // 2. Histórico
@@ -159,7 +169,6 @@ const Caixa = () => {
     if (activeTarget === "confirm") setConfirmFile(file);
   };
 
-  // Apenas confirmados entram nos cálculos
   const confirmedEntries = entries.filter(e => e.confirmed === true);
   const totalEntradas = confirmedEntries.filter(e => ["entrada","abertura"].includes(e.type)).reduce((s, e) => s + Number(e.amount), 0);
   const totalSaidas   = confirmedEntries.filter(e => ["saida","sangria"].includes(e.type)).reduce((s, e) => s + Number(e.amount), 0);
@@ -169,7 +178,6 @@ const Caixa = () => {
   const pendingCount = entries.filter(e => !e.confirmed).length;
   const isBlind = userRole === "vendedor";
 
-  // ── Confirmar lançamento ──────────────────────────────────────────────────
   const openConfirmDialog = (entry: CashEntry) => {
     setConfirmEntry(entry);
     setConfirmFile(null);
@@ -224,6 +232,23 @@ const Caixa = () => {
       logAction("DELETE_RECORD" as any, "cash_entries", id, null, { reason }, activeStoreId);
       toast.success("Lançamento apagado!"); 
       if (activeStoreId) fetchRegister(activeStoreId); 
+    }
+    setLoading(false);
+  };
+
+  const handleReopenRegister = async (id: string, reason: string) => {
+    if (userRole !== "admin") return;
+    setLoading(true);
+    const { error } = await supabase.from("cash_registers" as any).update({
+      status: "open", closed_at: null, closed_by: null, closing_amount: null,
+      expected_amount: null, difference: null, difference_reason: null,
+    }).eq("id", id);
+    if (error) { toast.error("Erro ao reabrir: " + error.message); }
+    else {
+      toast.success("Caixa reaberto com sucesso!");
+      logAction("UPDATE_RECORD" as any, "cash_registers", id, { status: "closed" }, { status: "open", reason }, activeStoreId);
+      if (activeStoreId) fetchRegister(activeStoreId);
+      setActiveTab("current");
     }
     setLoading(false);
   };
@@ -308,25 +333,6 @@ const Caixa = () => {
     setLoading(false);
   };
 
-  const handleReopenRegister = async (id: string, reason: string) => {
-    if (userRole !== "admin") return;
-    
-    setLoading(true);
-    const { error } = await supabase.from("cash_registers" as any).update({
-      status: "open", closed_at: null, closed_by: null, closing_amount: null,
-      expected_amount: null, difference: null, difference_reason: null,
-    }).eq("id", id);
-
-    if (error) { toast.error("Erro ao reabrir: " + error.message); }
-    else {
-      toast.success("Caixa reaberto com sucesso!");
-      logAction("UPDATE_OS_STATUS" as any, "cash_registers", id, { status: "closed" }, { status: "open", reason }, activeStoreId);
-      if (activeStoreId) fetchRegister(activeStoreId);
-      setActiveTab("current");
-    }
-    setLoading(false);
-  };
-
   const handleSangria = async () => {
     if (!user || !currentRegister) return;
     if (!sangriaForm.amount) { toast.error("Informe o valor da sangria!"); return; }
@@ -395,10 +401,63 @@ const Caixa = () => {
       <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)}>
         <TabsList className="w-full sm:w-auto">
           <TabsTrigger value="current" className="flex-1 sm:flex-none">Caixa Atual</TabsTrigger>
+          {userRole === "admin" && (
+            <TabsTrigger value="all-open" className="flex-1 sm:flex-none">Caixas Abertos</TabsTrigger>
+          )}
           {(userRole === "admin" || userPermissions?.gerenciar_financeiro) && (
             <TabsTrigger value="history" className="flex-1 sm:flex-none">Histórico (Admin)</TabsTrigger>
           )}
         </TabsList>
+
+        <TabsContent value="all-open" className="mt-4 space-y-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {allOpenRegisters.length === 0 ? (
+              <div className="col-span-full py-12 text-center text-muted-foreground bg-muted/20 rounded-xl border border-dashed">
+                Nenhum caixa aberto no momento.
+              </div>
+            ) : (
+              allOpenRegisters.map(reg => (
+                <Card key={reg.id} className="overflow-hidden border-primary/20 hover:border-primary/40 transition-all cursor-pointer group"
+                  onClick={() => {
+                    setCurrentRegister(reg);
+                    setActiveTab("current");
+                  }}>
+                  <div className="p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                          {reg.profiles?.display_name?.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-bold text-sm tracking-tight">{reg.profiles?.display_name}</p>
+                          <Badge variant="outline" className="text-[10px] py-0 h-4 bg-primary/5 border-primary/20">
+                            {reg.stores?.name}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Aberto há</p>
+                        <p className="text-xs font-mono">{new Date(reg.opened_at).toLocaleTimeString()}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border/50">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground uppercase font-semibold">Fundo</p>
+                        <p className="font-bold text-sm">{formatCurrency(reg.opening_amount)}</p>
+                      </div>
+                      <div className="text-right">
+                         <Button variant="ghost" size="sm" className="h-7 text-[10px] group-hover:bg-primary group-hover:text-white">
+                           Gerenciar <ArrowUpRight className="ml-1 h-3 w-3" />
+                         </Button>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))
+            )}
+          </div>
+        </TabsContent>
 
         <TabsContent value="current" className="mt-4 space-y-4">
           {!currentRegister ? (
