@@ -97,38 +97,55 @@ const Caixa = () => {
     setLoading(true);
     
     // 1. Caixa Aberto
-    let openQuery = supabase.from("cash_registers" as any)
-      .select("*, profiles:opened_by(display_name), stores:store_id(name)")
-      .eq("status", "open");
+    let openQuery = supabase.from("cash_registers" as any).select("*").eq("status", "open");
     
     if (storeId !== "all") {
       openQuery = openQuery.eq("store_id", storeId);
     }
     
-    const { data: openData } = await openQuery;
+    const { data: openData, error: openError } = await openQuery;
+    if (openError) console.error("Error fetching open registers:", openError);
+
+    // Fetch dependencies manually if needed to avoid join failures
+    const profilesRes = await supabase.from("profiles").select("user_id, display_name");
+    const storesRes = await supabase.from("stores").select("id, name");
     
+    const profileMap = new Map(profilesRes.data?.map(p => [p.user_id, p.display_name]));
+    const storeMap = new Map(storesRes.data?.map(s => [s.id, s.name]));
+
+    const mappedOpenData = (openData || []).map((reg: any) => ({
+      ...reg,
+      profiles: { display_name: profileMap.get(reg.opened_by) },
+      stores: { name: storeMap.get(reg.store_id) }
+    }));
+
     if (storeId === "all") {
-      setAllOpenRegisters(openData ?? []);
-      if (!currentRegister) {
-        setLoading(false);
-        return;
-      }
+      setAllOpenRegisters(mappedOpenData);
     } else {
-      const activeOne = openData?.find((reg: any) => reg.store_id === storeId) || openData?.[0];
-      setCurrentRegister(activeOne as any || null);
+      const activeOne = mappedOpenData.find((reg: any) => reg.store_id === storeId) || mappedOpenData[0];
+      setCurrentRegister(activeOne || null);
     }
 
-    if (currentRegister || (openData && openData.length > 0)) {
-      const regToUse = currentRegister || openData?.[0];
-      if (regToUse) {
-        const { data: entriesData } = await supabase
-          .from("cash_entries" as any).select("*")
-          .eq("cash_register_id", (regToUse as any).id)
-          .order("confirmed", { ascending: true })
-          .order("created_at", { ascending: false });
-
-        setEntries((entriesData as unknown as CashEntry[]) ?? []);
-      }
+    const regToUse = currentRegister || (storeId !== "all" ? mappedOpenData[0] : null);
+    if (regToUse) {
+       const { data: entriesData, error: entriesError } = await supabase
+         .from("cash_entries" as any).select("*")
+         .eq("cash_register_id", (regToUse as any).id)
+         .order("confirmed", { ascending: true })
+         .order("created_at", { ascending: false });
+       
+       if (entriesError) console.error("Error fetching entries:", entriesError);
+       setEntries((entriesData as unknown as CashEntry[]) ?? []);
+    } else if (storeId !== "all") {
+       // Fetch pending entries for store if no register is open
+       const { data: pendingData } = await supabase
+         .from("cash_entries" as any).select("*")
+         .eq("store_id", storeId)
+         .eq("confirmed", false)
+         .order("created_at", { ascending: false });
+       setEntries((pendingData as unknown as CashEntry[]) ?? []);
+    } else {
+      setEntries([]);
     }
 
     // 2. Histórico
@@ -144,7 +161,8 @@ const Caixa = () => {
         historyQuery = historyQuery.eq("store_id", storeId);
       }
       
-      const { data: historyData } = await historyQuery;
+      const { data: historyData, error: historyError } = await historyQuery;
+      if (historyError) console.error("Error fetching history:", historyError);
       setRegistersHistory((historyData as unknown as CashRegister[]) ?? []);
       setHistoryLoading(false);
     }

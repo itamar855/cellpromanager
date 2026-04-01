@@ -83,15 +83,19 @@ const Transacoes = () => {
 
   const fetchData = async () => {
     let txQuery = supabase.from("transactions").select("*").order("created_at", { ascending: false });
-    if (selectedStoreId !== "all") {
+    
+    // Only filter if a specific store is selected and it's not "all"
+    if (selectedStoreId && selectedStoreId !== "all") {
       txQuery = txQuery.eq("store_id", selectedStoreId);
     }
     
     const [txRes, storesRes, accountsRes] = await Promise.all([
       txQuery,
       supabase.from("stores").select("*"),
-      supabase.from("store_bank_accounts").select("*").eq("store_id", selectedStoreId === "all" ? "" : selectedStoreId),
+      supabase.from("store_bank_accounts").select("*").eq("store_id", (selectedStoreId && selectedStoreId !== "all") ? selectedStoreId : ""),
     ]);
+
+    if (txRes.error) console.error("Transactions fetch error:", txRes.error);
     setTransactions(txRes.data ?? []);
     setStores(storesRes.data ?? []);
     setAccounts(accountsRes.data ?? []);
