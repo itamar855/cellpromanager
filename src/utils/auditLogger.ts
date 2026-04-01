@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export type AuditAction = 
   | "CREATE_SALE" 
@@ -22,7 +23,9 @@ export const logAction = async (
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    let finalStoreId = (storeId === "all" || !storeId) ? null : storeId;
+    const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-12a-f]{12}$/i.test(str);
+    let finalStoreId = (storeId && isUUID(storeId)) ? storeId : null;
+    
     if (!finalStoreId) {
       const { data: profile } = await supabase
         .from("profiles")
@@ -32,18 +35,25 @@ export const logAction = async (
       finalStoreId = profile?.store_id;
     }
 
-    await supabase.from("audit_logs").insert({
+    const { error } = await supabase.from("audit_logs").insert({
       user_id: user.id,
       store_id: finalStoreId,
       action,
       entity_type: entityType,
       entity_id: entityId,
+      before_state: oldValues,
+      after_state: newValues,
+      old_data: oldValues,
+      new_data: newValues,
       old_values: oldValues,
       new_values: newValues,
-      old_data: oldValues, // Fallback compatibility
-      new_data: newValues  // Fallback compatibility
     } as any);
-  } catch (error) {
+
+    if (error) {
+      console.error("Audit Log Error:", error);
+      toast.error("Erro ao gravar Auditoria: " + error.message);
+    }
+  } catch (error: any) {
     console.error("Failed to log action:", error);
   }
 };
