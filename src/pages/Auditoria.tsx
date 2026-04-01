@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search, Activity, User, Calendar, Database } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 
 const actionLabels: Record<string, string> = {
   CREATE_SALE: "Nova Venda",
@@ -55,7 +56,12 @@ const Auditoria = () => {
 
     const { data, error } = await query;
 
-    if (!error) setLogs(data || []);
+    if (error) {
+      console.error("Erro ao buscar logs:", error);
+      toast.error("Erro ao carregar auditoria: " + error.message);
+    } else {
+      setLogs(data || []);
+    }
     setLoading(false);
   };
 
@@ -63,11 +69,12 @@ const Auditoria = () => {
     if (activeStoreId) fetchLogs();
   }, [activeStoreId]);
 
-  const filteredLogs = logs.filter(log => 
-    log.action.toLowerCase().includes(search.toLowerCase()) ||
-    (log.entity_type && log.entity_type.toLowerCase().includes(search.toLowerCase())) ||
-    (log.profiles?.display_name && log.profiles.display_name.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filteredLogs = logs.filter(log => {
+    const actionMatch = (log.action || "").toLowerCase().includes(search.toLowerCase());
+    const entityMatch = (log.entity_type || "").toLowerCase().includes(search.toLowerCase());
+    const userMatch = (log.profiles?.display_name || "").toLowerCase().includes(search.toLowerCase());
+    return actionMatch || entityMatch || userMatch;
+  });
 
   return (
     <div className="space-y-4">
