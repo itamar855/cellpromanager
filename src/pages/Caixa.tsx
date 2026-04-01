@@ -44,7 +44,7 @@ interface CashRegister {
 }
 
 const Caixa = () => {
-  const { user, userRole, userPermissions, activeStoreId, userStoreIds, setActiveTab: setGlobalActiveTab } = useAuth();
+  const { user, userRole, userPermissions, activeStoreId, userStoreIds } = useAuth();
   const [activeTab, setActiveTab] = useState("current");
   const [currentRegister, setCurrentRegister] = useState<CashRegister | null>(null);
   const [allOpenRegisters, setAllOpenRegisters] = useState<CashRegister[]>([]);
