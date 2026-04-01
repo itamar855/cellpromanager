@@ -97,9 +97,12 @@ const Caixa = () => {
     setLoading(true);
     
     // 1. Caixa Aberto
+    // 1. Busca de Caixas Abertos
+    // Para Admins, buscamos SEMRE todos os caixas abertos do sistema para monitoramento global
     let openQuery = supabase.from("cash_registers" as any).select("*").eq("status", "open");
     
-    if (storeId !== "all") {
+    // Se NÃO for admin, filtramos pela loja ativa
+    if (userRole !== "admin" && storeId !== "all") {
       openQuery = openQuery.eq("store_id", storeId);
     }
     
