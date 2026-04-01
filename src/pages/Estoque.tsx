@@ -60,9 +60,13 @@ const Estoque = () => {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [editProductOpen, setEditProductOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<Tables<"products"> | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", brand: "iPhone", model: "", imei: "", serial_number: "", cost_price: "", sale_price: "", store_id: "", condition: "used", color: "", capacity: "" });
+  const [editForm, setEditForm] = useState({ name: "", brand: "iPhone", model: "", imei: "", serial_number: "", cost_price: "", sale_price: "", store_id: "", condition: "used", color: "", capacity: "", justification: "" });
   const [historyProduct, setHistoryProduct] = useState<Tables<"products"> | null>(null);
   const [productHistory, setProductHistory] = useState<any[]>([]);
+  const [justification, setJustification] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteType, setDeleteType] = useState<"product" | "accessory" | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const [form, setForm] = useState({
     name: "", brand: "iPhone" as string, model: "", imei: "",
@@ -72,7 +76,7 @@ const Estoque = () => {
 
   const [accForm, setAccForm] = useState({
     name: "", category: "outro", brand: "", quantity: "0", min_quantity: "5",
-    cost_price: "", sale_price: "", store_id: "", description: "",
+    cost_price: "", sale_price: "", store_id: "", description: "", justification: "",
   });
 
   const fetchData = async () => {
@@ -139,6 +143,7 @@ const Estoque = () => {
   const handleAccSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    if (editAcc && !accForm.justification) { toast.error("Informe o motivo da alteração!"); return; }
     setLoading(true);
 
     const payload = {
@@ -160,22 +165,23 @@ const Estoque = () => {
     if (error) {
       toast.error(error.message);
     } else {
-      logAction(editAcc ? "CREATE_RECORD" : "CREATE_RECORD", "accessories", editAcc ? editAcc.id : "new", editAcc, payload, payload.store_id);
+      logAction(editAcc ? "UPDATE_RECORD" : "CREATE_RECORD", "accessories", editAcc ? editAcc.id : "new", editAcc, { ...payload, justification: accForm.justification }, payload.store_id);
       toast.success(editAcc ? "Acessório atualizado!" : "Acessório cadastrado!");
       setAccDialogOpen(false);
       setEditAcc(null);
-      setAccForm({ name: "", category: "outro", brand: "", quantity: "0", min_quantity: "5", cost_price: "", sale_price: "", store_id: "", description: "" });
+      setAccForm({ name: "", category: "outro", brand: "", quantity: "0", min_quantity: "5", cost_price: "", sale_price: "", store_id: "", description: "", justification: "" });
       fetchData();
     }
     setLoading(false);
   };
 
-  const handleDeleteAcc = async (acc: Accessory) => {
-    if (userRole !== "admin") return;
-    const { error } = await supabase.from("accessories" as any).delete().eq("id", acc.id);
+  const handleDeleteAcc = async (accId: string, reason: string) => {
+    const acc = accessories.find(a => a.id === accId);
+    if (!acc) return;
+    const { error } = await supabase.from("accessories" as any).delete().eq("id", accId);
     if (error) toast.error(error.message);
     else { 
-      logAction("DELETE_RECORD", "accessories", acc.id, acc, null, acc.store_id);
+      logAction("DELETE_RECORD", "accessories", acc.id, acc, { reason }, acc.store_id);
       toast.success("Acessório removido!"); 
       fetchData(); 
     }
@@ -183,12 +189,13 @@ const Estoque = () => {
 
   const handleTransfer = async () => {
     if (!transferProduct || !transferStoreId || !user) return;
+    if (!justification) { toast.error("Informe o motivo da transferência!"); return; }
     setLoading(true);
     const { error } = await supabase.from("products").update({ store_id: transferStoreId } as any).eq("id", transferProduct.id);
     if (error) {
       toast.error("Erro na transferência: " + error.message);
     } else {
-      logAction("TRANSFER_STOCK", "products", transferProduct.id, transferProduct, { ...transferProduct, store_id: transferStoreId }, transferStoreId);
+      logAction("TRANSFER_STOCK", "products", transferProduct.id, transferProduct, { ...transferProduct, store_id: transferStoreId, reason: justification }, transferStoreId);
       const storeMap = new Map(stores.map(s => [s.id, s.name]));
       await supabase.from("transactions").insert({
         type: "income", amount: 0,
@@ -197,7 +204,7 @@ const Estoque = () => {
       });
       await supabase.from("product_history" as any).insert({
         product_id: transferProduct.id, action: "Transferência de Loja", 
-        notes: `De: ${storeMap.get(transferProduct.store_id)} → Para: ${storeMap.get(transferStoreId)}`,
+        notes: `Transferência: ${justification}`,
         created_by: user.id,
       });
       toast.success("Produto transferido!");
@@ -246,6 +253,7 @@ const Estoque = () => {
       condition: p.condition || "used",
       color: p.color || "",
       capacity: p.capacity || "",
+      justification: "",
     });
     setEditProductOpen(true);
   };
@@ -253,6 +261,7 @@ const Estoque = () => {
   const handleUpdateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editProduct || !user) return;
+    if (!editForm.justification) { toast.error("Informe o motivo da alteração!"); return; }
     setLoading(true);
     const oldCost = Number(editProduct.cost_price);
     const newCost = parseFloat(editForm.cost_price);
@@ -274,14 +283,14 @@ const Estoque = () => {
     if (error) {
       toast.error(error.message);
     } else {
-      logAction("UPDATE_RECORD", "products", editProduct.id, editProduct, updatePayload, editForm.store_id);
+      logAction("UPDATE_RECORD", "products", editProduct.id, editProduct, { ...updatePayload, justification: editForm.justification }, editForm.store_id);
       if (oldCost !== newCost) {
         await supabase.from("product_history" as any).insert({
           product_id: editProduct.id,
           action: "Edição",
           old_cost: oldCost,
           new_cost: newCost,
-          notes: "Dados do aparelho atualizados",
+          notes: `Edição: ${editForm.justification}`,
           created_by: user.id,
         });
       }
@@ -293,13 +302,13 @@ const Estoque = () => {
     setLoading(false);
   };
 
-  const handleDeleteProduct = async (id: string) => {
-    if (!confirm("Tem certeza que deseja excluir este aparelho? Esta ação não pode ser desfeita.")) return;
+  const handleDeleteProduct = async (id: string, reason: string) => {
     const productToDelete = products.find(p => p.id === id);
+    if (!productToDelete) return;
     const { error } = await supabase.from("products").delete().eq("id", id);
     if (error) toast.error(error.message);
     else { 
-      logAction("DELETE_RECORD", "products", id, productToDelete, null, productToDelete?.store_id);
+      logAction("DELETE_RECORD", "products", id, productToDelete, { reason }, productToDelete?.store_id);
       toast.success("Aparelho removido!"); fetchData(); 
     }
   };
@@ -311,11 +320,11 @@ const Estoque = () => {
         name: acc.name, category: acc.category, brand: acc.brand || "",
         quantity: String(acc.quantity), min_quantity: String(acc.min_quantity),
         cost_price: String(acc.cost_price), sale_price: acc.sale_price ? String(acc.sale_price) : "",
-        store_id: acc.store_id, description: acc.description || "",
+        store_id: acc.store_id, description: acc.description || "", justification: ""
       });
     } else {
       setEditAcc(null);
-      setAccForm({ name: "", category: "outro", brand: "", quantity: "0", min_quantity: "5", cost_price: "", sale_price: "", store_id: "", description: "" });
+      setAccForm({ name: "", category: "outro", brand: "", quantity: "0", min_quantity: "5", cost_price: "", sale_price: "", store_id: "", description: "", justification: "" });
     }
     setAccDialogOpen(true);
   };
@@ -520,7 +529,7 @@ const Estoque = () => {
                             <Button className="h-7 w-7 p-0 bg-transparent text-foreground hover:bg-muted" onClick={() => openEditProduct(p)}>
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
-                            <Button className="h-7 w-7 p-0 bg-transparent text-destructive hover:bg-destructive/10" onClick={() => handleDeleteProduct(p.id)}>
+                            <Button className="h-7 w-7 p-0 bg-transparent text-destructive hover:bg-destructive/10" onClick={() => { setDeleteId(p.id); setDeleteType("product"); setJustification(""); setDeleteDialogOpen(true); }}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </div>
@@ -597,12 +606,10 @@ const Estoque = () => {
                             <Button className="h-7 w-7 p-0 bg-transparent text-foreground hover:bg-muted" onClick={() => openAccDialog(a)}>
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
-                            {userRole === "admin" && (
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10" 
-                                onClick={() => handleDeleteAcc(a)}>
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10" 
+                              onClick={() => { setDeleteId(a.id); setDeleteType("accessory"); setJustification(""); setDeleteDialogOpen(true); }}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
                           </div>
                         </div>
                       </div>
@@ -682,6 +689,12 @@ const Estoque = () => {
                 <Input type="number" step="0.01" value={accForm.sale_price} onChange={(e) => setAccForm({ ...accForm, sale_price: e.target.value })} placeholder="50.00" className="h-10" />
               </div>
             </div>
+            {editAcc && (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-primary">Motivo da Alteração</Label>
+                <Input value={accForm.justification} onChange={(e) => setAccForm({ ...accForm, justification: e.target.value })} placeholder="Ex: Correção de preço, ajuste de estoque..." required className="h-10 border-primary/30" />
+              </div>
+            )}
             <div className="space-y-1.5 grayscale opacity-60 pointer-events-none">
               <Label className="text-xs">Loja (Vinculada à Loja Ativa)</Label>
               <Input value={storeMap.get(activeStoreId || "") || ""} readOnly className="h-10" />
@@ -719,6 +732,10 @@ const Estoque = () => {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-primary">Motivo da Transferência</Label>
+                <Input value={justification} onChange={(e) => setJustification(e.target.value)} placeholder="Ex: Necessidade de estoque na outra loja" required className="h-10 border-primary/30" />
+              </div>
               <Button onClick={handleTransfer} className="w-full h-11 font-semibold" disabled={loading || !transferStoreId}>
                 {loading ? "Transferindo..." : "Confirmar Transferência"}
               </Button>
@@ -751,6 +768,10 @@ const Estoque = () => {
               <div className="space-y-1.5"><Label className="text-xs">Venda (R$)</Label><Input type="number" step="0.01" value={editForm.sale_price} onChange={e => setEditForm(f => ({ ...f, sale_price: e.target.value }))} className="h-10" /></div>
             </div>
             <div className="space-y-1.5"><Label className="text-xs">Loja</Label><Select value={editForm.store_id} onValueChange={v => setEditForm(f => ({ ...f, store_id: v }))}><SelectTrigger className="h-10"><SelectValue /></SelectTrigger><SelectContent>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-primary">Motivo da Alteração</Label>
+              <Input value={editForm.justification} onChange={e => setEditForm(f => ({ ...f, justification: e.target.value }))} placeholder="Ex: Erro no cadastro, atualização de preço..." required className="h-10 border-primary/30" />
+            </div>
             <Button type="submit" className="w-full h-11 font-semibold" disabled={loading}>{loading ? "Salvando..." : "Salvar Alterações"}</Button>
           </form>
         </DialogContent>
@@ -797,6 +818,52 @@ const Estoque = () => {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog with Justification */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" /> Confirmar Exclusão
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Esta ação é permanente. Por favor, informe o motivo da exclusão para continuar.
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Motivo da Exclusão</Label>
+              <Input 
+                value={justification} 
+                onChange={(e) => setJustification(e.target.value)} 
+                placeholder="Ex: Item danificado, erro de entrada..." 
+                required 
+                className="h-10"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setDeleteDialogOpen(false)}>Cancelar</Button>
+              <Button 
+                variant="destructive" 
+                className="flex-1" 
+                disabled={!justification || loading}
+                onClick={async () => {
+                  setLoading(true);
+                  if (deleteType === "product" && deleteId) {
+                    await handleDeleteProduct(deleteId, justification);
+                  } else if (deleteType === "accessory" && deleteId) {
+                    await handleDeleteAcc(deleteId, justification);
+                  }
+                  setLoading(false);
+                  setDeleteDialogOpen(false);
+                }}
+              >
+                {loading ? "Excluindo..." : "Confirmar Exclusão"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
