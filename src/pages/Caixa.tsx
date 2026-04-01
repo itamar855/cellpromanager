@@ -119,9 +119,18 @@ const Caixa = () => {
       stores: { name: storeMap.get(reg.store_id) }
     }));
 
-    if (storeId === "all") {
-      setAllOpenRegisters(mappedOpenData);
-    } else {
+    // Admin always gets all open registers regardless of activeStoreId to monitor teams
+    if (userRole === "admin") {
+      const { data: allOpen } = await supabase.from("cash_registers" as any).select("*").eq("status", "open");
+      const mappedAll = (allOpen || []).map((reg: any) => ({
+        ...reg,
+        profiles: { display_name: profileMap.get(reg.opened_by) },
+        stores: { name: storeMap.get(reg.store_id) }
+      }));
+      setAllOpenRegisters(mappedAll);
+    }
+
+    if (storeId !== "all") {
       const activeOne = mappedOpenData.find((reg: any) => reg.store_id === storeId) || mappedOpenData[0];
       setCurrentRegister(activeOne || null);
     }
@@ -136,16 +145,8 @@ const Caixa = () => {
        
        if (entriesError) console.error("Error fetching entries:", entriesError);
        setEntries((entriesData as unknown as CashEntry[]) ?? []);
-    } else if (storeId !== "all") {
-       // Fetch pending entries for store if no register is open
-       const { data: pendingData } = await supabase
-         .from("cash_entries" as any).select("*")
-         .eq("store_id", storeId)
-         .eq("confirmed", false)
-         .order("created_at", { ascending: false });
-       setEntries((pendingData as unknown as CashEntry[]) ?? []);
     } else {
-      setEntries([]);
+       setEntries([]);
     }
 
     // 2. Histórico
