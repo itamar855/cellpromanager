@@ -33,7 +33,7 @@ const navItems = [
 ];
 
 const AppLayout = ({ children }: { children: ReactNode }) => {
-  const { user, userRole, userPermissions, userStoreId, activeStoreId, setActiveStoreId, signOut } = useAuth();
+  const { user, userRole, userPermissions, userStoreIds, activeStoreId, setActiveStoreId, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
@@ -43,8 +43,8 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
     supabase.from("stores").select("id, name").then(({ data }) => {
       if (data) {
         let allowedStores = data;
-        if (userRole !== "admin" && userStoreId) {
-          allowedStores = data.filter(s => s.id === userStoreId);
+        if (userRole !== "admin" && userStoreIds && userStoreIds.length > 0) {
+          allowedStores = data.filter(s => userStoreIds.includes(s.id));
         }
         setStores(allowedStores);
         
@@ -64,7 +64,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         }
       }
     });
-  }, [userRole, userStoreId, activeStoreId, setActiveStoreId]);
+  }, [userRole, userStoreIds, activeStoreId, setActiveStoreId]);
 
   const handleStoreChange = (store: { id: string; name: string }) => {
     setActiveStoreName(store.name);

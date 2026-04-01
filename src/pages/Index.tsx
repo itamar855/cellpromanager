@@ -17,7 +17,7 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
 const Dashboard = () => {
-  const { user, userRole, userPermissions, activeStoreId: ctxStoreId, userStoreId } = useAuth();
+  const { user, userRole, userPermissions, activeStoreId: ctxStoreId, userStoreIds } = useAuth();
 
   const isAdmin = userRole === "admin";
   const can = (key: string) => isAdmin || (userPermissions?.[key] === true);
@@ -42,10 +42,10 @@ const Dashboard = () => {
 
   // Re-fetch quando os contextos essenciais carregam ou a loja ativa muda
   useEffect(() => { 
-    if (userPermissions !== null && userStoreId !== undefined) {
+    if (userPermissions !== null && userStoreIds !== undefined) {
       fetchData(); 
     }
-  }, [activeStoreId, userPermissions, userStoreId, userRole]);
+  }, [activeStoreId, userPermissions, userStoreIds, userRole]);
 
   const [stats, setStats] = useState({
     totalStock: 0, totalInvested: 0, totalInvestedAcc: 0,
@@ -65,7 +65,7 @@ const Dashboard = () => {
     if (!userPermissions) return;
 
     const effectiveStoreId = !isAdmin && (!activeStoreId || activeStoreId === "all") 
-      ? userStoreId 
+      ? (userStoreIds.length > 0 ? userStoreIds[0] : null) 
       : activeStoreId;
 
     // isFiltered garante que force o filtro caso a loja efetiva seja definida
@@ -197,12 +197,12 @@ const Dashboard = () => {
         <div>
           <h1 className="font-display text-xl md:text-3xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            {activeStoreId !== "all" || (!isAdmin && userStoreId)
+            {activeStoreId !== "all" || (!isAdmin && userStoreIds.length > 0)
               ? <>Dados limitados à filial</>
               : "Visão geral de todas as lojas"}
           </p>
         </div>
-        {(activeStoreId !== "all" || (!isAdmin && userStoreId)) && (
+        {(activeStoreId !== "all" || (!isAdmin && userStoreIds.length > 0)) && (
           <div className="flex items-center gap-1.5 rounded-lg bg-primary/10 border border-primary/20 px-3 py-1.5">
             <Store className="h-3.5 w-3.5 text-primary" />
             <span className="text-xs font-semibold text-primary">{!isAdmin ? "Sua Loja" : activeStoreName}</span>

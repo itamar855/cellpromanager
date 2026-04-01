@@ -8,7 +8,7 @@ type AuthContextType = {
   user: User | null;
   userRole: Enums<"app_role"> | null;
   userPermissions: Record<string, boolean> | null;
-  userStoreId: string | null;
+  userStoreIds: string[];
   activeStoreId: string | null;
   setActiveStoreId: (id: string) => void;
   loading: boolean;
@@ -20,7 +20,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   userRole: null,
   userPermissions: null,
-  userStoreId: null,
+  userStoreIds: [],
   activeStoreId: null,
   setActiveStoreId: () => {},
   loading: true,
@@ -34,7 +34,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<Enums<"app_role"> | null>(null);
   const [userPermissions, setUserPermissions] = useState<Record<string, boolean> | null>(null);
-  const [userStoreId, setUserStoreId] = useState<string | null>(null);
+  const [userStoreIds, setUserStoreIds] = useState<string[]>([]);
   const [activeStoreId, setActiveStoreIdState] = useState<string | null>(() => localStorage.getItem("cellmanager-active-store-id"));
   const [loading, setLoading] = useState(true);
 
@@ -45,9 +45,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const fetchUserData = async (userId: string) => {
-    const [roleRes, profileRes] = await Promise.all([
+    const [roleRes, storesRes] = await Promise.all([
       supabase.from("user_roles").select("role, permissions").eq("user_id", userId).maybeSingle(),
-      supabase.from("profiles").select("store_id").eq("user_id", userId).maybeSingle()
+      supabase.from("member_stores" as any).select("store_id").eq("user_id", userId)
     ]);
     
     if (roleRes.data) {
@@ -58,13 +58,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUserPermissions(null);
     }
 
-    const storeId = profileRes.data ? (profileRes.data as any).store_id : null;
-    setUserStoreId(storeId);
+    const assignedStoreIds = storesRes.data ? (storesRes.data as any[]).map(s => s.store_id) : [];
+    setUserStoreIds(assignedStoreIds);
 
-    if (storeId && (roleRes.data as any)?.role !== 'admin') {
-      setActiveStoreId(storeId);
-    } else if (!localStorage.getItem("cellmanager-active-store-id")) {
-      // Falbeack: se não tiver storeId no localstorage, pegamos a 1º ou deixamos null pra carregar dps.
+    const isAll = (roleRes.data as any)?.role === 'admin';
+    const currentActive = localStorage.getItem("cellmanager-active-store-id");
+
+    if (!isAll && assignedStoreIds.length > 0) {
+      // Se não é admin e não tem uma loja ativa válida no momento, força a 1ª da lista
+      if (!currentActive || !assignedStoreIds.includes(currentActive)) {
+        setActiveStoreId(assignedStoreIds[0]);
+      }
+    } else if (isAll && !currentActive) {
+      setActiveStoreId("all");
     }
   };
 
@@ -78,7 +84,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         } else {
           setUserRole(null);
           setUserPermissions(null);
-          setUserStoreId(null);
+          setUserStoreIds([]);
           setActiveStoreIdState(null);
           localStorage.removeItem("cellmanager-active-store-id");
         }
@@ -103,7 +109,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, userRole, userPermissions, userStoreId, activeStoreId, setActiveStoreId, loading, signOut }}>
+    <AuthContext.Provider value={{ session, user, userRole, userPermissions, userStoreIds, activeStoreId, setActiveStoreId, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );

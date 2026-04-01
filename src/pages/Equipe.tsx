@@ -18,7 +18,10 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Users, Shield, ShieldCheck, User, Plus, Phone, Store, Trash2 } from "lucide-react";
+import { Users, Shield, ShieldCheck, User, Plus, Phone, Store, Trash2, ChevronDown, Check } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 const roleConfig: Record<string, { label: string; color: string; icon: typeof Shield }> = {
@@ -59,8 +62,8 @@ const defaultPermissions = (role: string): Permissions => {
 type ProfileWithRole = Tables<"profiles"> & {
   role?: Enums<"app_role"> | null;
   phone?: string | null;
-  store_id?: string | null;
   permissions?: Permissions;
+  assignedStoreIds?: string[];
 };
 
 const Equipe = () => {
@@ -71,7 +74,7 @@ const Equipe = () => {
   const [memberToDelete, setMemberToDelete] = useState<ProfileWithRole | null>(null);
   const [newRole, setNewRole] = useState<string>("");
   const [editPhone, setEditPhone] = useState("");
-  const [editStoreId, setEditStoreId] = useState("");
+  const [editStoreIds, setEditStoreIds] = useState<string[]>([]);
   const [permissions, setPermissions] = useState<Permissions>({});
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -80,15 +83,23 @@ const Equipe = () => {
   const [loading, setLoading] = useState(false);
 
   const fetchData = async () => {
-    const [profilesRes, rolesRes, storesRes] = await Promise.all([
+    const [profilesRes, rolesRes, storesRes, memberStoresRes] = await Promise.all([
       supabase.from("profiles").select("*"),
       supabase.from("user_roles").select("*"),
       supabase.from("stores").select("*"),
+      supabase.from("member_stores" as any).select("*"),
     ]);
 
     const profiles = profilesRes.data ?? [];
     const roles = rolesRes.data ?? [];
+    const ms = memberStoresRes.data ?? [];
+    
     const roleMap = new Map((roles as any[]).map((r) => [r.user_id, { role: r.role, permissions: r.permissions }]));
+    const storeMapGroup = new Map<string, string[]>();
+    (ms as any[]).forEach(item => {
+      if (!storeMapGroup.has(item.user_id)) storeMapGroup.set(item.user_id, []);
+      storeMapGroup.get(item.user_id)?.push(item.store_id);
+    });
 
     setMembers(
       profiles.map((p: any) => {
@@ -97,6 +108,7 @@ const Equipe = () => {
           ...p,
           role: (roleData as any)?.role ?? null,
           permissions: ((roleData as any)?.permissions as Permissions) ?? null,
+          assignedStoreIds: storeMapGroup.get(p.user_id) || [],
         };
       })
     );
@@ -113,7 +125,7 @@ const Equipe = () => {
     setSelectedMember(member);
     setNewRole(member.role || "vendedor");
     setEditPhone((member as any).phone || "");
-    setEditStoreId((member as any).store_id || "");
+    setEditStoreIds(member.assignedStoreIds || []);
     setPermissions(member.permissions || defaultPermissions(member.role || "vendedor"));
   };
 
@@ -151,12 +163,27 @@ const Equipe = () => {
       .from("profiles")
       .update({
         phone: editPhone || null,
-        store_id: editStoreId === "none" ? null : editStoreId || null,
+        // Mantemos o store_id legado como o primeiro do array para compatibilidade rápida
+        store_id: editStoreIds.length > 0 ? editStoreIds[0] : null,
       } as any)
       .eq("user_id", selectedMember.user_id);
 
-    if (profileError) toast.error(profileError.message);
-    else toast.success("Membro atualizado!");
+    if (profileError) {
+      toast.error(profileError.message);
+    } else {
+      // Sincroniza member_stores
+      await supabase.from("member_stores" as any).delete().eq("user_id", selectedMember.user_id);
+      
+      if (editStoreIds.length > 0) {
+        const insertData = editStoreIds.map(sid => ({
+          user_id: selectedMember.user_id,
+          store_id: sid
+        }));
+        await supabase.from("member_stores" as any).insert(insertData);
+      }
+      
+      toast.success("Membro e unidades atualizados!");
+    }
 
     setSelectedMember(null);
     setLoading(false);
@@ -247,9 +274,12 @@ const Equipe = () => {
                             <Phone className="h-2.5 w-2.5" /> {(member as any).phone}
                           </span>
                         )}
-                        {(member as any).store_id && (
-                          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                            <Store className="h-2.5 w-2.5" /> {storeMap.get((member as any).store_id) || ""}
+                        {member.assignedStoreIds && member.assignedStoreIds.length > 0 && (
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 ml-2">
+                            <Store className="h-2.5 w-2.5" /> 
+                            {member.assignedStoreIds.length === 1 
+                              ? storeMap.get(member.assignedStoreIds[0])
+                              : `${member.assignedStoreIds.length} Lojas vinculadas`}
                           </span>
                         )}
                         {isMe && (
@@ -322,14 +352,23 @@ const Equipe = () => {
                   <Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="(11) 99999-9999" className="h-10" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Loja de Atuação</Label>
-                  <Select value={editStoreId || "none"} onValueChange={setEditStoreId}>
-                    <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Nenhuma</SelectItem>
-                      {stores.map((s) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
+                  <Label className="text-xs font-semibold">Lojas de Atuação</Label>
+                  <div className="rounded-lg border border-border/50 p-2 max-h-[120px] overflow-y-auto space-y-1 bg-muted/20">
+                    {stores.map((s) => (
+                      <div key={s.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-muted/40 transition-colors">
+                        <Checkbox 
+                          id={`store-${s.id}`}
+                          checked={editStoreIds.includes(s.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) setEditStoreIds(prev => [...prev, s.id]);
+                            else setEditStoreIds(prev => prev.filter(id => id !== s.id));
+                          }}
+                        />
+                        <Label htmlFor={`store-${s.id}`} className="text-xs cursor-pointer truncate">{s.name}</Label>
+                      </div>
+                    ))}
+                    {stores.length === 0 && <p className="text-[10px] text-muted-foreground p-2">Nenhuma loja cadastrada.</p>}
+                  </div>
                 </div>
 
                 {/* Permissões por módulo */}
