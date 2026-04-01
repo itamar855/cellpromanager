@@ -211,25 +211,26 @@ const Auditoria = () => {
                 <div className="space-y-3 font-mono">
                   <p className="text-[10px] uppercase text-muted-foreground font-bold tracking-wider font-sans">Dados da Operação</p>
                   
-                  {(selectedLog.old_values || selectedLog.old_data) ? (
+                  {(selectedLog.before_state || selectedLog.old_values || selectedLog.old_data) ? (
                     <div className="space-y-2">
                       <p className="text-[11px] text-muted-foreground">Estado Anterior:</p>
                       <pre className="p-3 bg-muted/50 rounded-lg text-[10px] overflow-x-auto border border-border/40 whitespace-pre-wrap">
-                        {JSON.stringify(selectedLog.old_values || selectedLog.old_data, null, 2)}
+                        {JSON.stringify(selectedLog.before_state || selectedLog.old_values || selectedLog.old_data, null, 2)}
                       </pre>
                     </div>
                   ) : null}
 
-                  {(selectedLog.new_values || selectedLog.new_data) ? (
+                  {(selectedLog.after_state || selectedLog.new_values || selectedLog.new_data) ? (
                     <div className="space-y-2">
                       <p className="text-[11px] text-muted-foreground text-primary/80">Novo Estado / Justificativa:</p>
                       <pre className="p-3 bg-primary/5 rounded-lg text-[10px] overflow-x-auto border border-primary/20 whitespace-pre-wrap">
-                        {JSON.stringify(selectedLog.new_values || selectedLog.new_data, null, 2)}
+                        {JSON.stringify(selectedLog.after_state || selectedLog.new_values || selectedLog.new_data, null, 2)}
                       </pre>
                     </div>
                   ) : null}
 
-                  {!(selectedLog.old_values || selectedLog.old_data) && !(selectedLog.new_values || selectedLog.new_data) && (
+                  {!(selectedLog.before_state || selectedLog.old_values || selectedLog.old_data) && 
+                   !(selectedLog.after_state || selectedLog.new_values || selectedLog.new_data) && (
                     <p className="text-xs text-muted-foreground italic font-sans">Nenhum detalhe técnico disponível para este registro.</p>
                   )}
                 </div>
