@@ -104,7 +104,7 @@ const Vendas = () => {
       supabase.from("accessories" as any).select("*").eq("store_id", activeStoreId).gt("quantity", 0),
       supabase.from("transactions").select("*").eq("store_id", activeStoreId).eq("type", "income").eq("category", "acessorio").order("created_at", { ascending: false }),
       supabase.from("profiles").select("*"),
-      supabase.from("customers").select("*").order("name"),
+      supabase.from("customers").select("*").or(`store_id.eq.${activeStoreId},store_id.is.null`).order("name"),
       supabase.from("store_bank_accounts").select("*").eq("store_id", activeStoreId),
     ]);
     setSales((salesRes.data as unknown as Sale[]) ?? []);
@@ -137,8 +137,9 @@ const Vendas = () => {
     setCustomerSearch(c.name);
     setCustomerResults([]);
     setShowNewCustomerForm(false);
-    // Busca histórico de compras
+    // Busca histórico de compras (apenas na loja atual)
     const { data } = await supabase.from("sales").select("*")
+      .eq("store_id", activeStoreId)
       .or(`customer_id.eq.${c.id},customer_phone.eq.${c.phone ?? ""}`)
       .order("created_at", { ascending: false }).limit(5);
     setCustomerSalesHistory((data as unknown as Sale[]) ?? []);

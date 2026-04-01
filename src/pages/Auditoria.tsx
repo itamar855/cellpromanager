@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -27,25 +28,38 @@ const actionColors: Record<string, string> = {
 };
 
 const Auditoria = () => {
+  const { user, userRole, activeStoreId } = useAuth();
   const [logs, setLogs] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
 
   const fetchLogs = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    let query = supabase
       .from("audit_logs" as any)
       .select(`*, profiles:user_id(display_name)`)
       .order("created_at", { ascending: false })
-      .limit(100);
+      .limit(200);
+
+    // Filtro por loja para não-admins
+    if (userRole !== "admin") {
+      if (activeStoreId && activeStoreId !== "all") {
+        query = query.eq("store_id", activeStoreId);
+      }
+    } else if (activeStoreId && activeStoreId !== "all") {
+      // Admin vendo uma loja específica
+      query = query.eq("store_id", activeStoreId);
+    }
+
+    const { data, error } = await query;
 
     if (!error) setLogs(data || []);
     setLoading(false);
   };
 
   useEffect(() => {
-    fetchLogs();
-  }, []);
+    if (activeStoreId) fetchLogs();
+  }, [activeStoreId]);
 
   const filteredLogs = logs.filter(log => 
     log.action.toLowerCase().includes(search.toLowerCase()) ||

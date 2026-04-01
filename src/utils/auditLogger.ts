@@ -20,13 +20,20 @@ export const logAction = async (
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("store_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
     await supabase.from("audit_logs").insert({
       user_id: user.id,
+      store_id: profile?.store_id, // Captura a loja no momento da ação
       action,
       entity_type: entityType,
       entity_id: entityId,
-      old_values: oldValues,
-      new_values: newValues,
+      before_state: oldValues,
+      after_state: newValues,
     });
   } catch (error) {
     console.error("Failed to log action:", error);

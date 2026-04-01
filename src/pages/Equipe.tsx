@@ -49,9 +49,11 @@ const MODULES = [
 type Permissions = Record<string, boolean>;
 
 const defaultPermissions = (role: string): Permissions => {
-  if (role === "admin") return Object.fromEntries(MODULES.map((m) => [m.key, true]));
-  if (role === "gerente") return Object.fromEntries(MODULES.map((m) => [m.key, !["lojas", "equipe", "auditoria", "configuracoes"].includes(m.key)]));
-  return Object.fromEntries(MODULES.map((m) => [m.key, ["dashboard", "vendas", "estoque", "os", "clientes", "caixa"].includes(m.key)]));
+  if (role === "admin") {
+    return Object.fromEntries(MODULES.map((m) => [m.key, true]));
+  }
+  // Para outros papéis, apenas módulos operacionais básicos, sem dashboard por padrão
+  return Object.fromEntries(MODULES.map((m) => [m.key, ["vendas", "os", "clientes", "caixa"].includes(m.key)]));
 };
 
 type ProfileWithRole = Tables<"profiles"> & {

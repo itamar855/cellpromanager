@@ -32,8 +32,16 @@ const Clientes = () => {
 
   const fetchData = async () => {
     if (!activeStoreId) return;
+    
+    // Filtro de loja para clientes (se a coluna existir)
+    let customersQuery = supabase.from("customers").select("*").order("created_at", { ascending: false });
+    
+    if (activeStoreId !== "all") {
+      customersQuery = customersQuery.or(`store_id.eq.${activeStoreId},store_id.is.null`);
+    }
+
     const [custRes, salesRes, ordersRes, prodsRes] = await Promise.all([
-      supabase.from("customers").select("*").order("created_at", { ascending: false }),
+      customersQuery,
       supabase.from("sales").select("*").eq("store_id", activeStoreId),
       supabase.from("service_orders").select("*").eq("store_id", activeStoreId),
       supabase.from("products").select("id, name").eq("store_id", activeStoreId),
@@ -91,10 +99,16 @@ const Clientes = () => {
     if (!user) return;
     setLoading(true);
 
-    const payload = {
-      name: form.name, phone: form.phone || null, email: form.email || null,
-      cpf: form.cpf || null, address: form.address || null, notes: form.notes || null, birth_date: form.birth_date || null,
+    const payload: any = {
+      name: form.name, 
+      phone: form.phone || null, 
+      email: form.email || null,
+      cpf: form.cpf || null, 
+      address: form.address || null, 
+      notes: form.notes || null, 
+      birth_date: form.birth_date || null,
       created_by: user.id,
+      store_id: activeStoreId !== "all" ? activeStoreId : null,
     };
 
     let error;
