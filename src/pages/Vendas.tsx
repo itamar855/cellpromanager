@@ -57,7 +57,7 @@ const createPendingCashEntry = async (storeId: string, userId: string, amount: n
 const emptyCustomerForm = { name: "", phone: "", cpf: "", address: "", email: "", birth: "" };
 
 const Vendas = () => {
-  const { user, userRole, activeStoreId } = useAuth();
+  const { user, userRole, activeStoreId, setActiveStoreId } = useAuth();
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Tables<"products">[]>([]);
   const [accessories, setAccessories] = useState<Accessory[]>([]);
@@ -547,6 +547,7 @@ const Vendas = () => {
           <div className="flex items-center gap-2">
             <Store className="h-4 w-4 text-muted-foreground" />
             <Select value={activeStoreId} onValueChange={(v) => {
+              setActiveStoreId(v);
               const s = stores.find(s => s.id === v);
               window.dispatchEvent(new CustomEvent("store-changed", { detail: { id: v, name: s?.name || "Todas as lojas" } }));
             }}>

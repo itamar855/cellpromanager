@@ -38,9 +38,11 @@ export const logAction = async (
       action,
       entity_type: entityType,
       entity_id: entityId,
-      before_state: oldValues,
-      after_state: newValues,
-    });
+      old_values: oldValues,
+      new_values: newValues,
+      old_data: oldValues, // Fallback compatibility
+      new_data: newValues  // Fallback compatibility
+    } as any);
   } catch (error) {
     console.error("Failed to log action:", error);
   }

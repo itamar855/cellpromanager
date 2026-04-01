@@ -20,29 +20,15 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
 const Dashboard = () => {
-  const { user, userRole, userPermissions, activeStoreId: ctxStoreId, userStoreIds } = useAuth();
+  const { user, userRole, userPermissions, activeStoreId, setActiveStoreId, userStoreIds } = useAuth();
 
   const isAdmin = userRole === "admin";
   const canSeeFinancials = isAdmin || userRole === "gerente";
   const can = (key: string) => isAdmin || (userPermissions?.[key] === true);
 
-  // Loja ativa — lê da context/localstorage
-  const [activeStoreId, setActiveStoreId] = useState<string>(
-    () => ctxStoreId || localStorage.getItem("cellmanager-active-store-id") || "all"
-  );
   const [activeStoreName, setActiveStoreName] = useState<string>(
     () => localStorage.getItem("cellmanager-active-store-name") || "Todas as lojas"
   );
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      setActiveStoreId(detail.id);
-      setActiveStoreName(detail.name);
-    };
-    window.addEventListener("store-changed", handler);
-    return () => window.removeEventListener("store-changed", handler);
-  }, []);
 
   // Re-fetch quando os contextos essenciais carregam ou a loja ativa muda
   useEffect(() => { 
@@ -218,6 +204,7 @@ const Dashboard = () => {
           <div className="flex items-center gap-2">
             <Store className="h-4 w-4 text-muted-foreground" />
             <Select value={activeStoreId} onValueChange={(v) => {
+              setActiveStoreId(v);
               const s = stores.find(s => s.id === v);
               window.dispatchEvent(new CustomEvent("store-changed", { detail: { id: v, name: s?.name || "Todas as lojas" } }));
             }}>

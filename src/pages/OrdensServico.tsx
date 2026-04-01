@@ -20,7 +20,7 @@ import { toast } from "sonner";
 import {
   Plus, Wrench, Search, Clock, CheckCircle2, AlertCircle, Package,
   Phone, User, FileText, MessageCircle, Banknote, CreditCard, QrCode, DollarSign,
-  Printer, ChevronRight, ChevronLeft, Camera, Upload, Receipt, Shield, Trash2
+  Printer, ChevronRight, ChevronLeft, Camera, Upload, Receipt, Shield, Trash2, Store
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { KanbanBoard } from "@/components/KanbanBoard";
@@ -391,7 +391,7 @@ const generateThermalPdf = async (order: any, store: any, techName: string, publ
 };
 
 const OrdensServico = () => {
-  const { user, userRole, activeStoreId } = useAuth();
+  const { user, userRole, activeStoreId, setActiveStoreId } = useAuth();
   const isAdmin = userRole === "admin";
   const [orders, setOrders] = useState<Tables<"service_orders">[]>([]);
   const [stores, setStores] = useState<Tables<"stores">[]>([]);
@@ -758,6 +758,24 @@ const OrdensServico = () => {
           <h1 className="font-display text-xl md:text-3xl font-bold tracking-tight">Ordens de Serviço</h1>
           <p className="text-muted-foreground text-sm mt-0.5">{orders.length} ordens registradas</p>
         </div>
+        {isAdmin && (
+          <div className="flex items-center gap-2">
+            <Store className="h-4 w-4 text-muted-foreground" />
+            <Select value={activeStoreId} onValueChange={(v) => {
+              setActiveStoreId(v);
+              const s = stores.find(s => s.id === v);
+              window.dispatchEvent(new CustomEvent("store-changed", { detail: { id: v, name: s?.name || "Todas as lojas" } }));
+            }}>
+              <SelectTrigger className="w-[180px] h-9">
+                <SelectValue placeholder="Selecionar Loja" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as Lojas</SelectItem>
+                {stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
           <DialogTrigger asChild>
             <Button className="gap-2 h-10"><Plus className="h-4 w-4" /> Nova OS</Button>

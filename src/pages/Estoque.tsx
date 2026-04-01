@@ -45,7 +45,7 @@ type Accessory = {
 };
 
 const Estoque = () => {
-  const { user, userRole, activeStoreId } = useAuth();
+  const { user, userRole, activeStoreId, setActiveStoreId } = useAuth();
   const [products, setProducts] = useState<Tables<"products">[]>([]);
   const [accessories, setAccessories] = useState<Accessory[]>([]);
   const [stores, setStores] = useState<Tables<"stores">[]>([]);
@@ -97,10 +97,12 @@ const Estoque = () => {
       accQuery.order("created_at", { ascending: false }),
     ]);
 
-    if (productsRes.error) {
-      console.error("Products error:", productsRes.error);
-      toast.error("Erro aparelhos: " + productsRes.error.message);
+    const pErr = productsRes.error;
+    if (pErr) {
+      console.error("Erro ao buscar produtos:", pErr);
+      toast.error(`Falha ao carregar estoque: ${pErr.message}`);
     }
+    console.log(`[DEBUG] Estoque carregado. Qtd: ${productsRes.data?.length || 0}. Loja Selecionada: ${activeStoreId}`);
     setProducts(productsRes.data ?? []);
     setStores(storesRes.data ?? []);
     setAccessories((accRes.data ?? []) as unknown as Accessory[]);
@@ -347,6 +349,7 @@ const Estoque = () => {
           <div className="flex items-center gap-2">
             <Store className="h-4 w-4 text-muted-foreground" />
             <Select value={activeStoreId} onValueChange={(v) => {
+              setActiveStoreId(v);
               const s = stores.find(s => s.id === v);
               window.dispatchEvent(new CustomEvent("store-changed", { detail: { id: v, name: s?.name || "Todas as lojas" } }));
             }}>
