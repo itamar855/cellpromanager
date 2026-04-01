@@ -7,6 +7,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search, Activity, User, Calendar, Database } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const actionLabels: Record<string, string> = {
   CREATE_SALE: "Nova Venda",
@@ -36,6 +42,7 @@ const Auditoria = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [selectedLog, setSelectedLog] = useState<any | null>(null);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -115,7 +122,11 @@ const Auditoria = () => {
             ) : (
               <div className="divide-y divide-border/40">
                 {filteredLogs.map((log) => (
-                  <div key={log.id} className="p-4 hover:bg-muted/30 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div 
+                    key={log.id} 
+                    onClick={() => setSelectedLog(log)}
+                    className="p-4 hover:bg-muted/30 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                  >
                     <div className="flex gap-4 items-start">
                       <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${log.action.includes('DELETE') ? 'bg-destructive' : 'bg-primary animate-pulse'}`} />
                       <div className="space-y-1">
@@ -160,6 +171,73 @@ const Auditoria = () => {
           </ScrollArea>
         </CardContent>
       </Card>
+
+      <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5 text-primary" />
+              Detalhes do Registro
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedLog && (
+            <ScrollArea className="max-h-[60vh] mt-4">
+              <div className="space-y-6 pr-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <p className="text-[10px] uppercase text-muted-foreground font-bold tracking-wider">Ação</p>
+                    <Badge className={`text-[10px] border ${actionColors[selectedLog.action] || 'bg-muted'}`}>
+                      {actionLabels[selectedLog.action] || selectedLog.action}
+                    </Badge>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <p className="text-[10px] uppercase text-muted-foreground font-bold tracking-wider">Entidade</p>
+                    <p className="text-sm font-semibold capitalize">{selectedLog.entity_type?.replace('_', ' ') || 'Sistema'}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <p className="text-[10px] uppercase text-muted-foreground font-bold tracking-wider">Usuário</p>
+                    <p className="text-sm">{profileMap.get(selectedLog.user_id) || "Sistema"}</p>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <p className="text-[10px] uppercase text-muted-foreground font-bold tracking-wider">Horário</p>
+                    <p className="text-sm">{new Date(selectedLog.created_at).toLocaleString("pt-BR")}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 font-mono">
+                  <p className="text-[10px] uppercase text-muted-foreground font-bold tracking-wider font-sans">Dados da Operação</p>
+                  
+                  {(selectedLog.old_values || selectedLog.old_data) ? (
+                    <div className="space-y-2">
+                      <p className="text-[11px] text-muted-foreground">Estado Anterior:</p>
+                      <pre className="p-3 bg-muted/50 rounded-lg text-[10px] overflow-x-auto border border-border/40 whitespace-pre-wrap">
+                        {JSON.stringify(selectedLog.old_values || selectedLog.old_data, null, 2)}
+                      </pre>
+                    </div>
+                  ) : null}
+
+                  {(selectedLog.new_values || selectedLog.new_data) ? (
+                    <div className="space-y-2">
+                      <p className="text-[11px] text-muted-foreground text-primary/80">Novo Estado / Justificativa:</p>
+                      <pre className="p-3 bg-primary/5 rounded-lg text-[10px] overflow-x-auto border border-primary/20 whitespace-pre-wrap">
+                        {JSON.stringify(selectedLog.new_values || selectedLog.new_data, null, 2)}
+                      </pre>
+                    </div>
+                  ) : null}
+
+                  {!(selectedLog.old_values || selectedLog.old_data) && !(selectedLog.new_values || selectedLog.new_data) && (
+                    <p className="text-xs text-muted-foreground italic font-sans">Nenhum detalhe técnico disponível para este registro.</p>
+                  )}
+                </div>
+              </div>
+            </ScrollArea>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

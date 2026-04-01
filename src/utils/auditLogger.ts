@@ -22,7 +22,7 @@ export const logAction = async (
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    let finalStoreId = storeId;
+    let finalStoreId = (storeId === "all" || !storeId) ? null : storeId;
     if (!finalStoreId) {
       const { data: profile } = await supabase
         .from("profiles")
