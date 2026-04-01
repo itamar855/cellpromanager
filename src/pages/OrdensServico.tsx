@@ -391,7 +391,7 @@ const generateThermalPdf = async (order: any, store: any, techName: string, publ
 };
 
 const OrdensServico = () => {
-  const { user } = useAuth();
+  const { user, activeStoreId } = useAuth();
   const [orders, setOrders] = useState<Tables<"service_orders">[]>([]);
   const [stores, setStores] = useState<Tables<"stores">[]>([]);
   const [profiles, setProfiles] = useState<Tables<"profiles">[]>([]);
@@ -431,8 +431,9 @@ const OrdensServico = () => {
   });
 
   const fetchData = async () => {
+    if (!activeStoreId) return;
     const [ordersRes, storesRes, profilesRes] = await Promise.all([
-      supabase.from("service_orders").select("*").order("created_at", { ascending: false }),
+      supabase.from("service_orders").select("*").eq("store_id", activeStoreId).order("created_at", { ascending: false }),
       supabase.from("stores").select("*"),
       supabase.from("profiles").select("*"),
     ]);
@@ -441,7 +442,7 @@ const OrdensServico = () => {
     setProfiles(profilesRes.data ?? []);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [activeStoreId]);
 
   const uploadReceipt = async (file: File): Promise<string | null> => {
     const fileName = `${detailOrder?.order_number}-${Date.now()}-${file.name}`;
@@ -494,7 +495,7 @@ const OrdensServico = () => {
       device_accessories: form.device_accessories || null,
       reported_defect: form.reported_defect,
       requested_service: form.requested_service,
-      store_id: form.store_id || null,
+      store_id: activeStoreId,
       technician_id: form.technician_id || null,
       estimated_price: form.estimated_price ? parseFloat(form.estimated_price) : 0,
       estimated_completion: form.estimated_completion || null,

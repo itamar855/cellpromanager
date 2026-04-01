@@ -42,7 +42,7 @@ const TRANSACTION_CATEGORIES = [
 ];
 
 const Transacoes = () => {
-  const { user, userRole } = useAuth();
+  const { user, userRole, activeStoreId } = useAuth();
   const [transactions, setTransactions] = useState<Tables<"transactions">[]>([]);
   const [stores, setStores] = useState<Tables<"stores">[]>([]);
   const [accounts, setAccounts] = useState<Tables<"store_bank_accounts">[]>([]);
@@ -78,17 +78,18 @@ const Transacoes = () => {
   };
 
   const fetchData = async () => {
+    if (!activeStoreId) return;
     const [txRes, storesRes, accountsRes] = await Promise.all([
-      supabase.from("transactions").select("*").order("created_at", { ascending: false }),
+      supabase.from("transactions").select("*").eq("store_id", activeStoreId).order("created_at", { ascending: false }),
       supabase.from("stores").select("*"),
-      supabase.from("store_bank_accounts").select("*"),
+      supabase.from("store_bank_accounts").select("*").eq("store_id", activeStoreId),
     ]);
     setTransactions(txRes.data ?? []);
     setStores(storesRes.data ?? []);
     setAccounts(accountsRes.data ?? []);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [activeStoreId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,7 +105,7 @@ const Transacoes = () => {
       amount: parseFloat(form.amount),
       description: form.description || null, 
       category: form.category || null,
-      store_id: form.store_id || null, 
+      store_id: activeStoreId, 
       source_account_id: form.source_account_id || null,
       destination_account_id: form.destination_account_id || null,
       net_amount: parseFloat(form.amount),
@@ -296,14 +297,9 @@ const Transacoes = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold">Loja Responsável</Label>
-                  <Select value={form.store_id} onValueChange={(v) => setForm({ ...form, store_id: v })}>
-                    <SelectTrigger className="h-10"><SelectValue placeholder="Opcional" /></SelectTrigger>
-                    <SelectContent>
-                      {stores.map((s) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-1.5 grayscale opacity-60 pointer-events-none">
+                  <Label className="text-xs font-semibold">Loja Responsável (Ativa)</Label>
+                  <Input value={storeMap.get(activeStoreId || "") || ""} readOnly className="h-10" />
                 </div>
               </div>
 

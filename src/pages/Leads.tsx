@@ -41,7 +41,7 @@ const statusConfig: Record<LeadStatus, { label: string; color: string }> = {
 const allStatuses: LeadStatus[] = ['novo', 'atendimento', 'negociacao', 'concluido', 'perdido'];
 
 const Leads = () => {
-  const { user, userRole, userPermissions } = useAuth();
+  const { user, userRole, userPermissions, activeStoreId } = useAuth();
   
   if (userRole !== "admin" && !userPermissions?.leads) {
     return (
@@ -88,6 +88,10 @@ const Leads = () => {
     // Multi-agent filtering: only see assigned leads if not admin/gerente
     if (userRole !== "admin" && userRole !== "gerente") {
       query = query.eq("assigned_to", user?.id);
+    }
+
+    if (activeStoreId) {
+      query = query.eq("store_id", activeStoreId);
     }
 
     const { data: leadsData } = await query;
@@ -148,7 +152,7 @@ const Leads = () => {
     const { error } = await supabase.from("leads").insert({
       ...form,
       created_by: user.id,
-      store_id: form.store_id || null
+      store_id: activeStoreId || form.store_id || null
     });
 
     if (error) {
@@ -208,7 +212,7 @@ const Leads = () => {
       email: form.email,
       source: form.source,
       notes: form.notes,
-      store_id: form.store_id || null,
+      store_id: activeStoreId || form.store_id || null,
       assigned_to: form.assigned_to || null
     }).eq("id", selectedLead.id);
 
@@ -389,7 +393,7 @@ const Leads = () => {
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Loja</Label>
-                      <Select value={form.store_id} onValueChange={v => setForm({...form, store_id: v})}>
+                      <Select value={form.store_id || activeStoreId || ""} onValueChange={v => setForm({...form, store_id: v})} disabled={!!activeStoreId}>
                         <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
                         <SelectContent>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                       </Select>
@@ -429,10 +433,12 @@ const Leads = () => {
                 {vendedores.map(v => <SelectItem key={v.user_id} value={v.user_id}>{v.display_name}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Select value={filterStore} onValueChange={setFilterStore}>
-              <SelectTrigger className="w-[140px] h-10 bg-muted/20 border-border/40"><SelectValue placeholder="Loja" /></SelectTrigger>
-              <SelectContent><SelectItem value="all">Todas Lojas</SelectItem>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-            </Select>
+            {userRole === "admin" && (
+              <Select value={filterStore} onValueChange={setFilterStore}>
+                <SelectTrigger className="w-[140px] h-10 bg-muted/20 border-border/40"><SelectValue placeholder="Loja" /></SelectTrigger>
+                <SelectContent><SelectItem value="all">Todas Lojas</SelectItem>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+              </Select>
+            )}
             <Select value={filterSource} onValueChange={setFilterSource}>
               <SelectTrigger className="w-[140px] h-10 bg-muted/20 border-border/40"><SelectValue placeholder="Origem" /></SelectTrigger>
               <SelectContent><SelectItem value="all">Todas Origens</SelectItem><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="instagram">Instagram</SelectItem><SelectItem value="trafego_pago">Tráfego Pago</SelectItem><SelectItem value="indicacao">Indicação</SelectItem></SelectContent>
@@ -639,7 +645,7 @@ const Leads = () => {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Loja</Label>
-              <Select value={form.store_id} onValueChange={v => setForm({...form, store_id: v})}>
+              <Select value={form.store_id || activeStoreId || ""} onValueChange={v => setForm({...form, store_id: v})} disabled={!!activeStoreId}>
                 <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
               </Select>

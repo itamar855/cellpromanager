@@ -52,7 +52,7 @@ const MONTHS = [
 ];
 
 const FinancasPF = () => {
-  const { user, userRole } = useAuth();
+  const { user, userRole, activeStoreId } = useAuth();
   const [transactions, setTransactions] = useState<Tables<"transactions">[]>([]);
   const [fixedExpenses, setFixedExpenses] = useState<Tables<"fixed_expenses">[]>([]);
   const [accounts, setAccounts] = useState<Tables<"store_bank_accounts">[]>([]);
@@ -94,14 +94,21 @@ const FinancasPF = () => {
 
   /* ─── Fetch ─── */
   const fetchData = async () => {
+    if (!activeStoreId) {
+      setTransactions([]);
+      setAccounts([]);
+      setFixedExpenses([]);
+      return;
+    }
     const [txRes, accRes, fixedRes] = await Promise.all([
       supabase
         .from("transactions")
         .select("*")
         .in("type", ["expense_pf", "pro_labore"])
+        .eq("store_id", activeStoreId)
         .order("created_at", { ascending: false }),
-      supabase.from("store_bank_accounts").select("*"),
-      supabase.from("fixed_expenses").select("*").eq("is_pf", true).order("due_day"),
+      supabase.from("store_bank_accounts").select("*").eq("store_id", activeStoreId),
+      supabase.from("fixed_expenses").select("*").eq("is_pf", true).eq("store_id", activeStoreId).order("due_day"),
     ]);
     setTransactions(txRes.data ?? []);
     setAccounts(accRes.data ?? []);
@@ -117,7 +124,7 @@ const FinancasPF = () => {
     return urlData.publicUrl;
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [activeStoreId]);
 
   /* ─── Filtered by month/year ─── */
   const filtered = transactions.filter((tx) => {
@@ -185,7 +192,7 @@ const FinancasPF = () => {
       category: form.category || null,
       source_account_id: form.source_account_id || null,
       destination_account_id: null,
-      store_id: null,
+      store_id: activeStoreId,
       net_amount: parseFloat(form.amount) || 0,
       receipt_url: existingReceiptUrl
     };
@@ -302,6 +309,7 @@ const FinancasPF = () => {
       category: fixedForm.category || null,
       due_day: parseInt(fixedForm.due_day) || 1,
       is_pf: true,
+      store_id: activeStoreId,
       active: fixedForm.active,
       created_by: user.id,
     };
@@ -354,7 +362,7 @@ const FinancasPF = () => {
         created_at: new Date(filterYear, filterMonth, Math.min(e.due_day || 1, 28)).toISOString(),
         expected_settlement_date: new Date(filterYear, filterMonth, Math.min(e.due_day || 1, 28)).toISOString(),
         reconciled: false,
-        store_id: null,
+        store_id: activeStoreId,
         net_amount: e.amount
       }));
 

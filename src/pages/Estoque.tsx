@@ -44,12 +44,11 @@ type Accessory = {
 };
 
 const Estoque = () => {
-  const { user } = useAuth();
+  const { user, activeStoreId } = useAuth();
   const [products, setProducts] = useState<Tables<"products">[]>([]);
   const [accessories, setAccessories] = useState<Accessory[]>([]);
   const [stores, setStores] = useState<Tables<"stores">[]>([]);
   const [search, setSearch] = useState("");
-  const [filterStore, setFilterStore] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [accDialogOpen, setAccDialogOpen] = useState(false);
   const [editAcc, setEditAcc] = useState<Accessory | null>(null);
@@ -76,17 +75,18 @@ const Estoque = () => {
   });
 
   const fetchData = async () => {
+    if (!activeStoreId) return;
     const [productsRes, storesRes, accRes] = await Promise.all([
-      supabase.from("products").select("*").order("created_at", { ascending: false }),
+      supabase.from("products").select("*").eq("store_id", activeStoreId).order("created_at", { ascending: false }),
       supabase.from("stores").select("*"),
-      supabase.from("accessories" as any).select("*").order("created_at", { ascending: false }),
+      supabase.from("accessories" as any).select("*").eq("store_id", activeStoreId).order("created_at", { ascending: false }),
     ]);
     setProducts(productsRes.data ?? []);
     setStores(storesRes.data ?? []);
     setAccessories((accRes.data ?? []) as unknown as Accessory[]);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [activeStoreId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,7 +97,7 @@ const Estoque = () => {
       imei: form.imei || null, serial_number: form.serial_number || null,
       cost_price: parseFloat(form.cost_price),
       sale_price: form.sale_price ? parseFloat(form.sale_price) : null,
-      store_id: form.store_id, created_by: user.id,
+      store_id: activeStoreId, created_by: user.id,
       product_type: form.product_type, condition: form.condition,
       color: form.color || null, capacity: form.capacity || null,
     }).select().single();
@@ -133,7 +133,7 @@ const Estoque = () => {
       quantity: parseInt(accForm.quantity), min_quantity: parseInt(accForm.min_quantity),
       cost_price: parseFloat(accForm.cost_price),
       sale_price: accForm.sale_price ? parseFloat(accForm.sale_price) : null,
-      store_id: accForm.store_id, description: accForm.description || null,
+      store_id: activeStoreId, description: accForm.description || null,
       created_by: user.id,
     };
 
@@ -193,14 +193,12 @@ const Estoque = () => {
 
   const filteredProducts = products.filter((p) => {
     const q = search.toLowerCase();
-    return (p.name.toLowerCase().includes(q) || p.model.toLowerCase().includes(q) || (p.imei && p.imei.includes(search)))
-      && (filterStore === "all" || p.store_id === filterStore);
+    return (p.name.toLowerCase().includes(q) || p.model.toLowerCase().includes(q) || (p.imei && p.imei.includes(search)));
   });
 
   const filteredAccessories = accessories.filter((a) => {
     const q = search.toLowerCase();
-    return (a.name.toLowerCase().includes(q) || (a.brand && a.brand.toLowerCase().includes(q)))
-      && (filterStore === "all" || a.store_id === filterStore);
+    return (a.name.toLowerCase().includes(q) || (a.brand && a.brand.toLowerCase().includes(q)));
   });
 
   const inStock = filteredProducts.filter((p) => p.status === "in_stock");
@@ -325,19 +323,11 @@ const Estoque = () => {
         </div>
       )}
 
-      {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar..." className="pl-9 h-10" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar no estoque da loja..." className="pl-9 h-10" />
         </div>
-        <Select value={filterStore} onValueChange={setFilterStore}>
-          <SelectTrigger className="w-full sm:w-44 h-10"><SelectValue placeholder="Todas as lojas" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas as lojas</SelectItem>
-            {stores.map((s) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
-          </SelectContent>
-        </Select>
       </div>
 
       <Tabs defaultValue="aparelhos">
@@ -423,16 +413,11 @@ const Estoque = () => {
                       <Input type="number" step="0.01" value={form.sale_price} onChange={(e) => setForm({ ...form, sale_price: e.target.value })} placeholder="3500.00" className="h-10" />
                     </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Loja</Label>
-                    <Select value={form.store_id} onValueChange={(v) => setForm({ ...form, store_id: v })}>
-                      <SelectTrigger className="h-10"><SelectValue placeholder="Selecione a loja" /></SelectTrigger>
-                      <SelectContent>
-                        {stores.map((s) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
-                      </SelectContent>
-                    </Select>
+                  <div className="space-y-1.5 grayscale opacity-60 pointer-events-none">
+                    <Label className="text-xs">Loja (Vinculada à Loja Ativa)</Label>
+                    <Input value={storeMap.get(activeStoreId || "") || ""} readOnly className="h-10" />
                   </div>
-                  <Button type="submit" className="w-full h-11 font-semibold" disabled={loading || !form.store_id}>
+                  <Button type="submit" className="w-full h-11 font-semibold" disabled={loading || !activeStoreId}>
                     {loading ? "Salvando..." : "Cadastrar Aparelho"}
                   </Button>
                 </form>
@@ -637,16 +622,11 @@ const Estoque = () => {
                 <Input type="number" step="0.01" value={accForm.sale_price} onChange={(e) => setAccForm({ ...accForm, sale_price: e.target.value })} placeholder="50.00" className="h-10" />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Loja</Label>
-              <Select value={accForm.store_id} onValueChange={(v) => setAccForm({ ...accForm, store_id: v })}>
-                <SelectTrigger className="h-10"><SelectValue placeholder="Selecione a loja" /></SelectTrigger>
-                <SelectContent>
-                  {stores.map((s) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
-                </SelectContent>
-              </Select>
+            <div className="space-y-1.5 grayscale opacity-60 pointer-events-none">
+              <Label className="text-xs">Loja (Vinculada à Loja Ativa)</Label>
+              <Input value={storeMap.get(activeStoreId || "") || ""} readOnly className="h-10" />
             </div>
-            <Button type="submit" className="w-full h-11 font-semibold" disabled={loading || !accForm.store_id}>
+            <Button type="submit" className="w-full h-11 font-semibold" disabled={loading || !activeStoreId}>
               {loading ? "Salvando..." : editAcc ? "Salvar Alterações" : "Cadastrar Acessório"}
             </Button>
           </form>

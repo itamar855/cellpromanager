@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Landmark, Clock, Building, User, Briefcase, ArrowUpRight, TrendingUp, PieChart, History, Plus, PlusCircle, CreditCard, PiggyBank, PlusCircle as PlusIcon } from "lucide-react";
@@ -36,6 +37,7 @@ type AccountBalance = {
   future_balance: number;
 };
 export default function Contas() {
+  const { user, activeStoreId, userRole } = useAuth();
   const [balances, setBalances] = useState<AccountBalance[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [stores, setStores] = useState<Map<string, string>>(new Map());
@@ -63,10 +65,14 @@ export default function Contas() {
 
   const fetchData = async () => {
     setLoading(true);
+    if (!activeStoreId) {
+      setLoading(false);
+      return;
+    }
     const [accountsRes, storesRes, transactionsRes] = await Promise.all([
-      supabase.from("store_bank_accounts").select("*"),
+      supabase.from("store_bank_accounts").select("*").eq("store_id", activeStoreId),
       supabase.from("stores").select("id, name"),
-      supabase.from("transactions").select("*").order('created_at', { ascending: false }),
+      supabase.from("transactions").select("*").eq("store_id", activeStoreId).order('created_at', { ascending: false }),
     ]);
     const accounts = accountsRes.data || [];
     const storesData = storesRes.data || [];
@@ -113,7 +119,7 @@ export default function Contas() {
     }
     setLoading(true);
     const { error } = await supabase.from("store_bank_accounts").insert({
-      store_id: bankForm.owner_type === "PJ" ? bankForm.store_id : rawStores[0]?.id, // Default to first store for PF tracking
+      store_id: activeStoreId || (bankForm.owner_type === "PJ" ? bankForm.store_id : rawStores[0]?.id), 
       bank_name: bankForm.bank_name,
       account_type: bankForm.account_type,
       agency: bankForm.agency || null,
@@ -146,7 +152,7 @@ export default function Contas() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [activeStoreId]);
   const pj = balances.filter((a) => !a.owner_type || a.owner_type === "PJ");
   const pf = balances.filter((a) => a.owner_type === "PF");
   // Estatísticas PF do Mês Atual
@@ -393,7 +399,7 @@ export default function Contas() {
               </div>
               <div className="space-y-2">
                 <Label className="text-xs font-bold uppercase tracking-wider">Loja / Vínculo</Label>
-                <Select value={bankForm.store_id} onValueChange={(v) => setBankForm({ ...bankForm, store_id: v })}>
+                <Select value={bankForm.store_id || activeStoreId || ""} onValueChange={(v) => setBankForm({ ...bankForm, store_id: v })} disabled={!!activeStoreId}>
                   <SelectTrigger className="h-11"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                   <SelectContent>
                     {rawStores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}

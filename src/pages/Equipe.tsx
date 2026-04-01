@@ -40,6 +40,7 @@ const MODULES = [
   { key: "equipe", label: "Equipe" },
   { key: "contas", label: "Contas" },
   { key: "caixa", label: "Caixa" },
+  { key: "gerenciar_financeiro", label: "Caixa Avançado (Editar/Excluir)" },
   { key: "auditoria", label: "Auditoria" },
   { key: "configuracoes", label: "Configurações" },
   { key: "ia", label: "IA" },

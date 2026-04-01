@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,7 +60,7 @@ const RankBadge = ({ pos }: { pos: number }) => {
   return <span className="text-muted-foreground text-sm font-bold w-5 text-center">{pos}º</span>;
 };
 
-const Filters = ({ period, setPeriod, storeId, setStoreId, stores, customStart, setCustomStart, customEnd, setCustomEnd }: any) => (
+const Filters = ({ period, setPeriod, storeId, setStoreId, stores, customStart, setCustomStart, customEnd, setCustomEnd, userRole }: any) => (
   <div className="flex flex-wrap gap-2 items-end">
     <div className="space-y-1">
       <Label className="text-xs">Período</Label>
@@ -86,20 +87,23 @@ const Filters = ({ period, setPeriod, storeId, setStoreId, stores, customStart, 
         </div>
       </>
     )}
-    <div className="space-y-1">
-      <Label className="text-xs">Loja</Label>
-      <Select value={storeId} onValueChange={setStoreId}>
-        <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Todas as lojas</SelectItem>
-          {stores.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-        </SelectContent>
-      </Select>
-    </div>
+    {userRole === "admin" && (
+      <div className="space-y-1">
+        <Label className="text-xs">Loja (Filtro Local)</Label>
+        <Select value={storeId} onValueChange={setStoreId}>
+          <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas as lojas</SelectItem>
+            {stores.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+    )}
   </div>
 );
 
 const Relatorios = () => {
+  const { user, userRole, activeStoreId } = useAuth();
   const [tab, setTab] = useState("dre");
   const [stores, setStores] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -130,13 +134,20 @@ const Relatorios = () => {
     supabase.from("profiles").select("*").then(r => setProfiles(r.data ?? []));
   }, []);
 
+  useEffect(() => {
+    if (activeStoreId && userRole !== "admin") {
+      setStoreId(activeStoreId);
+    }
+  }, [activeStoreId, userRole]);
+
   const profileMap = new Map(profiles.map(p => [p.user_id, p.display_name ?? p.user_id]));
   const storeMap = new Map(stores.map(s => [s.id, s]));
 
   // ── DRE ──────────────────────────────────────────────────────────────────
   const fetchDRE = useCallback(async () => {
     const { start, end } = getPeriodDates(period, customStart, customEnd);
-    const q = (t: any) => storeId !== "all" ? t.eq("store_id", storeId) : t;
+    const effectiveStoreId = userRole === "admin" ? storeId : activeStoreId;
+    const q = (t: any) => effectiveStoreId && effectiveStoreId !== "all" ? t.eq("store_id", effectiveStoreId) : t;
     const [salesRes, productsRes, txRes, osRes] = await Promise.all([
       q(supabase.from("sales").select("*").gte("created_at", start).lte("created_at", end)),
       supabase.from("products").select("*"),
@@ -188,11 +199,12 @@ const Relatorios = () => {
   // ── VENDAS ────────────────────────────────────────────────────────────────
   const fetchVendas = useCallback(async () => {
     const { start, end } = getPeriodDates(period, customStart, customEnd);
+    const effectiveStoreId = userRole === "admin" ? storeId : activeStoreId;
     const [salesRes, productsRes] = await Promise.all([
       supabase.from("sales").select("*").gte("created_at", start).lte("created_at", end).order("created_at", { ascending: false }),
       supabase.from("products").select("*"),
     ]);
-    const sales = (salesRes.data ?? []).filter((s: any) => storeId === "all" || s.store_id === storeId);
+    const sales = (salesRes.data ?? []).filter((s: any) => effectiveStoreId === "all" || s.store_id === effectiveStoreId);
     const products = productsRes.data ?? [];
     const productMap = new Map(products.map((p: any) => [p.id, p]));
     const rows = sales.map((s: any) => {
@@ -212,8 +224,9 @@ const Relatorios = () => {
   // ── OS ────────────────────────────────────────────────────────────────────
   const fetchOS = useCallback(async () => {
     const { start, end } = getPeriodDates(period, customStart, customEnd);
+    const effectiveStoreId = userRole === "admin" ? storeId : activeStoreId;
     const { data } = await supabase.from("service_orders").select("*").gte("created_at", start).lte("created_at", end).order("created_at", { ascending: false });
-    const all = ((data ?? []) as any[]).filter(o => storeId === "all" || o.store_id === storeId);
+    const all = ((data ?? []) as any[]).filter(o => effectiveStoreId === "all" || o.store_id === effectiveStoreId);
     setOsData(all);
     const delivered = all.filter(o => o.status === "delivered");
     const totalReceitaOS = delivered.reduce((s, o) => s + Number(o.final_price || o.estimated_price || 0), 0);
@@ -232,8 +245,9 @@ const Relatorios = () => {
   // ── CAIXA ─────────────────────────────────────────────────────────────────
   const fetchCaixa = useCallback(async () => {
     const { start, end } = getPeriodDates(period, customStart, customEnd);
+    const effectiveStoreId = userRole === "admin" ? storeId : activeStoreId;
     const { data: registers } = await supabase.from("cash_registers" as any).select("*").gte("created_at", start).lte("created_at", end).order("created_at", { ascending: false });
-    const all = ((registers ?? []) as any[]).filter(r => storeId === "all" || r.store_id === storeId);
+    const all = ((registers ?? []) as any[]).filter(r => effectiveStoreId === "all" || r.store_id === effectiveStoreId);
     const closed = all.filter(r => r.status === "closed");
     setCaixaData(all.map(r => ({ data: new Date(r.created_at).toLocaleDateString("pt-BR"), loja: (storeMap.get(r.store_id) as any)?.name ?? "—", status: r.status === "open" ? "Aberto" : "Fechado", abertura: Number(r.opening_amount || 0), fechamento: Number(r.closing_amount || 0), esperado: Number(r.expected_amount || 0), diferenca: Number(r.difference || 0), motivo: r.difference_reason ?? "" })));
     setCaixaStats({ total: all.length, abertos: all.filter(r => r.status === "open").length, fechados: closed.length, totalDiferenca: closed.reduce((s, r) => s + Number(r.difference || 0), 0), comDiferenca: closed.filter(r => Math.abs(Number(r.difference || 0)) > 5).length });
@@ -242,14 +256,15 @@ const Relatorios = () => {
   // ── RANKING ───────────────────────────────────────────────────────────────
   const fetchRanking = useCallback(async () => {
     const { start, end } = getPeriodDates(rankPeriod, rankCustomStart, rankCustomEnd);
+    const effectiveStoreId = userRole === "admin" ? storeId : activeStoreId;
     const [salesRes, productsRes, osRes] = await Promise.all([
       supabase.from("sales").select("*").gte("created_at", start).lte("created_at", end),
       supabase.from("products").select("*"),
       supabase.from("service_orders").select("*").eq("status", "delivered").gte("delivered_at", start).lte("delivered_at", end),
     ]);
-    const sales = ((salesRes.data ?? []) as any[]).filter(s => storeId === "all" || s.store_id === storeId);
+    const sales = ((salesRes.data ?? []) as any[]).filter(s => effectiveStoreId === "all" || s.store_id === effectiveStoreId);
     const products = productsRes.data ?? [];
-    const os = ((osRes.data ?? []) as any[]).filter(o => storeId === "all" || o.store_id === storeId);
+    const os = ((osRes.data ?? []) as any[]).filter(o => effectiveStoreId === "all" || o.store_id === effectiveStoreId);
     const productMap = new Map(products.map((p: any) => [p.id, p]));
     const stats: Record<string, any> = {};
     const ensure = (uid: string) => { if (!stats[uid]) stats[uid] = { uid, nome: profileMap.get(uid) ?? "Usuário", totalVendas: 0, qtdVendas: 0, lucro: 0, comissoes: 0, osEntregues: 0 }; };
@@ -306,7 +321,7 @@ const Relatorios = () => {
     setNotaLoading(null);
   };
 
-  const filterProps = { period, setPeriod, storeId, setStoreId, stores, customStart, setCustomStart, customEnd, setCustomEnd };
+  const filterProps = { period, setPeriod, storeId, setStoreId, stores, customStart, setCustomStart, customEnd, setCustomEnd, userRole };
 
   const dreLines = [
     { label: "Receita de Aparelhos", value: dre.receitaAparelhos ?? 0, sub: `${dre.qtdVendasAparelhos ?? 0} vendas`, type: "income" },
@@ -664,16 +679,18 @@ const Relatorios = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Loja</Label>
-                <Select value={storeId} onValueChange={setStoreId}>
-                  <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas</SelectItem>
-                    {stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              {userRole === "admin" && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Loja (Filtro Local)</Label>
+                  <Select value={storeId} onValueChange={setStoreId}>
+                    <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas</SelectItem>
+                      {stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
             <Button size="sm" variant="outline" className="gap-1.5 h-9" onClick={() => exportCSV(ranking.map((r, i) => ({ posicao: i + 1, nome: r.nome, total_vendas: formatCurrency(r.totalVendas), qtd_vendas: r.qtdVendas, lucro: formatCurrency(r.lucro), os_entregues: r.osEntregues, comissoes: formatCurrency(r.comissoes) })), "ranking.csv")}>
               <Download className="h-3.5 w-3.5" /> CSV
@@ -774,16 +791,18 @@ const Relatorios = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Loja</Label>
-                <Select value={storeId} onValueChange={setStoreId}>
-                  <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas</SelectItem>
-                    {stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              {userRole === "admin" && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Loja (Filtro Local)</Label>
+                  <Select value={storeId} onValueChange={setStoreId}>
+                    <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas</SelectItem>
+                      {stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
             <Button size="sm" variant="outline" className="gap-1.5 h-9" onClick={() => exportCSV(comissoes.map((c, i) => ({ posicao: i + 1, vendedor: c.nome, vendas: c.qtdVendas, total_vendido: formatCurrency(c.totalVendas), lucro: formatCurrency(c.lucro), comissao: formatCurrency(c.comissoes) })), "comissoes.csv")}>
               <Download className="h-3.5 w-3.5" /> CSV

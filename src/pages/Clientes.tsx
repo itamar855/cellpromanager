@@ -18,7 +18,7 @@ const formatCurrency = (value: number) =>
 const emptyForm = { name: "", phone: "", email: "", cpf: "", address: "", notes: "", birth_date: "" };
 
 const Clientes = () => {
-  const { user } = useAuth();
+  const { user, activeStoreId } = useAuth();
   const [customers, setCustomers] = useState<Tables<"customers">[]>([]);
   const [sales, setSales] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
@@ -31,11 +31,12 @@ const Clientes = () => {
   const [loading, setLoading] = useState(false);
 
   const fetchData = async () => {
+    if (!activeStoreId) return;
     const [custRes, salesRes, ordersRes, prodsRes] = await Promise.all([
       supabase.from("customers").select("*").order("created_at", { ascending: false }),
-      supabase.from("sales").select("*"),
-      supabase.from("service_orders").select("*"),
-      supabase.from("products").select("id, name"),
+      supabase.from("sales").select("*").eq("store_id", activeStoreId),
+      supabase.from("service_orders").select("*").eq("store_id", activeStoreId),
+      supabase.from("products").select("id, name").eq("store_id", activeStoreId),
     ]);
     setCustomers(custRes.data ?? []);
     setSales(salesRes.data ?? []);
@@ -43,7 +44,7 @@ const Clientes = () => {
     setProducts(prodsRes.data ?? []);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [activeStoreId]);
 
   const productMap = new Map(products.map((p: any) => [p.id, p.name]));
 

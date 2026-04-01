@@ -52,7 +52,7 @@ const emptyDetails: StoreDetails = {
 };
 
 const Lojas = () => {
-  const { userRole, userPermissions } = useAuth();
+  const { userRole, userPermissions, activeStoreId } = useAuth();
   const [stores, setStores] = useState<any[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [fixedExpenses, setFixedExpenses] = useState<Tables<"fixed_expenses">[]>([]);
@@ -87,8 +87,15 @@ const Lojas = () => {
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   const fetchData = async () => {
+    let storesQuery = supabase.from("stores").select("*").order("created_at");
+    
+    // If not admin, filter by active store
+    if (userRole !== "admin" && activeStoreId) {
+      storesQuery = storesQuery.eq("id", activeStoreId);
+    }
+
     const [storesRes, bankRes, fixedRes] = await Promise.all([
-      supabase.from("stores").select("*").order("created_at"),
+      storesQuery,
       supabase.from("store_bank_accounts").select("*"),
       supabase.from("fixed_expenses").select("*").eq("is_pf", false).order("due_day"),
     ]);

@@ -17,7 +17,7 @@ const eventLabels: Record<string, string> = {
 };
 
 const Configuracoes = () => {
-  const { user } = useAuth();
+  const { user, activeStoreId, userRole } = useAuth();
   const [webhooks, setWebhooks] = useState<Tables<"webhooks">[]>([]);
   const [stores, setStores] = useState<Tables<"stores">[]>([]);
   const [whatsappConfig, setWhatsappConfig] = useState<Partial<Tables<"whatsapp_config">>>({
@@ -27,10 +27,15 @@ const Configuracoes = () => {
   const [form, setForm] = useState({ store_id: "", event_type: "os_status_changed", url: "" });
 
   const fetchData = async () => {
+    if (!activeStoreId) {
+      setWebhooks([]);
+      setStores([]);
+      return;
+    }
     const [wbRes, storesRes, waRes] = await Promise.all([
-      supabase.from("webhooks").select("*").order("created_at", { ascending: false }),
+      supabase.from("webhooks").select("*").eq("store_id", activeStoreId).order("created_at", { ascending: false }),
       supabase.from("stores").select("*"),
-      supabase.from("whatsapp_config").select("*").maybeSingle(),
+      supabase.from("whatsapp_config").select("*").eq("store_id", activeStoreId).maybeSingle(),
     ]);
     setWebhooks(wbRes.data ?? []);
     setStores(storesRes.data ?? []);
@@ -41,14 +46,14 @@ const Configuracoes = () => {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [activeStoreId]);
 
   const handleAddWebhook = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.url || !form.store_id) return;
     setLoading(true);
     const { error } = await supabase.from("webhooks").insert({
-      store_id: form.store_id, event_type: form.event_type, url: form.url, is_active: true
+      store_id: activeStoreId || form.store_id, event_type: form.event_type, url: form.url, is_active: true
     });
     if (error) toast.error("Erro ao salvar Webhook: " + error.message);
     else {
@@ -109,7 +114,7 @@ const Configuracoes = () => {
       api_key: whatsappConfig.api_key,
       instance_name: whatsappConfig.instance_name,
       is_active: whatsappConfig.is_active,
-      store_id: form.store_id || (stores.length > 0 ? stores[0].id : null)
+      store_id: activeStoreId || form.store_id || (stores.length > 0 ? stores[0].id : null)
     };
 
     const { error } = whatsappConfig.id 
@@ -155,7 +160,7 @@ const Configuracoes = () => {
             </div>
             <div className="space-y-1.5 sm:col-span-3">
               <Label className="text-xs">Loja</Label>
-              <Select value={form.store_id} onValueChange={(v) => setForm({ ...form, store_id: v })}>
+              <Select value={form.store_id || activeStoreId || ""} onValueChange={(v) => setForm({ ...form, store_id: v })} disabled={!!activeStoreId}>
                 <SelectTrigger className="h-10"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
                   {stores.map((s) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}

@@ -33,41 +33,42 @@ const navItems = [
 ];
 
 const AppLayout = ({ children }: { children: ReactNode }) => {
-  const { user, userRole, userPermissions, signOut } = useAuth();
+  const { user, userRole, userPermissions, userStoreId, activeStoreId, setActiveStoreId, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
-  const [activeStoreName, setActiveStoreName] = useState<string>(() =>
-    localStorage.getItem("cellmanager-active-store-name") || ""
-  );
+  const [activeStoreName, setActiveStoreName] = useState<string>("");
 
   useEffect(() => {
     supabase.from("stores").select("id, name").then(({ data }) => {
       if (data) {
-        setStores(data);
-        const savedId = localStorage.getItem("cellmanager-active-store-id");
-        if (savedId) {
-          const found = data.find(s => s.id === savedId);
-          if (found) setActiveStoreName(found.name);
-          else if (data.length > 0) {
-            setActiveStoreName(data[0].name);
-            localStorage.setItem("cellmanager-active-store-id", data[0].id);
-            localStorage.setItem("cellmanager-active-store-name", data[0].name);
+        let allowedStores = data;
+        if (userRole !== "admin" && userStoreId) {
+          allowedStores = data.filter(s => s.id === userStoreId);
+        }
+        setStores(allowedStores);
+        
+        const currentActive = activeStoreId || localStorage.getItem("cellmanager-active-store-id");
+        if (currentActive) {
+          const found = allowedStores.find(s => s.id === currentActive);
+          if (found) {
+            setActiveStoreName(found.name);
+            if (!activeStoreId) setActiveStoreId(found.id);
+          } else if (allowedStores.length > 0) {
+            setActiveStoreName(allowedStores[0].name);
+            setActiveStoreId(allowedStores[0].id);
           }
-        } else if (data.length > 0) {
-          setActiveStoreName(data[0].name);
-          localStorage.setItem("cellmanager-active-store-id", data[0].id);
-          localStorage.setItem("cellmanager-active-store-name", data[0].name);
+        } else if (allowedStores.length > 0) {
+          setActiveStoreName(allowedStores[0].name);
+          setActiveStoreId(allowedStores[0].id);
         }
       }
     });
-  }, []);
+  }, [userRole, userStoreId, activeStoreId, setActiveStoreId]);
 
   const handleStoreChange = (store: { id: string; name: string }) => {
-    localStorage.setItem("cellmanager-active-store-id", store.id);
-    localStorage.setItem("cellmanager-active-store-name", store.name);
     setActiveStoreName(store.name);
-    window.dispatchEvent(new CustomEvent("store-changed", { detail: store }));
+    setActiveStoreId(store.id);
   };
 
   const filteredNavItems = navItems.filter((item) => {
@@ -163,7 +164,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
             <span className="font-display font-bold text-sm">CellManager</span>
           </div>
           <div className="flex items-center gap-1">
-            {stores.length > 1 && (
+            {stores.length > 1 ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button className="h-8 px-2 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold gap-1 rounded-lg">
@@ -177,14 +178,19 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                     <DropdownMenuItem
                       key={s.id}
                       onClick={() => handleStoreChange(s)}
-                      className={activeStoreName === s.name ? "font-bold text-primary" : ""}
+                      className={activeStoreId === s.id ? "font-bold text-primary" : ""}
                     >
                       {s.name}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
-            )}
+            ) : stores.length === 1 ? (
+              <div className="flex items-center px-3 h-8 bg-primary/10 text-primary rounded-lg text-xs font-semibold gap-1.5 border border-primary/20">
+                <Store className="h-3.5 w-3.5" />
+                <span className="max-w-[100px] truncate">{activeStoreName || stores[0].name}</span>
+              </div>
+            ) : null}
             <Button className="h-8 w-8 p-0 bg-transparent hover:bg-muted" onClick={toggleTheme}>
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>

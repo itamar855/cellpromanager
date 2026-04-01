@@ -57,7 +57,7 @@ const createPendingCashEntry = async (storeId: string, userId: string, amount: n
 const emptyCustomerForm = { name: "", phone: "", cpf: "", address: "", email: "", birth: "" };
 
 const Vendas = () => {
-  const { user, userRole } = useAuth();
+  const { user, userRole, activeStoreId } = useAuth();
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Tables<"products">[]>([]);
   const [accessories, setAccessories] = useState<Accessory[]>([]);
@@ -96,15 +96,16 @@ const Vendas = () => {
   });
 
   const fetchData = async () => {
+    if (!activeStoreId) return;
     const [salesRes, productsRes, storesRes, accRes, pdvRes, profilesRes, customersRes, accountsRes] = await Promise.all([
-      supabase.from("sales").select("*").order("created_at", { ascending: false }),
-      supabase.from("products").select("*"),
+      supabase.from("sales").select("*").eq("store_id", activeStoreId).order("created_at", { ascending: false }),
+      supabase.from("products").select("*").eq("store_id", activeStoreId),
       supabase.from("stores").select("*"),
-      supabase.from("accessories" as any).select("*").gt("quantity", 0),
-      supabase.from("transactions").select("*").eq("type", "income").eq("category", "acessorio").order("created_at", { ascending: false }),
+      supabase.from("accessories" as any).select("*").eq("store_id", activeStoreId).gt("quantity", 0),
+      supabase.from("transactions").select("*").eq("store_id", activeStoreId).eq("type", "income").eq("category", "acessorio").order("created_at", { ascending: false }),
       supabase.from("profiles").select("*"),
       supabase.from("customers").select("*").order("name"),
-      supabase.from("store_bank_accounts").select("*"),
+      supabase.from("store_bank_accounts").select("*").eq("store_id", activeStoreId),
     ]);
     setSales((salesRes.data as unknown as Sale[]) ?? []);
     setProducts(productsRes.data ?? []);
@@ -116,7 +117,7 @@ const Vendas = () => {
     setBankAccounts(accountsRes.data ?? []);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [activeStoreId]);
 
   // Customer search
   useEffect(() => {
@@ -212,7 +213,7 @@ const Vendas = () => {
     setForm({ product_id: "", sale_price: "", has_trade_in: false, trade_in_device_name: "", trade_in_device_brand: "iPhone", trade_in_device_model: "", trade_in_device_imei: "", trade_in_value: "", payment_cash: "", payment_card: "", payment_pix: "", notes: "", commission_percent: "10", discount: "0", warranty_days: "90", installments: "1", destination_account_id: "" });
     clearCustomer();
   };
-  const resetPdv = () => { setCart([]); setPdvPayment({ cash: "", card: "", pix: "", customer: "", store_id: "" }); setAccSearch(""); };
+  const resetPdv = () => { setCart([]); setPdvPayment({ cash: "", card: "", pix: "", customer: "", store_id: activeStoreId || "" }); setAccSearch(""); };
 
   // ── Submit venda ──────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
@@ -306,16 +307,14 @@ const Vendas = () => {
   };
 
   const handlePdvSubmit = async () => {
-    if (!user || cart.length === 0) return;
-    if (!pdvPayment.store_id) { toast.error("Selecione a loja!"); return; }
-    if (Math.abs(pdvRemaining) > 0.01 && pdvTroco === 0) { toast.error("A soma dos pagamentos deve ser igual ao total!"); return; }
+    if (!user || cart.length === 0 || !activeStoreId) return;
     setLoading(true);
     try {
       for (const item of cart) await supabase.from("accessories" as any).update({ quantity: item.acc.quantity - item.qty }).eq("id", item.acc.id);
       const desc = `PDV: ${cart.map(i => `${i.qty}x ${i.acc.name}`).join(", ")}${pdvPayment.customer ? ` → ${pdvPayment.customer}` : ""}`;
-      await supabase.from("transactions").insert({ type: "income", category: "acessorio", amount: cartTotal, description: desc, store_id: pdvPayment.store_id, created_by: user.id });
+      await supabase.from("transactions").insert({ type: "income", category: "acessorio", amount: cartTotal, description: desc, store_id: activeStoreId, created_by: user.id });
       const mp = pdvCash > 0 ? "dinheiro" : pdvCard > 0 ? "cartao_credito" : pdvPix > 0 ? "pix" : "dinheiro";
-      await createPendingCashEntry(pdvPayment.store_id, user.id, cartTotal, desc, mp);
+      await createPendingCashEntry(activeStoreId, user.id, cartTotal, desc, mp);
       toast.success("Venda rápida registrada!"); setPdvOpen(false); resetPdv(); fetchData();
     } catch (err: any) { toast.error(err.message || "Erro"); }
     setLoading(false);
@@ -593,7 +592,7 @@ const Vendas = () => {
                         <span>{pdvTroco > 0 ? "Troco" : "Restante"}</span>
                         <span>{formatCurrency(pdvTroco > 0 ? pdvTroco : pdvRemaining)}</span>
                       </div>
-                      <Button className="w-full h-10 font-semibold" onClick={handlePdvSubmit} disabled={loading || (Math.abs(pdvRemaining) > 0.01 && pdvTroco === 0) || !pdvPayment.store_id}>
+                      <Button className="w-full h-10 font-semibold" onClick={handlePdvSubmit} disabled={loading || (Math.abs(pdvRemaining) > 0.01 && pdvTroco === 0) || !activeStoreId}>
                         {loading ? "Registrando..." : `Finalizar — ${formatCurrency(cartTotal)}`}
                       </Button>
                     </div>
