@@ -136,9 +136,11 @@ const Caixa = () => {
 
     if (storeId !== "all") {
       const activeOne = mappedOpenData.find((reg: any) => reg.store_id === storeId);
-      setCurrentRegister(activeOne || null);
+      // Se não temos um caixa selecionado manualmente para gerenciar, usamos o da loja atual
+      if (!currentRegister || (currentRegister.store_id !== storeId && storeId !== "all")) {
+        setCurrentRegister(activeOne || null);
+      }
     } else if (currentRegister) {
-      // No modo "Todas as Unidades", atualizamos os dados do caixa selecionado se ele ainda estiver aberto
       const updatedReg = mappedOpenData.find(r => r.id === currentRegister.id);
       if (updatedReg) setCurrentRegister(updatedReg);
     }
@@ -151,10 +153,18 @@ const Caixa = () => {
          .order("confirmed", { ascending: true })
          .order("created_at", { ascending: false });
        
-       if (entriesError) console.error("Error fetching entries:", entriesError);
+       if (entriesError) {
+         console.error("Error fetching entries:", entriesError);
+         toast.error("Erro ao carregar lançamentos: " + entriesError.message);
+       }
        setEntries((entriesData as unknown as CashEntry[]) ?? []);
-    } else {
-       setEntries([]);
+    } else if (storeId !== "all") {
+       const { data: pendingData } = await supabase
+         .from("cash_entries" as any).select("*")
+         .eq("store_id", storeId)
+         .eq("confirmed", false)
+         .order("created_at", { ascending: false });
+       setEntries((pendingData as unknown as CashEntry[]) ?? []);
     }
 
     // 2. Histórico
