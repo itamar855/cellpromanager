@@ -89,10 +89,15 @@ const Transacoes = () => {
       txQuery = txQuery.eq("store_id", selectedStoreId);
     }
     
+    let accountsQuery = supabase.from("store_bank_accounts").select("*");
+    if (selectedStoreId && selectedStoreId !== "all") {
+      accountsQuery = accountsQuery.eq("store_id", selectedStoreId);
+    }
+
     const [txRes, storesRes, accountsRes] = await Promise.all([
       txQuery,
       supabase.from("stores").select("*"),
-      supabase.from("store_bank_accounts").select("*").eq("store_id", (selectedStoreId && selectedStoreId !== "all") ? selectedStoreId : ""),
+      accountsQuery,
     ]);
 
     if (txRes.error) {

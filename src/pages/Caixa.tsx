@@ -121,19 +121,30 @@ const Caixa = () => {
       setAllOpenRegisters(mappedOpenData);
     }
 
-    if (storeId !== "all") {
-      const activeOne = mappedOpenData.find((reg: any) => reg.store_id === storeId);
-      // Se não temos um caixa selecionado manualmente para administrar...
-      if (!currentRegister || (currentRegister.store_id !== storeId && storeId !== "all")) {
-        setCurrentRegister(activeOne || null);
+    // Se for Vendedor, prioritiza o próprio caixa dele antes de qualquer filtro
+    const userOwnedReg = mappedOpenData.find((reg: any) => reg.opened_by === user?.id);
+    const activeOne = mappedOpenData.find((reg: any) => reg.store_id === storeId);
+
+    if (userRole !== "admin") {
+      // Vendedores sempre veem o próprio caixa se ele existir, independente da loja no topo
+      setCurrentRegister(userOwnedReg || activeOne || null);
+    } else {
+      // Administradores:
+      if (storeId !== "all") {
+        // Se mudou de loja e não estávamos gerenciando alguém especificamente...
+        if (!currentRegister || (currentRegister.store_id !== storeId && activeTab !== "current")) {
+          setCurrentRegister(activeOne || null);
+        }
+      } else if (currentRegister) {
+        // No modo "Todas as Unidades", atualizamos os dados se o caixa ainda estiver aberto
+        const updatedReg = mappedOpenData.find(r => r.id === currentRegister.id);
+        if (updatedReg) setCurrentRegister(updatedReg);
       }
-    } else if (currentRegister) {
-      // No modo "Todas as Unidades", atualizamos os dados se o caixa ainda estiver aberto
-      const updatedReg = mappedOpenData.find(r => r.id === currentRegister.id);
-      if (updatedReg) setCurrentRegister(updatedReg);
     }
 
-    const regToUse = currentRegister || (storeId !== "all" ? mappedOpenData.find((reg: any) => reg.store_id === storeId) : null);
+    // Identifica qual caixa as entradas devem carregar
+    const regToUse = currentRegister || (userRole !== "admin" ? (userOwnedReg || activeOne) : activeOne);
+    
     if (regToUse) {
        const { data: entriesData, error: entriesError } = await supabase
          .from("cash_entries" as any).select("*")
