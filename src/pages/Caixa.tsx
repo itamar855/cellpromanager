@@ -66,6 +66,9 @@ const Caixa = () => {
   const [activeTab, setActiveTab] = useState<"current" | "history">("current");
   const [registersHistory, setRegistersHistory] = useState<CashRegister[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [justification, setJustification] = useState("");
+  const [justDialogOpened, setJustDialogOpened] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{ type: "delete" | "unconfirm" | "reopen", id: string } | null>(null);
 
   // Confirm dialog
   const [confirmDialog, setConfirmDialog] = useState(false);
@@ -201,23 +204,27 @@ const Caixa = () => {
     }
   };
 
-  const handleUnconfirmEntry = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm("Tem certeza que deseja desconfirmar este lançamento?")) return;
+  const handleUnconfirmEntry = async (id: string, reason: string) => {
     setLoading(true);
     const { error } = await supabase.from("cash_entries" as any).update({ confirmed: false, receipt_url: null }).eq("id", id);
     if (error) toast.error(error.message);
-    else { toast.success("Lançamento desconfirmado!"); if (activeStoreId) fetchRegister(activeStoreId); }
+    else { 
+      logAction("UPDATE_RECORD" as any, "cash_entries", id, { status: "confirmed" }, { status: "unconfirmed", reason }, activeStoreId);
+      toast.success("Lançamento desconfirmado!"); 
+      if (activeStoreId) fetchRegister(activeStoreId); 
+    }
     setLoading(false);
   };
 
-  const handleDeleteEntry = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm("Tem certeza que deseja excluir permanentemente este lançamento?")) return;
+  const handleDeleteEntry = async (id: string, reason: string) => {
     setLoading(true);
     const { error } = await supabase.from("cash_entries" as any).delete().eq("id", id);
     if (error) toast.error(error.message);
-    else { toast.success("Lançamento apagado!"); if (activeStoreId) fetchRegister(activeStoreId); }
+    else { 
+      logAction("DELETE_RECORD" as any, "cash_entries", id, null, { reason }, activeStoreId);
+      toast.success("Lançamento apagado!"); 
+      if (activeStoreId) fetchRegister(activeStoreId); 
+    }
     setLoading(false);
   };
 
@@ -301,9 +308,8 @@ const Caixa = () => {
     setLoading(false);
   };
 
-  const handleReopenRegister = async (id: string) => {
+  const handleReopenRegister = async (id: string, reason: string) => {
     if (userRole !== "admin") return;
-    if (!confirm("Deseja REABRIR este caixa? O status voltará a ser 'ABERTO' e o fechamento será anulado.")) return;
     
     setLoading(true);
     const { error } = await supabase.from("cash_registers" as any).update({
@@ -314,7 +320,7 @@ const Caixa = () => {
     if (error) { toast.error("Erro ao reabrir: " + error.message); }
     else {
       toast.success("Caixa reaberto com sucesso!");
-      logAction("UPDATE_OS_STATUS" as any, "cash_registers", id, { status: "closed" }, { status: "open" }, activeStoreId);
+      logAction("UPDATE_OS_STATUS" as any, "cash_registers", id, { status: "closed" }, { status: "open", reason }, activeStoreId);
       if (activeStoreId) fetchRegister(activeStoreId);
       setActiveTab("current");
     }
@@ -489,11 +495,37 @@ const Caixa = () => {
                         <p className="font-medium">{entry.description}</p>
                         <p className="text-muted-foreground">{paymentLabels[entry.payment_method || ""] || "Outro"} · {new Date(entry.created_at).toLocaleTimeString("pt-BR")}</p>
                       </div>
-                      <div className="text-right">
-                        <p className={`font-bold ${["entrada","abertura"].includes(entry.type) ? "text-primary" : "text-destructive"}`}>
-                          {["entrada","abertura"].includes(entry.type) ? "+" : "-"}{formatCurrency(Number(entry.amount))}
-                        </p>
-                        {!entry.confirmed && <Badge className="text-[8px] bg-orange-500/20 text-orange-600">Pendente</Badge>}
+                      <div className="text-right flex items-center gap-3">
+                        <div className="space-y-1">
+                          <p className={`font-bold ${["entrada","abertura"].includes(entry.type) ? "text-primary" : "text-destructive"}`}>
+                            {["entrada","abertura"].includes(entry.type) ? "+" : "-"}{formatCurrency(Number(entry.amount))}
+                          </p>
+                          {!entry.confirmed && <Badge className="text-[8px] bg-orange-500/20 text-orange-600">Pendente</Badge>}
+                        </div>
+                        {userRole === "admin" && (
+                          <div className="flex flex-col gap-1">
+                            {entry.confirmed && (
+                              <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-yellow-500" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPendingAction({ type: "unconfirm", id: entry.id });
+                                  setJustification("");
+                                  setJustDialogOpened(true);
+                                }}>
+                                <Unlock className="h-3 w-3" />
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPendingAction({ type: "delete", id: entry.id });
+                                setJustification("");
+                                setJustDialogOpened(true);
+                              }}>
+                              <Minus className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -526,8 +558,17 @@ const Caixa = () => {
                           <td className={`py-2 text-right ${Math.abs(reg.difference || 0) < 0.1 ? "text-primary" : "text-destructive"}`}>
                             {formatCurrency(reg.difference || 0)}
                           </td>
-                          <td className="py-2 text-center">
-                            {userRole === "admin" && <Button className="h-6 text-[9px]" onClick={() => handleReopenRegister(reg.id)}>Reabrir</Button>}
+                          <td className="py-2 text-center flex items-center justify-center gap-1">
+                            {userRole === "admin" && (
+                              <Button className="h-6 text-[9px]" 
+                                onClick={() => {
+                                  setPendingAction({ type: "reopen", id: reg.id });
+                                  setJustification("");
+                                  setJustDialogOpened(true);
+                                }}>
+                                Reabrir
+                              </Button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -600,6 +641,51 @@ const Caixa = () => {
             <Input type="number" step="0.01" value={sangriaForm.amount} onChange={e => setSangriaForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
             <Input value={sangriaForm.description} onChange={e => setSangriaForm(f => ({ ...f, description: e.target.value }))} placeholder="Motivo" />
             <Button className="w-full bg-yellow-500 hover:bg-yellow-600" onClick={handleSangria} disabled={loading}>Criar Sangria</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={justDialogOpened} onOpenChange={setJustDialogOpened}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" /> Justificar Ação
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground italic">
+              {pendingAction?.type === "delete" ? "Esta exclusão é permanente." : 
+               pendingAction?.type === "unconfirm" ? "Este lançamento voltará a ser pendente." : 
+               "O caixa será reaberto."}
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-primary">Campo Obrigatório: Motivo</Label>
+              <Input 
+                value={justification} 
+                onChange={(e) => setJustification(e.target.value)} 
+                placeholder="Informe o motivo desta alteração..." 
+                required 
+                className="h-10"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setJustDialogOpened(false)}>Cancelar</Button>
+              <Button 
+                variant={pendingAction?.type === "delete" ? "destructive" : "default"}
+                className="flex-1" 
+                disabled={!justification || loading}
+                onClick={async () => {
+                  if (!pendingAction) return;
+                  if (pendingAction.type === "delete") await handleDeleteEntry(pendingAction.id, justification);
+                  if (pendingAction.type === "unconfirm") await handleUnconfirmEntry(pendingAction.id, justification);
+                  if (pendingAction.type === "reopen") await handleReopenRegister(pendingAction.id, justification);
+                  setJustDialogOpened(false);
+                  setPendingAction(null);
+                }}
+              >
+                {loading ? "Processando..." : "Confirmar Ação"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

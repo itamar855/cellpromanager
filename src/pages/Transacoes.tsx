@@ -14,7 +14,8 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, ArrowUpDown, ArrowUpRight, ArrowDownRight, Tag, Trash2, Edit2, Camera, Upload, Receipt, CheckCircle, Loader2 } from "lucide-react";
+import { Plus, ArrowUpDown, ArrowUpRight, ArrowDownRight, Tag, Trash2, Edit2, Camera, Upload, Receipt, CheckCircle, Loader2, AlertTriangle } from "lucide-react";
+import { logAction } from "@/utils/auditLogger";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -50,6 +51,7 @@ const Transacoes = () => {
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+  const [justification, setJustification] = useState("");
   
   const [reconcileDialogOpen, setReconcileDialogOpen] = useState(false);
   const [reconcilingTx, setReconcilingTx] = useState<Tables<"transactions"> | null>(null);
@@ -65,7 +67,8 @@ const Transacoes = () => {
     category: "", 
     store_id: "", 
     source_account_id: "", 
-    destination_account_id: "" 
+    destination_account_id: "",
+    justification: ""
   });
 
   const uploadReceipt = async (file: File): Promise<string | null> => {
@@ -118,6 +121,8 @@ const Transacoes = () => {
     }
 
     if (editingId) {
+      if (!form.justification) { toast.error("Por favor, informe o motivo da alteração."); setLoading(false); return; }
+      
       const { error } = await supabase
         .from("transactions")
         .update(payload)
@@ -125,29 +130,31 @@ const Transacoes = () => {
       
       if (error) { toast.error(error.message); }
       else {
+        logAction("UPDATE_RECORD", "transactions", editingId, null, { ...payload, justification: form.justification }, activeStoreId);
         toast.success("Transação atualizada!");
         setDialogOpen(false);
         setEditingId(null);
         setReceiptFile(null);
         setExistingReceiptUrl(null);
-        setForm({ type: "sale", amount: "", description: "", category: "", store_id: "", source_account_id: "", destination_account_id: "" });
+        setForm({ type: "sale", amount: "", description: "", category: "", store_id: "", source_account_id: "", destination_account_id: "", justification: "" });
         fetchData();
       }
     } else {
-      const { error } = await supabase.from("transactions").insert({
+      const { data: newTxRes, error } = await supabase.from("transactions").insert({
         ...payload,
         created_by: user.id,
         expected_settlement_date: new Date().toISOString(),
         reconciled: false,
-      } as any);
+      } as any).select().single();
       
       if (error) { toast.error(error.message); }
       else {
+        logAction("CREATE_RECORD", "transactions", (newTxRes as any).id, null, payload, activeStoreId);
         toast.success("Transação registrada!");
         setDialogOpen(false);
         setReceiptFile(null);
         setExistingReceiptUrl(null);
-        setForm({ type: "sale", amount: "", description: "", category: "", store_id: "", source_account_id: "", destination_account_id: "" });
+        setForm({ type: "sale", amount: "", description: "", category: "", store_id: "", source_account_id: "", destination_account_id: "", justification: "" });
         fetchData();
       }
     }
@@ -164,13 +171,14 @@ const Transacoes = () => {
       store_id: tx.store_id || "",
       source_account_id: tx.source_account_id || "",
       destination_account_id: tx.destination_account_id || "",
+      justification: ""
     });
     setExistingReceiptUrl(tx.receipt_url || null);
     setReceiptFile(null);
     setDialogOpen(true);
   };
 
-  const handleDelete = async () => {
+  const handleDelete = async (reason: string) => {
     if (!transactionToDelete) return;
     setLoading(true);
     const { error } = await supabase
@@ -181,6 +189,7 @@ const Transacoes = () => {
     if (error) {
       toast.error(error.message);
     } else {
+      logAction("DELETE_RECORD", "transactions", transactionToDelete, null, { reason }, activeStoreId);
       toast.success("Transação excluída!");
       setTransactionToDelete(null);
       fetchData();
@@ -465,26 +474,41 @@ const Transacoes = () => {
         ))}
       </div>
 
-      <AlertDialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Transação</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita e afetará os relatórios financeiros.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive hover:bg-destructive/90"
-              onClick={handleDelete}
-              disabled={loading}
-            >
-              {loading ? "Excluindo..." : "Excluir"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <Dialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" /> Confirmar Exclusão
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Esta ação excluirá a transação permanentemente e afetará os relatórios financeiros.
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-primary">Motivo da Exclusão</Label>
+              <Input 
+                value={justification} 
+                onChange={(e) => setJustification(e.target.value)} 
+                placeholder="Ex: Lançamento duplicado, erro de digitação..." 
+                required 
+                className="h-10"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setTransactionToDelete(null)}>Cancelar</Button>
+              <Button 
+                variant="destructive" 
+                className="flex-1" 
+                disabled={!justification || loading}
+                onClick={() => handleDelete(justification)}
+              >
+                {loading ? "Excluindo..." : "Confirmar Exclusão"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirmation Dialog with Receipt */}
       <Dialog open={reconcileDialogOpen} onOpenChange={setReconcileDialogOpen}>

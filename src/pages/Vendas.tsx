@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import {
   Plus, ShoppingBag, Smartphone, CreditCard, Banknote, QrCode,
   Zap, Trash2, Search, FileText, MessageCircle, User as UserIcon, UserPlus,
-  ChevronDown, ChevronUp, History, Tag, Shield, Landmark, Store,
+  ChevronDown, ChevronUp, History, Tag, Shield, Landmark, Store, AlertTriangle,
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { gerarNotaFiscalInterna, type NotaFiscalData } from "@/utils/notaFiscalInterna";
@@ -81,6 +81,9 @@ const Vendas = () => {
   const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
   const [newCustomerForm, setNewCustomerForm] = useState(emptyCustomerForm);
   const [customerSalesHistory, setCustomerSalesHistory] = useState<Sale[]>([]);
+  const [justification, setJustification] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
   const [pdvPayment, setPdvPayment] = useState({ cash: "", card: "", pix: "", customer: "", store_id: "" });
@@ -339,9 +342,9 @@ const Vendas = () => {
     setLoading(false);
   };
 
-  const handleDeleteSale = async (sale: Sale) => {
-    if (userRole !== "admin") return;
-    if (!confirm("Tem certeza que deseja apagar esta venda? O produto voltará para o estoque e as transações vinculadas serão removidas.")) return;
+  const handleDeleteSale = async (saleId: string, reason: string) => {
+    const sale = sales.find(s => s.id === saleId);
+    if (!sale) return;
     
     setLoading(true);
     try {
@@ -361,7 +364,7 @@ const Vendas = () => {
       
       if (error) throw error;
       
-      logAction("DELETE_RECORD", "sales", sale.id, sale, null, sale.store_id);
+      logAction("DELETE_RECORD", "sales", sale.id, sale, { reason }, sale.store_id);
       toast.success("Venda removida e produto retornou ao estoque!");
       fetchData();
     } catch (error: any) {
@@ -879,12 +882,10 @@ const Vendas = () => {
                           <MessageCircle className="h-3 w-3" />WhatsApp
                         </Button>
                       )}
-                      {userRole === "admin" && (
-                        <Button className="h-7 px-2 text-[10px] gap-1 text-destructive border border-destructive/30 bg-transparent hover:bg-destructive/10 shadow-none"
-                          onClick={() => handleDeleteSale(sale)} disabled={loading}>
-                          <Trash2 className="h-3 w-3" />Excluir
-                        </Button>
-                      )}
+                      <Button className="h-7 px-2 text-[10px] gap-1 text-destructive border border-destructive/30 bg-transparent hover:bg-destructive/10 shadow-none"
+                        onClick={() => { setDeleteId(sale.id); setJustification(""); setDeleteDialogOpen(true); }} disabled={loading}>
+                        <Trash2 className="h-3.5 w-3.5" />Excluir
+                      </Button>
                     </div>
                   </div>
                   <div className="text-right shrink-0">
@@ -907,6 +908,47 @@ const Vendas = () => {
           </Card>
         )}
       </div>
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" /> Confirmar Exclusão de Venda
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Esta ação é permanente. O produto voltará para o estoque e as transações vinculadas serão removidas.
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Motivo da Exclusão</Label>
+              <Input 
+                value={justification} 
+                onChange={(e) => setJustification(e.target.value)} 
+                placeholder="Ex: Erro no lançamento, cancelamento pelo cliente..." 
+                required 
+                className="h-10"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setDeleteDialogOpen(false)}>Cancelar</Button>
+              <Button 
+                variant="destructive" 
+                className="flex-1" 
+                disabled={!justification || loading}
+                onClick={async () => {
+                  if (deleteId) {
+                    await handleDeleteSale(deleteId, justification);
+                    setDeleteDialogOpen(false);
+                  }
+                }}
+              >
+                {loading ? "Excluindo..." : "Confirmar Exclusão"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

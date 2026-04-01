@@ -18,7 +18,8 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Users, Shield, ShieldCheck, User, Plus, Phone, Store, Trash2, ChevronDown, Check } from "lucide-react";
+import { Users, Shield, ShieldCheck, User, Plus, Phone, Store, Trash2, ChevronDown, Check, AlertTriangle } from "lucide-react";
+import { logAction } from "@/utils/auditLogger";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -81,6 +82,7 @@ const Equipe = () => {
     email: "", password: "", display_name: "", phone: "", role: "vendedor", store_id: "",
   });
   const [loading, setLoading] = useState(false);
+  const [justification, setJustification] = useState("");
 
   const fetchData = async () => {
     const [profilesRes, rolesRes, storesRes, memberStoresRes] = await Promise.all([
@@ -127,6 +129,7 @@ const Equipe = () => {
     setEditPhone((member as any).phone || "");
     setEditStoreIds(member.assignedStoreIds || []);
     setPermissions(member.permissions || defaultPermissions(member.role || "vendedor"));
+    setJustification("");
   };
 
   const handleRoleChange = async () => {
@@ -159,6 +162,8 @@ const Equipe = () => {
       if (error) { toast.error(error.message); setLoading(false); return; }
     }
 
+    if (!justification) { toast.error("Por favor, informe o motivo da alteração."); setLoading(false); return; }
+
     const { error: profileError } = await supabase
       .from("profiles")
       .update({
@@ -183,6 +188,7 @@ const Equipe = () => {
       }
       
       toast.success("Membro e unidades atualizados!");
+      logAction("UPDATE_RECORD" as any, "user_roles", selectedMember.user_id, { role: selectedMember.role }, { role: newRole, justification });
     }
 
     setSelectedMember(null);
@@ -190,13 +196,14 @@ const Equipe = () => {
     fetchData();
   };
 
-  const handleDeleteMember = async () => {
+  const handleDeleteMember = async (reason: string) => {
     if (!memberToDelete) return;
     setLoading(true);
 
     try {
       await supabase.from("user_roles").delete().eq("user_id", memberToDelete.user_id);
       await supabase.from("profiles").delete().eq("user_id", memberToDelete.user_id);
+      logAction("DELETE_RECORD" as any, "profiles", memberToDelete.user_id, null, { reason, name: memberToDelete.display_name });
       toast.success("Membro removido com sucesso!");
       setMemberToDelete(null);
       fetchData();
@@ -391,6 +398,18 @@ const Equipe = () => {
                   )}
                 </div>
 
+                <div className="space-y-1.5 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                  <Label className="text-xs font-bold text-primary flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> Motivo da Alteração (Obrigatório)
+                  </Label>
+                  <Input 
+                    value={justification} 
+                    onChange={e => setJustification(e.target.value)} 
+                    placeholder="Ex: Promoção, mudança de unidade..." 
+                    className="h-10 border-primary/30"
+                  />
+                </div>
+
                 <Button onClick={handleRoleChange} className="w-full h-11 font-semibold" disabled={loading}>
                   {loading ? "Salvando..." : "Salvar"}
                 </Button>
@@ -404,20 +423,31 @@ const Equipe = () => {
       <AlertDialog open={!!memberToDelete} onOpenChange={(open) => !open && setMemberToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remover membro</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" /> Confirmar Remoção
+            </AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja remover <strong>{memberToDelete?.display_name || memberToDelete?.user_id}</strong> da equipe? Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="py-2 space-y-1.5">
+            <Label className="text-xs font-semibold">Motivo da Remoção</Label>
+            <Input 
+              value={justification} 
+              onChange={e => setJustification(e.target.value)} 
+              placeholder="Ex: Desligamento, erro de cadastro..." 
+              required 
+            />
+          </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive hover:bg-destructive/90"
-              onClick={handleDeleteMember}
-              disabled={loading}
+            <AlertDialogCancel onClick={() => setJustification("")}>Cancelar</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              onClick={() => handleDeleteMember(justification)}
+              disabled={loading || !justification}
             >
-              {loading ? "Removendo..." : "Remover"}
-            </AlertDialogAction>
+              {loading ? "Removendo..." : "Remover Membro"}
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

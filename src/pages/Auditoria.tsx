@@ -10,9 +10,10 @@ import { Input } from "@/components/ui/input";
 const actionLabels: Record<string, string> = {
   CREATE_SALE: "Nova Venda",
   UPDATE_OS_STATUS: "Alteração de Status OS",
-  UPDATE_PRODUCT_PRICE: "Ajuste de Preço / Detalhes",
-  CREATE_RECORD: "Novo Cadastro",
+  UPDATE_PRODUCT_PRICE: "Ajuste de Estoque",
+  CREATE_RECORD: "Novo Registro",
   DELETE_RECORD: "Exclusão",
+  UPDATE_RECORD: "Alteração Sistemática",
   LOGIN: "Acesso ao Sistema",
   TRANSFER_STOCK: "Transferência de Estoque",
 };
@@ -23,6 +24,7 @@ const actionColors: Record<string, string> = {
   UPDATE_PRODUCT_PRICE: "bg-orange-500/10 text-orange-500 border-orange-500/20",
   CREATE_RECORD: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
   DELETE_RECORD: "bg-destructive/10 text-destructive border-destructive/20",
+  UPDATE_RECORD: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
   LOGIN: "bg-purple-500/10 text-purple-500 border-purple-500/20",
   TRANSFER_STOCK: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20",
 };
@@ -112,6 +114,11 @@ const Auditoria = () => {
                             {log.entity_type ? `${log.entity_type.replace('_', ' ')}` : "Sistema"}
                           </span>
                         </div>
+                        {((log.new_data as any)?.justification || (log.new_data as any)?.reason) && (
+                          <p className="text-[11px] bg-muted/40 p-1.5 rounded border border-border/50 text-foreground/80 italic font-medium max-w-md">
+                            "{(log.new_data as any)?.justification || (log.new_data as any)?.reason}"
+                          </p>
+                        )}
                         <div className="flex items-center gap-3 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <User className="h-3 w-3" />

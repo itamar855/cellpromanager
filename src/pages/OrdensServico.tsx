@@ -405,6 +405,10 @@ const OrdensServico = () => {
   const [signatureData, setSignatureData] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "kanban">("kanban");
+  const [justification, setJustification] = useState("");
+  const [actionType, setActionType] = useState<"delete" | "status" | "transfer" | "update" | null>(null);
+  const [pendingUpdate, setPendingUpdate] = useState<any>(null);
+  const [justDialogOpened, setJustDialogOpened] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -417,6 +421,7 @@ const OrdensServico = () => {
     payment_cash: "", payment_card: "", payment_pix: "", payment_other: "", payment_notes: "",
     exit_checklist: {} as ChecklistData,
     warranty_end_date: "",
+    justification: "",
   });
 
   const [passwordType, setPasswordType] = useState<"text" | "pattern">("text");
@@ -529,8 +534,15 @@ const OrdensServico = () => {
     setLoading(false);
   };
 
-  const updateStatus = async (orderId: string, newStatus: string, oldStatus: string) => {
+  const updateStatus = async (orderId: string, newStatus: string, oldStatus: string, reason?: string) => {
     if (!user) return;
+    if ((newStatus === "delivered" || newStatus === "cancelled") && !reason) {
+      setPendingUpdate({ orderId, newStatus, oldStatus });
+      setActionType("status");
+      setJustification("");
+      setJustDialogOpened(true);
+      return;
+    }
     const updates: any = { status: newStatus };
     if (newStatus === "delivered") updates.delivered_at = new Date().toISOString();
     if (newStatus === "ready") updates.completed_at = new Date().toISOString();
@@ -548,12 +560,12 @@ const OrdensServico = () => {
         old_status: oldStatus,
         new_status: newStatus,
       });
-      logAction("UPDATE_OS_STATUS", "service_orders", orderId, { status: oldStatus }, { status: newStatus }, (order as any).store_id);
+      logAction("UPDATE_OS_STATUS", "service_orders", orderId, { status: oldStatus }, { status: newStatus, reason }, (order as any).store_id);
     }
 
     await supabase.from("service_order_history").insert({
       service_order_id: orderId, old_status: oldStatus,
-      new_status: newStatus, created_by: user.id,
+      new_status: newStatus, created_by: user.id, notes: reason || null,
     } as any);
 
     if (newStatus === "delivered") {
@@ -573,6 +585,7 @@ const OrdensServico = () => {
 
   const handleUpdateService = async () => {
     if (!user || !detailOrder) return;
+    if (!updateForm.justification) { toast.error("Informe o motivo da alteração!"); return; }
     setLoading(true);
 
     const updates: any = {};
@@ -600,14 +613,12 @@ const OrdensServico = () => {
       const updated = { ...detailOrder, ...updates };
       setDetailOrder(updated);
       fetchData();
-      logAction("CREATE_RECORD", "service_orders", detailOrder.id, null, updates, detailOrder.store_id);
+      logAction("UPDATE_RECORD", "service_orders", detailOrder.id, null, { ...updates, justification: updateForm.justification }, detailOrder.store_id);
     }
     setLoading(false);
   };
 
-  const handleDeleteOS = async (id: string) => {
-    if (!isAdmin) return;
-    if (!confirm("Tem certeza que deseja EXCLUIR esta OS permanentemente?")) return;
+  const handleDeleteOS = async (id: string, reason: string) => {
     
     setLoading(true);
     const { error } = await supabase.from("service_orders").delete().eq("id", id);
@@ -617,13 +628,13 @@ const OrdensServico = () => {
       toast.success("Ordem de Serviço removida!");
       setDetailOrder(null);
       fetchData();
-      logAction("DELETE_RECORD", "service_orders", id, null, null, activeStoreId);
+      logAction("DELETE_RECORD", "service_orders", id, null, { reason }, activeStoreId);
     }
     setLoading(false);
   };
 
-  const handleMoveStore = async (newStoreId: string) => {
-    if (!isAdmin || !detailOrder) return;
+  const handleMoveStore = async (newStoreId: string, reason: string) => {
+    if (!detailOrder) return;
     setLoading(true);
     const { error } = await supabase.from("service_orders").update({ store_id: newStoreId } as any).eq("id", detailOrder.id);
     if (error) {
@@ -632,7 +643,7 @@ const OrdensServico = () => {
       toast.success("OS movida para a nova unidade!");
       setDetailOrder({ ...detailOrder, store_id: newStoreId });
       fetchData();
-      logAction("TRANSFER_STOCK" as any, "service_orders", detailOrder.id, { from: detailOrder.store_id }, { to: newStoreId }, activeStoreId);
+      logAction("TRANSFER_STOCK" as any, "service_orders", detailOrder.id, { from: detailOrder.store_id }, { to: newStoreId, reason }, activeStoreId);
     }
     setLoading(false);
   };
@@ -726,6 +737,7 @@ const OrdensServico = () => {
       payment_notes: order.payment_notes ?? "",
       exit_checklist: (order.exit_checklist as ChecklistData) || {},
       warranty_end_date: order.warranty_end_date ? new Date(order.warranty_end_date).toISOString().split('T')[0] : "",
+      justification: "",
     });
   };
 
@@ -1258,8 +1270,19 @@ const OrdensServico = () => {
                       </div>
                     )}
 
-                    <Button className="w-full h-9" onClick={handleUpdateService} disabled={loading}>
-                      {loading ? "Salvando..." : "Salvar Alterações"}
+                    <div className="space-y-1.5 pt-2">
+                      <Label className="text-xs font-semibold text-primary">Campo Obrigatório: Motivo da Alteração</Label>
+                      <Input 
+                        value={updateForm.justification} 
+                        onChange={e => setUpdateForm(f => ({ ...f, justification: e.target.value }))} 
+                        placeholder="Ex: Atualização de preço, peça adicionada, técnico alterado..." 
+                        required 
+                        className="h-10 border-primary/40 shadow-sm"
+                      />
+                    </div>
+
+                    <Button className="w-full h-10 font-bold" onClick={handleUpdateService} disabled={loading || !updateForm.justification}>
+                      {loading ? "Salvando..." : "Salvar Alterações e Justificar"}
                     </Button>
                   </div>
                 )}
@@ -1295,14 +1318,23 @@ const OrdensServico = () => {
                     
                     <div className="space-y-2">
                       <Label className="text-[10px] text-muted-foreground uppercase">Mover para outra unidade</Label>
-                      <div className="flex gap-2">
+                      <div className="space-y-2">
+                        <Input 
+                          value={justification} 
+                          onChange={(e) => setJustification(e.target.value)} 
+                          placeholder="Motivo da transferência..." 
+                          className="h-8 text-xs border-destructive/20" 
+                        />
                         <Select 
                           value={detailOrder.store_id} 
-                          onValueChange={handleMoveStore}
+                          onValueChange={(v) => {
+                            if (!justification) { toast.error("Por favor, informe o motivo antes de transferir."); return; }
+                            handleMoveStore(v, justification);
+                          }}
                         >
                           <SelectTrigger className="h-9 text-xs flex-1"><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            {stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                            {stores.filter(s => s.id !== detailOrder.store_id).map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>
@@ -1312,7 +1344,11 @@ const OrdensServico = () => {
                       <Button 
                         variant="destructive" 
                         className="w-full h-9 text-xs gap-2"
-                        onClick={() => handleDeleteOS(detailOrder.id)}
+                        onClick={() => {
+                          setActionType("delete");
+                          setJustification("");
+                          setJustDialogOpened(true);
+                        }}
                         disabled={loading}
                       >
                         <Trash2 className="h-3.5 w-3.5" /> Excluir Ordem de Serviço
@@ -1326,6 +1362,53 @@ const OrdensServico = () => {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* OS Action Justification Dialog (Status / Delete) */}
+      <Dialog open={justDialogOpened} onOpenChange={setJustDialogOpened}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <AlertCircle className="h-5 w-5" /> Confirmar Ação
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              {actionType === "delete" ? "Esta ação excluirá a OS permanentemente." : "Você está alterando o status para uma fase crítica."}
+              <br />Por favor, informe uma justificativa:
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-primary">Justificativa / Motivo</Label>
+              <Input 
+                value={justification} 
+                onChange={(e) => setJustification(e.target.value)} 
+                placeholder="Descreva o motivo..." 
+                required 
+                className="h-10"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setJustDialogOpened(false)}>Cancelar</Button>
+              <Button 
+                variant={actionType === "delete" ? "destructive" : "default"}
+                className="flex-1" 
+                disabled={!justification || loading}
+                onClick={async () => {
+                  if (actionType === "delete" && detailOrder) {
+                    await handleDeleteOS(detailOrder.id, justification);
+                    setJustDialogOpened(false);
+                  } else if (actionType === "status" && pendingUpdate) {
+                    await updateStatus(pendingUpdate.orderId, pendingUpdate.newStatus, pendingUpdate.oldStatus, justification);
+                    setJustDialogOpened(false);
+                    setPendingUpdate(null);
+                  }
+                }}
+              >
+                {loading ? "Processando..." : "Confirmar"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
