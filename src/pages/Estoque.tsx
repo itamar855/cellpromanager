@@ -97,6 +97,10 @@ const Estoque = () => {
       accQuery.order("created_at", { ascending: false }),
     ]);
 
+    if (productsRes.error) {
+      console.error("Products error:", productsRes.error);
+      toast.error("Erro aparelhos: " + productsRes.error.message);
+    }
     setProducts(productsRes.data ?? []);
     setStores(storesRes.data ?? []);
     setAccessories((accRes.data ?? []) as unknown as Accessory[]);
