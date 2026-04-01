@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,6 +63,9 @@ const Caixa = () => {
   const [closeDialog, setCloseDialog] = useState(false);
   const [entryDialog, setEntryDialog] = useState(false);
   const [sangriaDialog, setSangriaDialog] = useState(false);
+  const [activeTab, setActiveTab] = useState<"current" | "history">("current");
+  const [registersHistory, setRegistersHistory] = useState<CashRegister[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   // Confirm dialog
   const [confirmDialog, setConfirmDialog] = useState(false);
@@ -82,42 +86,61 @@ const Caixa = () => {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [activeTarget, setActiveTarget] = useState<"open" | "close" | "confirm" | null>(null);
 
-  const fetchData = async () => {
-    // fetchData is now handled by fetchRegister(activeStoreId) and AuthContext
-  };
-
   const fetchRegister = async (storeId: string) => {
     if (!storeId) return;
-    const { data } = await supabase
-      .from("cash_registers" as any).select("*")
-      .eq("store_id", storeId).eq("status", "open").maybeSingle();
-    setCurrentRegister(data as unknown as CashRegister | null);
+    setLoading(true);
+    
+    // 1. Caixa Aberto
+    let openQuery = supabase.from("cash_registers" as any).select("*").eq("status", "open");
+    if (storeId !== "all") {
+      openQuery = openQuery.eq("store_id", storeId);
+    }
+    const { data: openData } = await openQuery.maybeSingle();
+    setCurrentRegister(openData as unknown as CashRegister | null);
 
-    if (data) {
-      const registerId = (data as any).id;
-
-      // Busca todos os pendentes (qualquer data) + confirmados do caixa atual
+    if (openData) {
+      const registerId = (openData as any).id;
       const { data: entriesData } = await supabase
         .from("cash_entries" as any).select("*")
         .eq("cash_register_id", registerId)
-        .order("confirmed", { ascending: true })       // pendentes primeiro
+        .order("confirmed", { ascending: true })
         .order("created_at", { ascending: false });
 
       setEntries((entriesData as unknown as CashEntry[]) ?? []);
-    } else {
-      // Sem caixa aberto: busca apenas pendentes soltos da loja (de outros caixas fechados)
+    } else if (storeId !== "all") {
       const { data: pendingData } = await supabase
         .from("cash_entries" as any).select("*")
         .eq("store_id", storeId)
         .eq("confirmed", false)
         .order("created_at", { ascending: false });
       setEntries((pendingData as unknown as CashEntry[]) ?? []);
+    } else {
+      setEntries([]);
     }
+
+    // 2. Histórico
+    if (userRole === "admin" || activeTab === "history") {
+      setHistoryLoading(true);
+      let historyQuery = supabase.from("cash_registers" as any)
+        .select("*")
+        .eq("status", "closed")
+        .order("opened_at", { ascending: false })
+        .limit(20);
+      
+      if (storeId !== "all") {
+        historyQuery = historyQuery.eq("store_id", storeId);
+      }
+      
+      const { data: historyData } = await historyQuery;
+      setRegistersHistory((historyData as unknown as CashRegister[]) ?? []);
+      setHistoryLoading(false);
+    }
+    setLoading(false);
   };
 
   useEffect(() => { 
     if (activeStoreId) fetchRegister(activeStoreId); 
-  }, [activeStoreId]);
+  }, [activeStoreId, activeTab]);
 
   const uploadReceipt = async (file: File, path: string): Promise<string | null> => {
     const safePath = path.replace(/[^a-zA-Z0-9.\-_/]/g, "_");
@@ -159,21 +182,17 @@ const Caixa = () => {
       const receiptUrl = await uploadReceipt(confirmFile, `confirmacao/${confirmEntry.id}-${Date.now()}-${confirmFile.name}`);
       if (!receiptUrl) { setLoading(false); return; }
 
-      const { data: updatedData, error } = await supabase
+      const { error } = await supabase
         .from("cash_entries" as any)
         .update({ confirmed: true, receipt_url: receiptUrl })
-        .eq("id", confirmEntry.id)
-        .select();
+        .eq("id", confirmEntry.id);
 
       if (error) { toast.error(error.message); setLoading(false); return; }
 
-      setEntries(prev => prev.map(e => e.id === confirmEntry.id ? { ...e, confirmed: true, receipt_url: receiptUrl } : e));
-      
       toast.success("Lançamento confirmado!");
       setConfirmDialog(false);
       setConfirmEntry(null);
       setConfirmFile(null);
-      
       if (activeStoreId) fetchRegister(activeStoreId);
     } catch (err: any) {
       toast.error("Erro ao confirmar: " + err.message);
@@ -184,7 +203,7 @@ const Caixa = () => {
 
   const handleUnconfirmEntry = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm("Tem certeza que deseja desconfirmar este lançamento (ele voltará ser pendente)?")) return;
+    if (!confirm("Tem certeza que deseja desconfirmar este lançamento?")) return;
     setLoading(true);
     const { error } = await supabase.from("cash_entries" as any).update({ confirmed: false, receipt_url: null }).eq("id", id);
     if (error) toast.error(error.message);
@@ -202,7 +221,6 @@ const Caixa = () => {
     setLoading(false);
   };
 
-  // ── Abrir caixa ───────────────────────────────────────────────────────────
   const handleOpenRegister = async () => {
     if (!user || !activeStoreId) return;
     setLoading(true);
@@ -225,22 +243,14 @@ const Caixa = () => {
       receipt_url: receiptUrl, confirmed: true, created_by: user.id,
     });
 
-    // Migra pendentes soltos da loja para este caixa
-    await supabase.from("cash_entries" as any)
-      .update({ cash_register_id: (reg as any).id })
-      .eq("store_id", activeStoreId)
-      .eq("confirmed", false)
-      .neq("cash_register_id", (reg as any).id);
-
     toast.success("Caixa aberto!");
-    logAction("LOGIN" as any, "cash_registers", (reg as any).id, null, { store_id: activeStoreId, opening_amount: openForm.amount });
+    logAction("LOGIN" as any, "cash_registers", (reg as any).id, null, { store_id: activeStoreId });
     setOpenDialog(false);
     setOpenForm({ amount: "", note: "", receipt: null });
     fetchRegister(activeStoreId);
     setLoading(false);
   };
 
-  // ── Fechar caixa ──────────────────────────────────────────────────────────
   const handleCloseRegister = async () => {
     if (!user || !currentRegister) return;
     if (pendingCount > 0) {
@@ -264,14 +274,6 @@ const Caixa = () => {
       status: "closed", closed_at: new Date().toISOString(),
     }).eq("id", currentRegister.id);
 
-    await supabase.from("cash_entries" as any).insert({
-      cash_register_id: currentRegister.id, store_id: activeStoreId,
-      type: "fechamento", amount: closingAmount,
-      description: `Fechamento${difference !== 0 ? ` (dif: ${formatCurrency(difference)})` : ""}`,
-      payment_method: "dinheiro", receipt_url: receiptUrl,
-      confirmed: true, created_by: user.id,
-    });
-
     toast.success("Caixa fechado!");
     logAction("DELETE_RECORD" as any, "cash_registers", currentRegister.id, { status: "open" }, { status: "closed", difference });
     setCloseDialog(false);
@@ -280,7 +282,6 @@ const Caixa = () => {
     setLoading(false);
   };
 
-  // ── Novo lançamento ───────────────────────────────────────────────────────
   const handleEntry = async () => {
     if (!user || !currentRegister) return;
     if (!entryForm.amount || !entryForm.description) { toast.error("Preencha todos os campos!"); return; }
@@ -300,7 +301,26 @@ const Caixa = () => {
     setLoading(false);
   };
 
-  // ── Sangria ───────────────────────────────────────────────────────────────
+  const handleReopenRegister = async (id: string) => {
+    if (userRole !== "admin") return;
+    if (!confirm("Deseja REABRIR este caixa? O status voltará a ser 'ABERTO' e o fechamento será anulado.")) return;
+    
+    setLoading(true);
+    const { error } = await supabase.from("cash_registers" as any).update({
+      status: "open", closed_at: null, closed_by: null, closing_amount: null,
+      expected_amount: null, difference: null, difference_reason: null,
+    }).eq("id", id);
+
+    if (error) { toast.error("Erro ao reabrir: " + error.message); }
+    else {
+      toast.success("Caixa reaberto com sucesso!");
+      logAction("UPDATE_OS_STATUS" as any, "cash_registers", id, { status: "closed" }, { status: "open" }, activeStoreId);
+      if (activeStoreId) fetchRegister(activeStoreId);
+      setActiveTab("current");
+    }
+    setLoading(false);
+  };
+
   const handleSangria = async () => {
     if (!user || !currentRegister) return;
     if (!sangriaForm.amount) { toast.error("Informe o valor da sangria!"); return; }
@@ -321,8 +341,7 @@ const Caixa = () => {
     setLoading(false);
   };
 
-  // ── Receipt upload UI ─────────────────────────────────────────────────────
-  const ReceiptUpload = ({ target, file }: { target: typeof activeTarget; file: File | null }) => (
+  const ReceiptUpload = ({ target, file }: { target: "open" | "close" | "confirm" | null; file: File | null }) => (
     <div className="space-y-2">
       <Label className="text-xs flex items-center gap-1">
         <Receipt className="h-3 w-3" /> Comprovante
@@ -332,7 +351,7 @@ const Caixa = () => {
         <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
           <CheckCircle className="h-4 w-4 text-primary shrink-0" />
           <p className="text-xs text-primary truncate flex-1">{file.name}</p>
-          <Button className="h-6 text-[10px] bg-transparent text-foreground hover:bg-muted border-0 shadow-none px-2" onClick={() => {
+          <Button type="button" className="h-6 text-[10px] bg-transparent text-foreground hover:bg-muted border-0 shadow-none px-2" onClick={() => {
             if (target === "open")    setOpenForm(f => ({ ...f, receipt: null }));
             if (target === "close")   setCloseForm(f => ({ ...f, receipt: null }));
             if (target === "confirm") setConfirmFile(null);
@@ -355,7 +374,6 @@ const Caixa = () => {
 
   return (
     <div className="space-y-4">
-      {/* Hidden file inputs */}
       <input ref={fileInputRef} type="file" accept="image/*,application/pdf" className="hidden"
         onChange={e => { if (e.target.files?.[0]) handleFileSelect(e.target.files[0]); e.target.value = ""; }} />
       <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
@@ -364,389 +382,224 @@ const Caixa = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="font-display text-xl md:text-3xl font-bold tracking-tight">Caixa</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Controle de abertura, fechamento e lançamentos (Loja Atual)</p>
+          <p className="text-muted-foreground text-sm mt-0.5">Visão consolidada e controle financeiro {activeStoreId === "all" ? "(Todas as Lojas)" : ""}</p>
         </div>
       </div>
 
-      {currentRegister ? (
-        <>
-          {pendingCount > 0 && (
-            <div className="flex items-center gap-3 rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-3">
-              <Clock className="h-4 w-4 text-orange-500 shrink-0" />
-              <p className="text-sm text-orange-500 font-medium">
-                {pendingCount} lançamento{pendingCount > 1 ? "s" : ""} aguardando confirmação — clique em cada um para confirmar com comprovante.
-              </p>
-            </div>
+      <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)}>
+        <TabsList className="w-full sm:w-auto">
+          <TabsTrigger value="current" className="flex-1 sm:flex-none">Caixa Atual</TabsTrigger>
+          {(userRole === "admin" || userPermissions?.gerenciar_financeiro) && (
+            <TabsTrigger value="history" className="flex-1 sm:flex-none">Histórico (Admin)</TabsTrigger>
           )}
+        </TabsList>
 
-          <Card className="border-primary/30 bg-primary/5">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
-                    <Unlock className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm text-primary">Caixa Aberto</p>
-                    <p className="text-xs text-muted-foreground">Desde {new Date(currentRegister.opened_at).toLocaleString("pt-BR")}</p>
-                  </div>
+        <TabsContent value="current" className="mt-4 space-y-4">
+          {!currentRegister ? (
+            <Card className="border-dashed border-border/50">
+              <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-4">
+                <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
+                  <Wallet className="h-8 w-8 text-muted-foreground opacity-50" />
                 </div>
-                <div className="flex gap-2 flex-wrap">
-                  <Button className="gap-1.5 h-9 text-[11px] bg-transparent border border-yellow-500/30 text-yellow-500 hover:bg-yellow-500/10 px-3"
-                    onClick={() => setSangriaDialog(true)}>
-                    <Minus className="h-3.5 w-3.5" /> Sangria
-                  </Button>
-                  <Button className="gap-1.5 h-9 text-[11px] bg-transparent border border-border text-foreground hover:bg-muted px-3" onClick={() => setEntryDialog(true)}>
-                    <Plus className="h-3.5 w-3.5" /> Lançamento
-                  </Button>
-                  <Button className="gap-1.5 h-9 text-[11px] bg-destructive hover:bg-destructive/90 text-white px-3" onClick={() => setCloseDialog(true)}>
-                    <Lock className="h-3.5 w-3.5" /> Fechar Caixa
-                  </Button>
+                <div className="text-center">
+                  <p className="font-semibold">Caixa fechado</p>
+                  <p className="text-xs text-muted-foreground mt-1">Abra o caixa para começar a registrar lançamentos</p>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+                {pendingCount > 0 && (
+                  <div className="flex items-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-500">
+                    <Clock className="h-4 w-4 shrink-0" />
+                    {pendingCount} lançamento{pendingCount > 1 ? "s" : ""} pendente aguardando confirmação
+                  </div>
+                )}
+                <Button className="gap-2" onClick={() => setOpenDialog(true)} disabled={!activeStoreId || activeStoreId === "all"}>
+                  <Unlock className="h-4 w-4" /> Abrir Caixa
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {pendingCount > 0 && (
+                <div className="flex items-center gap-3 rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-3">
+                  <Clock className="h-4 w-4 text-orange-500 shrink-0" />
+                  <p className="text-sm text-orange-500 font-medium">{pendingCount} lançamento(s) pendente(s) de confirmação.</p>
+                </div>
+              )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { label: "Fundo Inicial",  value: Number(currentRegister.opening_amount), color: "text-blue-500", visible: true },
-              { label: "Total Entradas", value: totalEntradas,  color: "text-primary", visible: !isBlind },
-              { label: "Total Saídas",   value: totalSaidas,    color: "text-destructive", visible: !isBlind },
-              { label: "Saldo Esperado", value: expectedAmount, color: expectedAmount >= 0 ? "text-primary" : "text-destructive", visible: !isBlind },
-            ].map(card => (
-              <Card key={card.label} className="border-border/50">
+              <Card className="border-primary/30 bg-primary/5">
                 <CardContent className="p-4">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{card.label}</p>
-                  <p className={`font-display text-lg font-bold mt-1 ${card.visible ? card.color : "text-muted-foreground"}`}>
-                    {card.visible ? formatCurrency(card.value) : "******"}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {!isBlind && (
-          <Card className="border-border/50">
-            <CardHeader className="pb-2">
-              <CardTitle className="font-display text-sm flex items-center gap-2">
-                <ArrowDownUp className="h-4 w-4 text-primary" /> Conferência por Forma de Pagamento
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {["dinheiro","pix","cartao_credito","cartao_debito","transferencia"].map(method => {
-                  const ent = confirmedEntries.filter(e => ["entrada","abertura"].includes(e.type) && e.payment_method === method).reduce((s, e) => s + Number(e.amount), 0);
-                  const sai = confirmedEntries.filter(e => ["saida","sangria"].includes(e.type) && e.payment_method === method).reduce((s, e) => s + Number(e.amount), 0);
-                  if (ent === 0 && sai === 0) return null;
-                  const saldo = ent - sai;
-                  return (
-                    <div key={method} className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
-                      <span className="text-sm">{paymentLabels[method]}</span>
-                      <div className="flex items-center gap-4 text-xs">
-                        <span className="text-primary">+{formatCurrency(ent)}</span>
-                        <span className="text-destructive">-{formatCurrency(sai)}</span>
-                        <span className={`font-bold ${saldo >= 0 ? "text-primary" : "text-destructive"}`}>{formatCurrency(saldo)}</span>
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex items-center gap-3">
+                      <Unlock className="h-5 w-5 text-primary" />
+                      <div>
+                        <p className="font-semibold text-sm text-primary">Caixa Aberto</p>
+                        <p className="text-xs text-muted-foreground">Desde {new Date(currentRegister.opened_at).toLocaleString("pt-BR")}</p>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-          )}
+                    <div className="flex gap-2">
+                      <Button className="h-9 text-[11px] bg-transparent border border-yellow-500/30 text-yellow-500 hover:bg-yellow-500/10" onClick={() => setSangriaDialog(true)}>Sangria</Button>
+                      <Button className="h-9 text-[11px] bg-transparent border border-border text-foreground hover:bg-muted" onClick={() => setEntryDialog(true)}>Lançamento</Button>
+                      <Button className="h-9 text-[11px] bg-destructive hover:bg-destructive/90 text-white" onClick={() => setCloseDialog(true)}>Fechar Caixa</Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-          <Card className="border-border/50">
-            <CardHeader className="pb-2">
-              <CardTitle className="font-display text-sm">
-                Lançamentos ({entries.length})
-                {pendingCount > 0 && (
-                  <Badge className="ml-2 bg-orange-500/15 text-orange-500 border-orange-500/30 text-[10px]">
-                    {pendingCount} pendente{pendingCount > 1 ? "s" : ""}
-                  </Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {entries.length > 0 ? (
-                <div className="space-y-2">
-                  {entries.map(entry => {
-                    const cfg = typeConfig[entry.type];
-                    const isPositive = ["entrada","abertura"].includes(entry.type);
-                    const isPending = !entry.confirmed;
-                    return (
-                      <div key={entry.id}
-                        className={`flex items-center justify-between rounded-lg border p-3 transition-colors ${
-                          isPending ? "border-orange-500/30 bg-orange-500/5 cursor-pointer hover:bg-orange-500/10" : "border-border/50"
-                        }`}
-                        onClick={() => isPending && openConfirmDialog(entry)}
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className={`h-8 w-8 rounded-full ${cfg.bg} flex items-center justify-center shrink-0 ${isPending ? "opacity-60" : ""}`}>
-                            <cfg.icon className={`h-4 w-4 ${cfg.color}`} />
-                          </div>
-                          <div className="min-w-0">
-                            <p className={`text-sm font-medium truncate ${isPending ? "opacity-70" : ""}`}>{entry.description}</p>
-                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                              <Badge className={`text-[9px] border bg-transparent ${cfg.color}`}>{cfg.label}</Badge>
-                              {entry.payment_method && <span className="text-[10px] text-muted-foreground">{paymentLabels[entry.payment_method] ?? entry.payment_method}</span>}
-                              {isPending ? (
-                                <Badge className="text-[9px] bg-orange-500/15 text-orange-500 border-orange-500/30 gap-1">
-                                  <Clock className="h-2.5 w-2.5" /> Pendente — clique para confirmar
-                                </Badge>
-                              ) : (
-                                entry.receipt_url && (
-                                  <a href={entry.receipt_url} target="_blank" rel="noreferrer"
-                                    className="text-[10px] text-primary underline flex items-center gap-0.5"
-                                    onClick={e => e.stopPropagation()}>
-                                    <Receipt className="h-2.5 w-2.5" /> Comprovante
-                                  </a>
-                                )
-                              )}
-                            </div>
-                          </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: "Fundo Inicial",  value: Number(currentRegister.opening_amount), color: "text-blue-500", visible: true },
+                  { label: "Total Entradas", value: totalEntradas,  color: "text-primary", visible: !isBlind },
+                  { label: "Total Saídas",   value: totalSaidas,    color: "text-destructive", visible: !isBlind },
+                  { label: "Saldo Esperado", value: expectedAmount, color: "text-primary", visible: !isBlind },
+                ].map(card => (
+                  <Card key={card.label} className="border-border/50">
+                    <CardContent className="p-4">
+                      <p className="text-[11px] text-muted-foreground uppercase">{card.label}</p>
+                      <p className={`font-display text-lg font-bold mt-1 ${card.visible ? card.color : "text-muted-foreground"}`}>
+                        {card.visible ? formatCurrency(card.value) : "******"}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {!isBlind && (
+                <Card className="border-border/50">
+                  <CardContent className="p-4 space-y-2">
+                    {["dinheiro","pix","cartao_credito","cartao_debito","transferencia"].map(method => {
+                      const ent = confirmedEntries.filter(e => ["entrada","abertura"].includes(e.type) && e.payment_method === method).reduce((s, e) => s + Number(e.amount), 0);
+                      const sai = confirmedEntries.filter(e => ["saida","sangria"].includes(e.type) && e.payment_method === method).reduce((s, e) => s + Number(e.amount), 0);
+                      if (ent === 0 && sai === 0) return null;
+                      return (
+                        <div key={method} className="flex justify-between text-xs">
+                          <span>{paymentLabels[method]}</span>
+                          <span className="font-bold">{formatCurrency(ent - sai)}</span>
                         </div>
-                        <div className="text-right shrink-0 ml-2 flex flex-col items-end gap-1">
-                          <p className={`font-bold text-sm ${isPending ? "opacity-60" : ""} ${isPositive ? "text-primary" : "text-destructive"}`}>
-                            {isPositive ? "+" : "-"}{formatCurrency(Number(entry.amount))}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground">{new Date(entry.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</p>
-                          {isPending ? (
-                            <Button
-                              className="h-6 text-[9px] border border-orange-500/40 text-orange-500 bg-transparent hover:bg-orange-500/10 px-2"
-                              onClick={e => { e.stopPropagation(); openConfirmDialog(entry); }}>
-                              Confirmar
-                            </Button>
-                          ) : (
-                            canManageFinance && (
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  className="h-6 w-6 p-0 border border-orange-500/40 text-orange-500 bg-transparent hover:bg-orange-500/10"
-                                  title="Desconfirmar Lançamento"
-                                  onClick={e => handleUnconfirmEntry(entry.id, e)}>
-                                  <Minus className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  className="h-6 w-6 p-0 border border-destructive/40 text-destructive bg-transparent hover:bg-destructive/10"
-                                  title="Excluir Lançamento"
-                                  onClick={e => handleDeleteEntry(entry.id, e)}>
-                                  <Minus className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            )
-                          )}
-                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              )}
+
+              <Card className="border-border/50">
+                <CardHeader className="pb-2"><CardTitle className="text-sm">Lançamentos Recentes ({entries.length})</CardTitle></CardHeader>
+                <CardContent className="space-y-2">
+                  {entries.map(entry => (
+                    <div key={entry.id} className="flex items-center justify-between text-xs border rounded-lg p-2 bg-muted/20" onClick={() => !entry.confirmed && openConfirmDialog(entry)}>
+                      <div>
+                        <p className="font-medium">{entry.description}</p>
+                        <p className="text-muted-foreground">{paymentLabels[entry.payment_method || ""] || "Outro"} · {new Date(entry.created_at).toLocaleTimeString("pt-BR")}</p>
                       </div>
-                    );
-                  })}
+                      <div className="text-right">
+                        <p className={`font-bold ${["entrada","abertura"].includes(entry.type) ? "text-primary" : "text-destructive"}`}>
+                          {["entrada","abertura"].includes(entry.type) ? "+" : "-"}{formatCurrency(Number(entry.amount))}
+                        </p>
+                        {!entry.confirmed && <Badge className="text-[8px] bg-orange-500/20 text-orange-600">Pendente</Badge>}
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="history" className="mt-4 space-y-4">
+          <Card className="border-border/50">
+            <CardHeader><CardTitle className="text-sm">Histórico de Fechamentos (Admin)</CardTitle></CardHeader>
+            <CardContent>
+              {historyLoading ? <p className="text-center py-4">Carregando...</p> : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="border-b">
+                      <tr>
+                        <th className="py-2">Data</th>
+                        <th className="py-2 text-right">Fechamento</th>
+                        <th className="py-2 text-right">Diferença</th>
+                        <th className="py-2 text-center">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {registersHistory.map(reg => (
+                        <tr key={reg.id}>
+                          <td className="py-2">{new Date(reg.opened_at).toLocaleDateString("pt-BR")}</td>
+                          <td className="py-2 text-right font-bold">{formatCurrency(Number(reg.closing_amount))}</td>
+                          <td className={`py-2 text-right ${Math.abs(reg.difference || 0) < 0.1 ? "text-primary" : "text-destructive"}`}>
+                            {formatCurrency(reg.difference || 0)}
+                          </td>
+                          <td className="py-2 text-center">
+                            {userRole === "admin" && <Button className="h-6 text-[9px]" onClick={() => handleReopenRegister(reg.id)}>Reabrir</Button>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ) : (
-                <p className="text-xs text-muted-foreground text-center py-8">Nenhum lançamento ainda</p>
               )}
             </CardContent>
           </Card>
-        </>
-      ) : (
-        <Card className="border-border/50">
-          <CardContent className="flex flex-col items-center justify-center py-16 gap-4">
-            <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
-              <Wallet className="h-8 w-8 text-muted-foreground opacity-50" />
-            </div>
-            <div className="text-center">
-              <p className="font-semibold">Caixa fechado</p>
-              <p className="text-xs text-muted-foreground mt-1">Abra o caixa para começar a registrar lançamentos</p>
-            </div>
-            {pendingCount > 0 && (
-              <div className="flex items-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-500">
-                <Clock className="h-4 w-4 shrink-0" />
-                {pendingCount} lançamento{pendingCount > 1 ? "s" : ""} pendente{pendingCount > 1 ? "s" : ""} de vendas/OS aguardando confirmação
-              </div>
-            )}
-            <Button className="gap-2" onClick={() => setOpenDialog(true)} disabled={!activeStoreId}>
-              <Unlock className="h-4 w-4" /> Abrir Caixa
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+        </TabsContent>
+      </Tabs>
 
-      {/* ── Dialog Confirmar ─────────────────────────────────────────────────── */}
-      <Dialog open={confirmDialog} onOpenChange={(o) => { setConfirmDialog(o); if (!o) { setConfirmEntry(null); setConfirmFile(null); } }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="font-display flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-primary" /> Confirmar Lançamento
-            </DialogTitle>
-          </DialogHeader>
-          {confirmEntry && (
-            <div className="space-y-4">
-              <div className="rounded-lg bg-muted/50 p-3 text-xs space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Tipo</span>
-                  <span className={`font-semibold ${typeConfig[confirmEntry.type].color}`}>{typeConfig[confirmEntry.type].label}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Descrição</span>
-                  <span className="font-medium text-right max-w-[60%]">{confirmEntry.description}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Valor</span>
-                  <span className="font-bold">{formatCurrency(Number(confirmEntry.amount))}</span>
-                </div>
-                {confirmEntry.payment_method && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Pagamento</span>
-                    <span>{paymentLabels[confirmEntry.payment_method] ?? confirmEntry.payment_method}</span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Data</span>
-                  <span>{new Date(confirmEntry.created_at).toLocaleString("pt-BR")}</span>
-                </div>
-              </div>
-              <ReceiptUpload target="confirm" file={confirmFile} />
-              <Button className="w-full h-11" onClick={handleConfirmEntry} disabled={loading || !confirmFile}>
-                {loading ? "Confirmando..." : "Confirmar com Comprovante"}
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Dialog Abrir Caixa ───────────────────────────────────────────────── */}
+      {/* Dialogs */}
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
         <DialogContent>
-          <DialogHeader><DialogTitle className="font-display flex items-center gap-2"><Unlock className="h-4 w-4 text-primary" /> Abrir Caixa</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Fundo de Caixa (R$)</Label>
-              <Input type="number" step="0.01" value={openForm.amount} onChange={e => setOpenForm(f => ({ ...f, amount: e.target.value }))} placeholder="200.00" className="h-10" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Observação</Label>
-              <Textarea value={openForm.note} onChange={e => setOpenForm(f => ({ ...f, note: e.target.value }))} placeholder="Notas de abertura..." className="min-h-[60px]" />
-            </div>
+          <DialogTitle>Abrir Caixa</DialogTitle>
+          <div className="space-y-4 mt-2">
+            <Label className="text-xs">Fundo inicial (R$)</Label>
+            <Input type="number" step="0.01" value={openForm.amount} onChange={e => setOpenForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
             <ReceiptUpload target="open" file={openForm.receipt} />
-            <Button className="w-full h-11" onClick={handleOpenRegister} disabled={loading}>
-              {loading ? "Abrindo..." : "Abrir Caixa"}
-            </Button>
+            <Button className="w-full" onClick={handleOpenRegister} disabled={loading}>Abrir Caixa</Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog Fechar Caixa ──────────────────────────────────────────────── */}
+      <Dialog open={confirmDialog} onOpenChange={setConfirmDialog}>
+        <DialogContent>
+          <DialogTitle>Confirmar Lançamento</DialogTitle>
+          <div className="space-y-4 mt-2">
+            <p className="text-xs">{confirmEntry?.description} - {confirmEntry && formatCurrency(Number(confirmEntry.amount))}</p>
+            <ReceiptUpload target="confirm" file={confirmFile} />
+            <Button className="w-full" onClick={handleConfirmEntry} disabled={loading || !confirmFile}>Confirmar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={closeDialog} onOpenChange={setCloseDialog}>
         <DialogContent>
-          <DialogHeader><DialogTitle className="font-display flex items-center gap-2"><Lock className="h-4 w-4 text-destructive" /> Fechar Caixa</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            {pendingCount > 0 && (
-              <div className="flex items-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 p-3 text-xs text-orange-500">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                {pendingCount} lançamento{pendingCount > 1 ? "s" : ""} pendente{pendingCount > 1 ? "s" : ""}. Confirme todos antes de fechar.
-              </div>
-            )}
-            {!isBlind ? (
-              <div className="rounded-lg bg-muted/50 p-3 text-xs">
-                <div className="flex justify-between"><span className="text-muted-foreground">Saldo esperado pelo sistema</span><span className="font-bold">{formatCurrency(expectedAmount)}</span></div>
-              </div>
-            ) : (
-              <div className="rounded-lg bg-muted/50 p-3 text-xs text-center text-muted-foreground font-medium">
-                Fechamento de Caixa Cego: Informe o valor exato contado fisicamente nas gavetas.
-              </div>
-            )}
-            <div className="space-y-1.5">
-              <Label className="text-xs">Valor Contado (R$)</Label>
-              <Input type="number" step="0.01" value={closeForm.amount} onChange={e => setCloseForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" className="h-10" />
-              {closeForm.amount && !isBlind && (
-                <div className={`flex items-center gap-2 text-xs font-semibold mt-1 ${Math.abs(difference) <= 5 ? "text-primary" : "text-destructive"}`}>
-                  {Math.abs(difference) <= 5 ? <CheckCircle className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
-                  Diferença: {difference >= 0 ? "+" : ""}{formatCurrency(difference)}
-                  {Math.abs(difference) > 5 && " — justificativa obrigatória"}
-                </div>
-              )}
-            </div>
-            {!isBlind && Math.abs(difference) > 5 && closeForm.amount && (
-              <div className="space-y-1.5">
-                <Label className="text-xs text-destructive">Motivo da diferença *</Label>
-                <Textarea value={closeForm.reason} onChange={e => setCloseForm(f => ({ ...f, reason: e.target.value }))} placeholder="Explique a diferença..." className="min-h-[60px]" />
-              </div>
-            )}
-            <div className="space-y-1.5">
-              <Label className="text-xs">Observação</Label>
-              <Textarea value={closeForm.note} onChange={e => setCloseForm(f => ({ ...f, note: e.target.value }))} placeholder="Notas de fechamento..." className="min-h-[60px]" />
-            </div>
+          <DialogTitle>Fechar Caixa</DialogTitle>
+          <div className="space-y-4 mt-2">
+            <Label className="text-xs">Valor contado (R$)</Label>
+            <Input type="number" step="0.01" value={closeForm.amount} onChange={e => setCloseForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
+            {!isBlind && <p className="text-xs">Diferença: {formatCurrency(difference)}</p>}
+            {Math.abs(difference) > 5 && <Textarea value={closeForm.reason} onChange={e => setCloseForm(f => ({ ...f, reason: e.target.value }))} placeholder="Motivo da diferença..." />}
             <ReceiptUpload target="close" file={closeForm.receipt} />
-            <Button className="w-full h-11 bg-destructive hover:bg-destructive/90"
-              onClick={handleCloseRegister}
-              disabled={loading || !closeForm.amount || pendingCount > 0}>
-              {loading ? "Fechando..." : "Confirmar Fechamento"}
-            </Button>
+            <Button className="w-full bg-destructive" onClick={handleCloseRegister} disabled={loading || !closeForm.amount}>Fechar Caixa</Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog Lançamento ────────────────────────────────────────────────── */}
       <Dialog open={entryDialog} onOpenChange={setEntryDialog}>
         <DialogContent>
-          <DialogHeader><DialogTitle className="font-display">Novo Lançamento</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 p-3 text-xs text-orange-500 flex items-center gap-2">
-              <Clock className="h-4 w-4 shrink-0" />
-              O lançamento ficará pendente até você confirmar com o comprovante.
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Button className={`gap-2 h-10 border ${entryForm.type === "entrada" ? "bg-primary text-primary-foreground" : "bg-transparent text-foreground hover:bg-muted"}`}
-                onClick={() => setEntryForm(f => ({ ...f, type: "entrada" }))}>
-                <TrendingUp className="h-4 w-4" /> Entrada
-              </Button>
-              <Button className={`gap-2 h-10 border ${entryForm.type === "saida" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : "bg-transparent text-foreground hover:bg-muted"}`}
-                onClick={() => setEntryForm(f => ({ ...f, type: "saida" }))}>
-                <TrendingDown className="h-4 w-4" /> Saída
-              </Button>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Descrição *</Label>
-              <Input value={entryForm.description} onChange={e => setEntryForm(f => ({ ...f, description: e.target.value }))} placeholder="Descrição do lançamento" className="h-10" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Valor (R$) *</Label>
-                <Input type="number" step="0.01" value={entryForm.amount} onChange={e => setEntryForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" className="h-10" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Forma de Pagamento</Label>
-                <Select value={entryForm.payment_method} onValueChange={v => setEntryForm(f => ({ ...f, payment_method: v }))}>
-                  <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                  <SelectContent>{Object.entries(paymentLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-            </div>
-            <Button className="w-full h-11" onClick={handleEntry} disabled={loading || !entryForm.amount || !entryForm.description}>
-              {loading ? "Salvando..." : "Criar Lançamento"}
-            </Button>
+          <DialogTitle>Novo Lançamento</DialogTitle>
+          <div className="space-y-4 mt-2">
+             <Select value={entryForm.type} onValueChange={v => setEntryForm(f => ({ ...f, type: v as any }))}>
+               <SelectTrigger><SelectValue /></SelectTrigger>
+               <SelectContent><SelectItem value="entrada">Entrada</SelectItem><SelectItem value="saida">Saída</SelectItem></SelectContent>
+             </Select>
+             <Input value={entryForm.description} onChange={e => setEntryForm(f => ({ ...f, description: e.target.value }))} placeholder="Descrição" />
+             <Input type="number" step="0.01" value={entryForm.amount} onChange={e => setEntryForm(f => ({ ...f, amount: e.target.value }))} placeholder="Valor" />
+             <Button className="w-full" onClick={handleEntry} disabled={loading}>Salvar</Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog Sangria ───────────────────────────────────────────────────── */}
       <Dialog open={sangriaDialog} onOpenChange={setSangriaDialog}>
         <DialogContent>
-          <DialogHeader><DialogTitle className="font-display flex items-center gap-2"><Minus className="h-4 w-4 text-yellow-500" /> Sangria de Caixa</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 p-3 text-xs text-orange-500 flex items-center gap-2">
-              <Clock className="h-4 w-4 shrink-0" />
-              A sangria ficará pendente até você confirmar com o comprovante.
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Valor (R$) *</Label>
-              <Input type="number" step="0.01" value={sangriaForm.amount} onChange={e => setSangriaForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" className="h-10" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Motivo *</Label>
-              <Input value={sangriaForm.description} onChange={e => setSangriaForm(f => ({ ...f, description: e.target.value }))} placeholder="Ex: Pagamento de fornecedor" className="h-10" />
-            </div>
-            <Button className="w-full h-11 bg-yellow-500 hover:bg-yellow-600 text-black font-bold" onClick={handleSangria}
-              disabled={loading || !sangriaForm.amount}>
-              {loading ? "Salvando..." : "Criar Sangria"}
-            </Button>
+          <DialogTitle>Sangria de Caixa</DialogTitle>
+          <div className="space-y-4 mt-2">
+            <Input type="number" step="0.01" value={sangriaForm.amount} onChange={e => setSangriaForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
+            <Input value={sangriaForm.description} onChange={e => setSangriaForm(f => ({ ...f, description: e.target.value }))} placeholder="Motivo" />
+            <Button className="w-full bg-yellow-500 hover:bg-yellow-600" onClick={handleSangria} disabled={loading}>Criar Sangria</Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -10,6 +10,9 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line,
 } from "recharts";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 const COLORS = ["hsl(152, 60%, 45%)", "hsl(38, 92%, 50%)", "hsl(0, 62%, 50%)", "hsl(220, 25%, 50%)", "hsl(280, 50%, 50%)"];
 
@@ -59,6 +62,7 @@ const Dashboard = () => {
   const [categoryBreakdown, setCategoryBreakdown] = useState<{ name: string; value: number }[]>([]);
   const [lowStockStores, setLowStockStores] = useState<{ name: string; count: number }[]>([]);
   const [lowStockAcc, setLowStockAcc] = useState<{ name: string; qty: number; min: number }[]>([]);
+  const [stores, setStores] = useState<any[]>([]);
 
   const fetchData = async () => {
     // Só prossegue quando AuthContext estiver 100% carregado
@@ -93,9 +97,10 @@ const Dashboard = () => {
 
     const [productsRes, transactionsRes, storesRes, salesRes, osRes, accRes] = await Promise.all(fetches);
 
+    const stores = storesRes.data ?? [];
+    setStores(stores);
     const products = productsRes.data ?? [];
     const transactions = transactionsRes.data ?? [];
-    const stores = storesRes.data ?? [];
     const sales = salesRes.data ?? [];
     const serviceOrders = osRes.data ?? [];
     const accessories = (accRes.data ?? []) as any[];
@@ -197,15 +202,32 @@ const Dashboard = () => {
         <div>
           <h1 className="font-display text-xl md:text-3xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            {activeStoreId !== "all" || (!isAdmin && userStoreIds.length > 0)
-              ? <>Dados limitados à filial</>
-              : "Visão geral de todas as lojas"}
+            {activeStoreId !== "all"
+              ? `Dados da unidade: ${activeStoreName}`
+              : "Visão consolidada de todas as lojas"}
           </p>
         </div>
-        {(activeStoreId !== "all" || (!isAdmin && userStoreIds.length > 0)) && (
+        {isAdmin && (
+          <div className="flex items-center gap-2">
+            <Store className="h-4 w-4 text-muted-foreground" />
+            <Select value={activeStoreId} onValueChange={(v) => {
+              const s = stores.find(s => s.id === v);
+              window.dispatchEvent(new CustomEvent("store-changed", { detail: { id: v, name: s?.name || "Todas as lojas" } }));
+            }}>
+              <SelectTrigger className="w-[200px] h-10 border-border/50 bg-card shadow-sm">
+                <SelectValue placeholder="Escolher Loja" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as Lojas</SelectItem>
+                {stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {!isAdmin && activeStoreId !== "all" && (
           <div className="flex items-center gap-1.5 rounded-lg bg-primary/10 border border-primary/20 px-3 py-1.5">
             <Store className="h-3.5 w-3.5 text-primary" />
-            <span className="text-xs font-semibold text-primary">{!isAdmin ? "Sua Loja" : activeStoreName}</span>
+            <span className="text-xs font-semibold text-primary">{activeStoreName}</span>
           </div>
         )}
       </div>

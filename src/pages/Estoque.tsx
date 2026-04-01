@@ -14,8 +14,9 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Search, Package, ArrowRightLeft, AlertTriangle, Zap, Pencil, Trash2 } from "lucide-react";
+import { Plus, Search, Package, ArrowRightLeft, AlertTriangle, Zap, Pencil, Trash2, Store } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
+import { logAction } from "@/utils/auditLogger";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -44,7 +45,7 @@ type Accessory = {
 };
 
 const Estoque = () => {
-  const { user, activeStoreId } = useAuth();
+  const { user, userRole, activeStoreId } = useAuth();
   const [products, setProducts] = useState<Tables<"products">[]>([]);
   const [accessories, setAccessories] = useState<Accessory[]>([]);
   const [stores, setStores] = useState<Tables<"stores">[]>([]);
@@ -76,14 +77,26 @@ const Estoque = () => {
 
   const fetchData = async () => {
     if (!activeStoreId) return;
+    setLoading(true);
+    
+    let productsQuery = supabase.from("products").select("*");
+    let accQuery = supabase.from("accessories" as any).select("*");
+
+    if (activeStoreId !== "all") {
+      productsQuery = productsQuery.eq("store_id", activeStoreId);
+      accQuery = accQuery.eq("store_id", activeStoreId);
+    }
+
     const [productsRes, storesRes, accRes] = await Promise.all([
-      supabase.from("products").select("*").eq("store_id", activeStoreId).order("created_at", { ascending: false }),
+      productsQuery.order("created_at", { ascending: false }),
       supabase.from("stores").select("*"),
-      supabase.from("accessories" as any).select("*").eq("store_id", activeStoreId).order("created_at", { ascending: false }),
+      accQuery.order("created_at", { ascending: false }),
     ]);
+
     setProducts(productsRes.data ?? []);
     setStores(storesRes.data ?? []);
     setAccessories((accRes.data ?? []) as unknown as Accessory[]);
+    setLoading(false);
   };
 
   useEffect(() => { fetchData(); }, [activeStoreId]);
@@ -147,6 +160,7 @@ const Estoque = () => {
     if (error) {
       toast.error(error.message);
     } else {
+      logAction(editAcc ? "CREATE_RECORD" : "CREATE_RECORD", "accessories", editAcc ? editAcc.id : "new", editAcc, payload, payload.store_id);
       toast.success(editAcc ? "Acessório atualizado!" : "Acessório cadastrado!");
       setAccDialogOpen(false);
       setEditAcc(null);
@@ -156,10 +170,15 @@ const Estoque = () => {
     setLoading(false);
   };
 
-  const handleDeleteAcc = async (id: string) => {
-    const { error } = await supabase.from("accessories" as any).delete().eq("id", id);
+  const handleDeleteAcc = async (acc: Accessory) => {
+    if (userRole !== "admin") return;
+    const { error } = await supabase.from("accessories" as any).delete().eq("id", acc.id);
     if (error) toast.error(error.message);
-    else { toast.success("Acessório removido!"); fetchData(); }
+    else { 
+      logAction("DELETE_RECORD", "accessories", acc.id, acc, null, acc.store_id);
+      toast.success("Acessório removido!"); 
+      fetchData(); 
+    }
   };
 
   const handleTransfer = async () => {
@@ -169,6 +188,7 @@ const Estoque = () => {
     if (error) {
       toast.error("Erro na transferência: " + error.message);
     } else {
+      logAction("TRANSFER_STOCK", "products", transferProduct.id, transferProduct, { ...transferProduct, store_id: transferStoreId }, transferStoreId);
       const storeMap = new Map(stores.map(s => [s.id, s.name]));
       await supabase.from("transactions").insert({
         type: "income", amount: 0,
@@ -236,7 +256,7 @@ const Estoque = () => {
     setLoading(true);
     const oldCost = Number(editProduct.cost_price);
     const newCost = parseFloat(editForm.cost_price);
-    const { error } = await supabase.from("products").update({
+    const updatePayload = {
       name: editForm.name,
       brand: editForm.brand,
       model: editForm.model,
@@ -248,11 +268,13 @@ const Estoque = () => {
       condition: editForm.condition,
       color: editForm.color || null,
       capacity: editForm.capacity || null,
-    } as any).eq("id", editProduct.id);
+    };
+    const { error } = await supabase.from("products").update(updatePayload as any).eq("id", editProduct.id);
 
     if (error) {
       toast.error(error.message);
     } else {
+      logAction("UPDATE_RECORD", "products", editProduct.id, editProduct, updatePayload, editForm.store_id);
       if (oldCost !== newCost) {
         await supabase.from("product_history" as any).insert({
           product_id: editProduct.id,
@@ -273,9 +295,13 @@ const Estoque = () => {
 
   const handleDeleteProduct = async (id: string) => {
     if (!confirm("Tem certeza que deseja excluir este aparelho? Esta ação não pode ser desfeita.")) return;
+    const productToDelete = products.find(p => p.id === id);
     const { error } = await supabase.from("products").delete().eq("id", id);
     if (error) toast.error(error.message);
-    else { toast.success("Aparelho removido!"); fetchData(); }
+    else { 
+      logAction("DELETE_RECORD", "products", id, productToDelete, null, productToDelete?.store_id);
+      toast.success("Aparelho removido!"); fetchData(); 
+    }
   };
 
   const openAccDialog = (acc?: Accessory) => {
@@ -301,8 +327,26 @@ const Estoque = () => {
           <h1 className="font-display text-xl md:text-3xl font-bold tracking-tight">Estoque</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             {inStock.length} aparelhos · {filteredAccessories.length} acessórios · {formatCurrency(totalInvestedProducts + totalInvestedAcc)} investido
+            {activeStoreId === "all" && " (Global)"}
           </p>
         </div>
+        {userRole === "admin" && (
+          <div className="flex items-center gap-2">
+            <Store className="h-4 w-4 text-muted-foreground" />
+            <Select value={activeStoreId} onValueChange={(v) => {
+              const s = stores.find(s => s.id === v);
+              window.dispatchEvent(new CustomEvent("store-changed", { detail: { id: v, name: s?.name || "Todas as lojas" } }));
+            }}>
+              <SelectTrigger className="w-[180px] h-9">
+                <SelectValue placeholder="Selecionar Loja" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as Lojas</SelectItem>
+                {stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       {/* Alertas */}
@@ -345,7 +389,9 @@ const Estoque = () => {
           <div className="flex justify-end">
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="gap-2 h-10"><Plus className="h-4 w-4" /> Novo Aparelho</Button>
+                <Button className="gap-2 h-10" disabled={activeStoreId === "all"}>
+                  <Plus className="h-4 w-4" /> Novo Aparelho
+                </Button>
               </DialogTrigger>
               <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
                 <DialogHeader>
@@ -445,7 +491,11 @@ const Estoque = () => {
                             {p.brand} · {p.model} {p.capacity && `· ${p.capacity}`} {p.color && `· ${p.color}`} · {conditionLabel}
                             {p.imei && ` · IMEI: ${p.imei}`}
                           </p>
-                          <p className="text-xs text-muted-foreground">{storeMap.get(p.store_id) || "—"}</p>
+                          {activeStoreId === "all" && (
+                            <Badge variant="outline" className="text-[9px] mt-1 bg-muted/50 border-primary/20 text-primary">
+                              {storeMap.get(p.store_id) || "—"}
+                            </Badge>
+                          )}
                         </div>
                         <div className="text-right shrink-0 flex flex-col items-end gap-1">
                           <div>
@@ -494,7 +544,7 @@ const Estoque = () => {
         {/* ABA ACESSÓRIOS */}
         <TabsContent value="acessorios" className="mt-4 space-y-3">
           <div className="flex justify-end">
-            <Button className="gap-2 h-10" onClick={() => openAccDialog()}>
+            <Button className="gap-2 h-10" onClick={() => openAccDialog()} disabled={activeStoreId === "all"}>
               <Plus className="h-4 w-4" /> Novo Acessório
             </Button>
           </div>
@@ -521,7 +571,14 @@ const Estoque = () => {
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            {a.brand && `${a.brand} · `}{storeMap.get(a.store_id) || "—"}
+                            {a.brand && `${a.brand} · `}
+                            {activeStoreId === "all" ? (
+                              <Badge variant="outline" className="text-[9px] bg-muted/50 border-primary/20 text-primary">
+                                {storeMap.get(a.store_id) || "—"}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">{storeMap.get(a.store_id) || "—"}</span>
+                            )}
                           </p>
                           <p className="text-xs text-muted-foreground">{a.description}</p>
                         </div>
@@ -540,9 +597,12 @@ const Estoque = () => {
                             <Button className="h-7 w-7 p-0 bg-transparent text-foreground hover:bg-muted" onClick={() => openAccDialog(a)}>
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
-                            <Button className="h-7 w-7 p-0 bg-transparent text-destructive hover:bg-destructive/10" onClick={() => handleDeleteAcc(a.id)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                            {userRole === "admin" && (
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10" 
+                                onClick={() => handleDeleteAcc(a)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </div>

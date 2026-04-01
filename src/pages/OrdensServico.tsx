@@ -20,7 +20,7 @@ import { toast } from "sonner";
 import {
   Plus, Wrench, Search, Clock, CheckCircle2, AlertCircle, Package,
   Phone, User, FileText, MessageCircle, Banknote, CreditCard, QrCode, DollarSign,
-  Printer, ChevronRight, ChevronLeft, Camera, Upload, Receipt,
+  Printer, ChevronRight, ChevronLeft, Camera, Upload, Receipt, Shield, Trash2
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { KanbanBoard } from "@/components/KanbanBoard";
@@ -391,7 +391,8 @@ const generateThermalPdf = async (order: any, store: any, techName: string, publ
 };
 
 const OrdensServico = () => {
-  const { user, activeStoreId } = useAuth();
+  const { user, userRole, activeStoreId } = useAuth();
+  const isAdmin = userRole === "admin";
   const [orders, setOrders] = useState<Tables<"service_orders">[]>([]);
   const [stores, setStores] = useState<Tables<"stores">[]>([]);
   const [profiles, setProfiles] = useState<Tables<"profiles">[]>([]);
@@ -399,6 +400,7 @@ const OrdensServico = () => {
   const [detailOrder, setDetailOrder] = useState<any | null>(null);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [filterStoreId, setFilterStoreId] = useState("all");
   const [loading, setLoading] = useState(false);
   const [signatureData, setSignatureData] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -432,11 +434,18 @@ const OrdensServico = () => {
 
   const fetchData = async () => {
     if (!activeStoreId) return;
+    
+    let query = supabase.from("service_orders").select("*");
+    if (activeStoreId !== "all") {
+      query = query.eq("store_id", activeStoreId);
+    }
+    
     const [ordersRes, storesRes, profilesRes] = await Promise.all([
-      supabase.from("service_orders").select("*").eq("store_id", activeStoreId).order("created_at", { ascending: false }),
+      query.order("created_at", { ascending: false }),
       supabase.from("stores").select("*"),
       supabase.from("profiles").select("*"),
     ]);
+
     setOrders((ordersRes.data as any[]) ?? []);
     setStores(storesRes.data ?? []);
     setProfiles(profilesRes.data ?? []);
@@ -495,7 +504,7 @@ const OrdensServico = () => {
       device_accessories: form.device_accessories || null,
       reported_defect: form.reported_defect,
       requested_service: form.requested_service,
-      store_id: activeStoreId,
+      store_id: activeStoreId === "all" ? form.store_id || stores[0]?.id : activeStoreId,
       technician_id: form.technician_id || null,
       estimated_price: form.estimated_price ? parseFloat(form.estimated_price) : 0,
       estimated_completion: form.estimated_completion || null,
@@ -506,10 +515,17 @@ const OrdensServico = () => {
       internal_notes: form.internal_notes || null,
       created_by: user.id,
       status: "open",
-    } as any);
+    } as any).select().single();
 
-    if (error) { toast.error("Erro ao criar OS: " + error.message); }
-    else { toast.success("Ordem de Serviço criada!"); setDialogOpen(false); resetForm(); fetchData(); }
+    if (error) { 
+      toast.error("Erro ao criar OS: " + error.message); 
+    } else { 
+      toast.success("Ordem de Serviço criada!"); 
+      setDialogOpen(false); 
+      resetForm(); 
+      fetchData(); 
+      logAction("CREATE_RECORD", "service_orders", (error as any)?.id, null, form, activeStoreId === "all" ? form.store_id : activeStoreId);
+    }
     setLoading(false);
   };
 
@@ -532,7 +548,7 @@ const OrdensServico = () => {
         old_status: oldStatus,
         new_status: newStatus,
       });
-      logAction("UPDATE_OS_STATUS", "service_orders", orderId, { status: oldStatus }, { status: newStatus });
+      logAction("UPDATE_OS_STATUS", "service_orders", orderId, { status: oldStatus }, { status: newStatus }, (order as any).store_id);
     }
 
     await supabase.from("service_order_history").insert({
@@ -584,6 +600,39 @@ const OrdensServico = () => {
       const updated = { ...detailOrder, ...updates };
       setDetailOrder(updated);
       fetchData();
+      logAction("CREATE_RECORD", "service_orders", detailOrder.id, null, updates, detailOrder.store_id);
+    }
+    setLoading(false);
+  };
+
+  const handleDeleteOS = async (id: string) => {
+    if (!isAdmin) return;
+    if (!confirm("Tem certeza que deseja EXCLUIR esta OS permanentemente?")) return;
+    
+    setLoading(true);
+    const { error } = await supabase.from("service_orders").delete().eq("id", id);
+    if (error) {
+      toast.error("Erro ao excluir: " + error.message);
+    } else {
+      toast.success("Ordem de Serviço removida!");
+      setDetailOrder(null);
+      fetchData();
+      logAction("DELETE_RECORD", "service_orders", id, null, null, activeStoreId);
+    }
+    setLoading(false);
+  };
+
+  const handleMoveStore = async (newStoreId: string) => {
+    if (!isAdmin || !detailOrder) return;
+    setLoading(true);
+    const { error } = await supabase.from("service_orders").update({ store_id: newStoreId } as any).eq("id", detailOrder.id);
+    if (error) {
+      toast.error("Erro ao mover OS: " + error.message);
+    } else {
+      toast.success("OS movida para a nova unidade!");
+      setDetailOrder({ ...detailOrder, store_id: newStoreId });
+      fetchData();
+      logAction("TRANSFER_STOCK" as any, "service_orders", detailOrder.id, { from: detailOrder.store_id }, { to: newStoreId }, activeStoreId);
     }
     setLoading(false);
   };
@@ -655,7 +704,9 @@ const OrdensServico = () => {
       (o.device_imei && o.device_imei.includes(search)) ||
       (o.device_model && o.device_model.toLowerCase().includes(q)) ||
       String(o.order_number).includes(search);
-    return match && (filterStatus === "all" || o.status === filterStatus);
+    
+    const storeMatch = filterStoreId === "all" || o.store_id === filterStoreId;
+    return match && (filterStatus === "all" || o.status === filterStatus) && storeMatch;
   });
 
   const statusCounts = orders.reduce((acc: any, o: any) => {
@@ -804,6 +855,25 @@ const OrdensServico = () => {
                   <Label className="text-xs">Defeito Relatado *</Label>
                   <Textarea value={form.reported_defect} onChange={(e) => setForm({ ...form, reported_defect: e.target.value })} placeholder="Descreva o problema relatado pelo cliente" required className="min-h-[60px]" />
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Loja da OS</Label>
+                    <Select 
+                      value={form.store_id || (activeStoreId === "all" ? "" : activeStoreId)} 
+                      onValueChange={(v) => setForm({ ...form, store_id: v })}
+                      disabled={activeStoreId !== "all"}
+                    >
+                      <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>
+                        {stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Previsão de Entrega</Label>
+                    <Input type="datetime-local" value={form.estimated_completion} onChange={(e) => setForm({ ...form, estimated_completion: e.target.value })} className="h-10" />
+                  </div>
+                </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Serviço Solicitado *</Label>
                   <Select value={form.requested_service} onValueChange={(v) => setForm({ ...form, requested_service: v })}>
@@ -821,10 +891,6 @@ const OrdensServico = () => {
                     <Input type="number" step="0.01" value={form.estimated_price} onChange={(e) => setForm({ ...form, estimated_price: e.target.value })} placeholder="150.00" className="h-10" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Previsão de Entrega</Label>
-                    <Input type="datetime-local" value={form.estimated_completion} onChange={(e) => setForm({ ...form, estimated_completion: e.target.value })} className="h-10" />
-                  </div>
-                  <div className="space-y-1.5">
                     <Label className="text-xs">Técnico Responsável</Label>
                     <Select value={form.technician_id} onValueChange={(v) => setForm({ ...form, technician_id: v })}>
                       <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
@@ -833,13 +899,13 @@ const OrdensServico = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Loja</Label>
-                  <Select value={form.store_id} onValueChange={(v) => setForm({ ...form, store_id: v })}>
-                    <SelectTrigger className="h-10"><SelectValue placeholder="Selecione a loja" /></SelectTrigger>
-                    <SelectContent>{stores.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Loja</Label>
+                    <Select value={form.store_id} onValueChange={(v) => setForm({ ...form, store_id: v })}>
+                      <SelectTrigger className="h-10"><SelectValue placeholder="Selecione a loja" /></SelectTrigger>
+                      <SelectContent>{stores.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
 
@@ -1217,6 +1283,44 @@ const OrdensServico = () => {
                   <div className="rounded-lg bg-muted/50 p-3 text-xs border-l-2 border-yellow-500">
                     <p className="font-semibold text-yellow-500 text-[10px] uppercase tracking-wide mb-1">Notas Internas</p>
                     <p>{detailOrder.internal_notes}</p>
+                  </div>
+                )}
+
+                {/* Área Administrativa */}
+                {isAdmin && (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 space-y-4">
+                    <p className="text-xs font-bold text-destructive uppercase tracking-wider flex items-center gap-2">
+                      <Shield className="h-3.5 w-3.5" /> Controle Administrativo
+                    </p>
+                    
+                    <div className="space-y-2">
+                      <Label className="text-[10px] text-muted-foreground uppercase">Mover para outra unidade</Label>
+                      <div className="flex gap-2">
+                        <Select 
+                          value={detailOrder.store_id} 
+                          onValueChange={handleMoveStore}
+                        >
+                          <SelectTrigger className="h-9 text-xs flex-1"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-destructive/20">
+                      <Button 
+                        variant="destructive" 
+                        className="w-full h-9 text-xs gap-2"
+                        onClick={() => handleDeleteOS(detailOrder.id)}
+                        disabled={loading}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Excluir Ordem de Serviço
+                      </Button>
+                      <p className="text-[10px] text-center text-destructive/60 mt-2 italic">
+                        Esta ação é irreversível e removerá todos os registros vinculados.
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>

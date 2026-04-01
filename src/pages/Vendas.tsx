@@ -17,8 +17,8 @@ import {
 import { toast } from "sonner";
 import {
   Plus, ShoppingBag, Smartphone, CreditCard, Banknote, QrCode,
-  Zap, Trash2, Search, FileText, MessageCircle, User, UserPlus,
-  ChevronDown, ChevronUp, History, Tag, Shield, Landmark,
+  Zap, Trash2, Search, FileText, MessageCircle, User as UserIcon, UserPlus,
+  ChevronDown, ChevronUp, History, Tag, Shield, Landmark, Store,
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { gerarNotaFiscalInterna, type NotaFiscalData } from "@/utils/notaFiscalInterna";
@@ -97,16 +97,33 @@ const Vendas = () => {
 
   const fetchData = async () => {
     if (!activeStoreId) return;
+    setLoading(true);
+
+    let salesQuery = supabase.from("sales").select("*");
+    let productsQuery = supabase.from("products").select("*");
+    let accQuery = supabase.from("accessories" as any).select("*").gt("quantity", 0);
+    let pdvQuery = supabase.from("transactions").select("*").eq("type", "income").eq("category", "acessorio");
+    let accountsQuery = supabase.from("store_bank_accounts").select("*");
+
+    if (activeStoreId !== "all") {
+      salesQuery = salesQuery.eq("store_id", activeStoreId);
+      productsQuery = productsQuery.eq("store_id", activeStoreId);
+      accQuery = accQuery.eq("store_id", activeStoreId);
+      pdvQuery = pdvQuery.eq("store_id", activeStoreId);
+      accountsQuery = accountsQuery.eq("store_id", activeStoreId);
+    }
+
     const [salesRes, productsRes, storesRes, accRes, pdvRes, profilesRes, customersRes, accountsRes] = await Promise.all([
-      supabase.from("sales").select("*").eq("store_id", activeStoreId).order("created_at", { ascending: false }),
-      supabase.from("products").select("*").eq("store_id", activeStoreId),
+      salesQuery.order("created_at", { ascending: false }),
+      productsQuery,
       supabase.from("stores").select("*"),
-      supabase.from("accessories" as any).select("*").eq("store_id", activeStoreId).gt("quantity", 0),
-      supabase.from("transactions").select("*").eq("store_id", activeStoreId).eq("type", "income").eq("category", "acessorio").order("created_at", { ascending: false }),
+      accQuery,
+      pdvQuery.order("created_at", { ascending: false }),
       supabase.from("profiles").select("*"),
-      supabase.from("customers").select("*").or(`store_id.eq.${activeStoreId},store_id.is.null`).order("name"),
-      supabase.from("store_bank_accounts").select("*").eq("store_id", activeStoreId),
+      supabase.from("customers").select("*").order("name"),
+      accountsQuery,
     ]);
+
     setSales((salesRes.data as unknown as Sale[]) ?? []);
     setProducts(productsRes.data ?? []);
     setStores(storesRes.data ?? []);
@@ -115,6 +132,7 @@ const Vendas = () => {
     setProfiles(profilesRes.data ?? []);
     setCustomers(customersRes.data ?? []);
     setBankAccounts(accountsRes.data ?? []);
+    setLoading(false);
   };
 
   useEffect(() => { fetchData(); }, [activeStoreId]);
@@ -266,7 +284,7 @@ const Vendas = () => {
     if (saleError) { toast.error(saleError.message); setLoading(false); return; }
 
     triggerWebhook("sale_completed", selectedProduct.store_id, saleData);
-    logAction("CREATE_SALE", "sales", (saleData as any).id, null, saleData);
+    logAction("CREATE_SALE", "sales", (saleData as any).id, null, saleData, selectedProduct.store_id);
 
     await supabase.from("products").update({ status: "sold", sale_price: salePriceAfterDiscount }).eq("id", form.product_id);
     const desc = `Venda: ${selectedProduct.name}${selectedCustomer?.name ? ` → ${selectedCustomer.name}` : ""}`;
@@ -343,7 +361,7 @@ const Vendas = () => {
       
       if (error) throw error;
       
-      logAction("DELETE_RECORD", "sales", sale.id, sale, null);
+      logAction("DELETE_RECORD", "sales", sale.id, sale, null, sale.store_id);
       toast.success("Venda removida e produto retornou ao estoque!");
       fetchData();
     } catch (error: any) {
@@ -394,7 +412,7 @@ const Vendas = () => {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-          <User className="h-3 w-3" /> Cliente
+          <UserIcon className="h-3 w-3" /> Cliente
         </p>
         {currentProfile && (
           <span className="text-[10px] text-muted-foreground flex items-center gap-1">
@@ -517,13 +535,36 @@ const Vendas = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="font-display text-xl md:text-3xl font-bold tracking-tight">Vendas</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">{sales.length} vendas registradas</p>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            {sales.length + pdvSales.length} transações registradas
+            {activeStoreId === "all" && " (Global)"}
+          </p>
         </div>
-        <div className="flex gap-2">
+        {userRole === "admin" && (
+          <div className="flex items-center gap-2">
+            <Store className="h-4 w-4 text-muted-foreground" />
+            <Select value={activeStoreId} onValueChange={(v) => {
+              const s = stores.find(s => s.id === v);
+              window.dispatchEvent(new CustomEvent("store-changed", { detail: { id: v, name: s?.name || "Todas as lojas" } }));
+            }}>
+              <SelectTrigger className="w-[180px] h-9">
+                <SelectValue placeholder="Selecionar Loja" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as Lojas</SelectItem>
+                {stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
+      <div className="flex justify-end gap-2">
           {/* PDV */}
           <Dialog open={pdvOpen} onOpenChange={o => { setPdvOpen(o); if (!o) resetPdv(); }}>
             <DialogTrigger asChild>
-              <Button className="gap-2 h-10 border bg-transparent text-foreground hover:bg-muted"><Zap className="h-4 w-4 text-yellow-500" /> PDV Rápido</Button>
+              <Button className="gap-2 h-10 border bg-transparent text-foreground hover:bg-muted" disabled={activeStoreId === "all"}>
+                <Zap className="h-4 w-4 text-yellow-500" /> PDV Rápido
+              </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90dvh] overflow-y-auto">
               <DialogHeader><DialogTitle className="font-display flex items-center gap-2"><Zap className="h-4 w-4 text-yellow-500" /> PDV — Venda Rápida</DialogTitle></DialogHeader>
@@ -606,7 +647,9 @@ const Vendas = () => {
           {/* Nova Venda */}
           <Dialog open={dialogOpen} onOpenChange={open => { setDialogOpen(open); if (!open) resetForm(); }}>
             <DialogTrigger asChild>
-              <Button className="gap-2 h-10"><Plus className="h-4 w-4" /> Nova Venda</Button>
+              <Button className="gap-2 h-10" disabled={activeStoreId === "all"}>
+                <Plus className="h-4 w-4" /> Nova Venda
+              </Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
               <DialogHeader><DialogTitle className="font-display">Registrar Venda</DialogTitle></DialogHeader>
@@ -773,7 +816,6 @@ const Vendas = () => {
             </DialogContent>
           </Dialog>
         </div>
-      </div>
 
       {/* Lista de vendas */}
       <div className="space-y-2">
@@ -782,8 +824,16 @@ const Vendas = () => {
             <CardContent className="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2"><p className="font-medium text-sm truncate">{tx.description}</p><Badge className="text-[10px] bg-yellow-500/15 text-yellow-500 border border-yellow-500/20 shrink-0">PDV</Badge></div>
-                  <p className="text-[10px] text-muted-foreground mt-1">{(storeMap.get(tx.store_id) as any)?.name || ""} · {new Date(tx.created_at).toLocaleDateString("pt-BR")}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-sm truncate">{tx.description}</p>
+                    <Badge className="text-[10px] bg-yellow-500/15 text-yellow-500 border border-yellow-500/20 shrink-0">PDV</Badge>
+                    {activeStoreId === "all" && (
+                      <Badge variant="outline" className="text-[9px] bg-muted/50 border-primary/20 text-primary">
+                        {(storeMap.get(tx.store_id) as any)?.name}
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">{new Date(tx.created_at).toLocaleDateString("pt-BR")}</p>
                 </div>
                 <p className="font-display font-bold text-sm text-primary shrink-0">{formatCurrency(Number(tx.amount))}</p>
               </div>
@@ -799,7 +849,14 @@ const Vendas = () => {
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium text-sm truncate">{product?.name || "Produto removido"}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-sm truncate">{product?.name || "Aparelho"}</p>
+                      {activeStoreId === "all" && (
+                        <Badge variant="outline" className="text-[9px] bg-muted/50 border-primary/20 text-primary">
+                          {(storeMap.get(sale.store_id) as any)?.name}
+                        </Badge>
+                      )}
+                    </div>
                     <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                       {sale.has_trade_in && <Badge className="text-[10px] bg-primary/15 text-primary border border-primary/20">Troca: {sale.trade_in_device_name}</Badge>}
                       {Number(sale.payment_cash) > 0 && <Badge className="text-[10px] border border-border bg-transparent text-foreground">💵 {formatCurrency(Number(sale.payment_cash))}</Badge>}
@@ -809,9 +866,7 @@ const Vendas = () => {
                       {sale.warranty_days && sale.warranty_days !== 90 && <Badge className="text-[10px] text-blue-500 border border-blue-500/30 bg-transparent">🛡️ {sale.warranty_days}d</Badge>}
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-1">
-                      {sale.customer_name && `${sale.customer_name} · `}
-                      {sale.seller_id && profileMap.get(sale.seller_id) && `Vendedor: ${profileMap.get(sale.seller_id)} · `}
-                      {(storeMap.get(sale.store_id) as any)?.name || ""} · {new Date(sale.created_at).toLocaleDateString("pt-BR")}
+                      {sale.customer_name ? `Cliente: ${sale.customer_name}` : "Venda avulsa"} · {sale.seller_id && profileMap.get(sale.seller_id) ? `Vendedor: ${profileMap.get(sale.seller_id)} · ` : ""} {new Date(sale.created_at).toLocaleDateString("pt-BR")}
                     </p>
                     <div className="flex gap-2 mt-2">
                       <Button className="h-7 px-2 text-[10px] gap-1 border border-border bg-transparent text-foreground hover:bg-muted shadow-none"
