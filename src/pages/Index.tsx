@@ -23,6 +23,7 @@ const Dashboard = () => {
   const { user, userRole, userPermissions, activeStoreId: ctxStoreId, userStoreIds } = useAuth();
 
   const isAdmin = userRole === "admin";
+  const canSeeFinancials = isAdmin || userRole === "gerente";
   const can = (key: string) => isAdmin || (userPermissions?.[key] === true);
 
   // Loja ativa — lê da context/localstorage
@@ -191,8 +192,14 @@ const Dashboard = () => {
   const kpiCards = [
     can("estoque") && { label: "Aparelhos", value: String(stats.totalStock), sub: "em estoque", icon: Package, color: "text-primary" },
     can("estoque") && { label: "Acessórios", value: String(stats.totalAccessories), sub: "unidades", icon: Zap, color: "text-accent" },
-    can("vendas") && { label: "Vendas", value: formatCurrency(stats.totalSalesRevenue), sub: `${stats.salesCount} vendas`, icon: ShoppingBag, color: "text-primary" },
-    can("vendas") && { label: "Lucro", value: formatCurrency(stats.totalProfit), sub: "nas vendas", icon: stats.totalProfit >= 0 ? TrendingUp : TrendingDown, color: stats.totalProfit >= 0 ? "text-primary" : "text-destructive" },
+    can("vendas") && { 
+      label: "Vendas", 
+      value: canSeeFinancials ? formatCurrency(stats.totalSalesRevenue) : `${stats.salesCount} unidades`, 
+      sub: canSeeFinancials ? `${stats.salesCount} vendas` : "sucesso", 
+      icon: ShoppingBag, 
+      color: "text-primary" 
+    },
+    can("vendas") && canSeeFinancials && { label: "Lucro", value: formatCurrency(stats.totalProfit), sub: "nas vendas", icon: stats.totalProfit >= 0 ? TrendingUp : TrendingDown, color: stats.totalProfit >= 0 ? "text-primary" : "text-destructive" },
     can("os") && { label: "OS Abertas", value: String(stats.openOS), sub: "em andamento", icon: Wrench, color: "text-accent" },
   ].filter(Boolean) as { label: string; value: string; sub: string; icon: any; color: string }[];
 
@@ -266,7 +273,7 @@ const Dashboard = () => {
         </div>
       )}
 
-      {can("estoque") && (
+      {can("estoque") && canSeeFinancials && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Card className="border-border/50 shadow-lg shadow-black/10">
             <CardContent className="p-4">
@@ -284,6 +291,33 @@ const Dashboard = () => {
             <CardContent className="p-4">
               <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Total Investido</p>
               <p className="font-display text-lg font-bold mt-1">{formatCurrency(totalInvestedAll)}</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card className="border-border/50 shadow-lg shadow-black/10">
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="rounded-lg p-3 bg-destructive/10 text-destructive">
+                <TrendingDown className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Gastos PJ</p>
+                <p className="font-display text-lg font-bold text-destructive">{formatCurrency(stats.expensesPJ)}</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-border/50 shadow-lg shadow-black/10">
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="rounded-lg p-3 bg-destructive/10 text-destructive">
+                <TrendingDown className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Gastos PF + Pro-labore</p>
+                <p className="font-display text-lg font-bold text-destructive">{formatCurrency(stats.expensesPF)}</p>
+              </div>
             </CardContent>
           </Card>
         </div>
