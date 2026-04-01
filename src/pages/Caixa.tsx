@@ -136,18 +136,14 @@ const Caixa = () => {
 
     const regToUse = currentRegister || (storeId !== "all" ? mappedOpenData[0] : null);
     if (regToUse) {
-       const txRes = await supabase
+       const { data: entriesData, error: entriesError } = await supabase
          .from("cash_entries" as any).select("*")
          .eq("cash_register_id", (regToUse as any).id)
          .order("confirmed", { ascending: true })
          .order("created_at", { ascending: false });
        
-       if (txRes.error) {
-        console.error("Transactions fetch error:", txRes.error);
-        toast.error("Erro ao carregar transações: " + txRes.error.message);
-      }
-      
-      setEntries(txRes.data ?? []);
+       if (entriesError) console.error("Error fetching entries:", entriesError);
+       setEntries((entriesData as unknown as CashEntry[]) ?? []);
     } else {
        setEntries([]);
     }

@@ -95,7 +95,11 @@ const Transacoes = () => {
       supabase.from("store_bank_accounts").select("*").eq("store_id", (selectedStoreId && selectedStoreId !== "all") ? selectedStoreId : ""),
     ]);
 
-    if (txRes.error) console.error("Transactions fetch error:", txRes.error);
+    if (txRes.error) {
+      console.error("Transactions fetch error:", txRes.error);
+      toast.error("Erro ao carregar transações: " + txRes.error.message);
+    }
+    
     setTransactions(txRes.data ?? []);
     setStores(storesRes.data ?? []);
     setAccounts(accountsRes.data ?? []);
