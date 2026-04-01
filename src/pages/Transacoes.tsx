@@ -431,6 +431,53 @@ const Transacoes = () => {
       </div>
     </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 mt-4">
+        <Card className="border-green-500/10 bg-green-500/5 shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-bold text-green-600 uppercase tracking-wider">Total Entradas</p>
+              <ArrowUpRight className="h-4 w-4 text-green-500" />
+            </div>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-2xl font-black text-green-600 tracking-tighter">
+                {formatCurrency(transactions.filter(t => t.type === 'sale' || t.type === 'income').reduce((acc, t) => acc + Number(t.amount), 0))}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-orange-500/10 bg-orange-500/5 shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-bold text-orange-600 uppercase tracking-wider">Total Saídas</p>
+              <ArrowDownRight className="h-4 w-4 text-orange-500" />
+            </div>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-2xl font-black text-orange-600 tracking-tighter">
+                {formatCurrency(transactions.filter(t => t.type === 'expense_pj' || t.type === 'expense_pf' || t.type === 'pro_labore').reduce((acc, t) => acc + Number(t.amount || 0), 0))}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-primary/10 bg-primary/5 shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-bold text-primary uppercase tracking-wider">Saldo Líquido</p>
+              <ArrowUpDown className="h-4 w-4 text-primary" />
+            </div>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-2xl font-black text-primary tracking-tighter">
+                {formatCurrency(
+                  transactions.filter(t => t.type === 'sale' || t.type === 'income').reduce((acc, t) => acc + Number(t.amount || 0), 0) -
+                  transactions.filter(t => t.type === 'expense_pj' || t.type === 'expense_pf' || t.type === 'pro_labore').reduce((acc, t) => acc + Number(t.amount || 0), 0)
+                )}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="space-y-2">
         {transactions.map((tx) => (
           <Card key={tx.id} className="border-border/50 shadow-sm overflow-hidden group hover:border-primary/30 transition-colors">
