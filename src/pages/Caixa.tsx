@@ -213,11 +213,19 @@ const Caixa = () => {
   };
 
   const confirmedEntries = entries.filter(e => e.confirmed === true);
-  const totalEntradas = confirmedEntries.filter(e => ["entrada","abertura"].includes(e.type)).reduce((s, e) => s + Number(e.amount), 0);
-  const totalSaidas   = confirmedEntries.filter(e => ["saida","sangria"].includes(e.type)).reduce((s, e) => s + Number(e.amount), 0);
-  const expectedAmount = Number(currentRegister?.opening_amount || 0) + totalEntradas - totalSaidas;
+  const confirmedDinheiro = confirmedEntries.filter(e => e.payment_method === "dinheiro");
+  
+  const cashIn  = confirmedDinheiro.filter(e => ["entrada"].includes(e.type)).reduce((s, e) => s + Number(e.amount), 0);
+  const cashOut = confirmedDinheiro.filter(e => ["saida","sangria"].includes(e.type)).reduce((s, e) => s + Number(e.amount), 0);
+  const expectedCash = Number(currentRegister?.opening_amount || 0) + cashIn - cashOut;
+
+  const totalPix   = confirmedEntries.filter(e => e.payment_method === "pix").reduce((s, e) => s + Number(e.amount), 0);
+  const totalCard  = confirmedEntries.filter(e => ["cartao_credito", "cartao_debito"].includes(e.payment_method)).reduce((s, e) => s + Number(e.amount), 0);
+  const totalTotal = expectedCash + totalPix + totalCard;
+
   const closingAmount = parseFloat(closeForm.amount) || 0;
-  const difference = closingAmount - expectedAmount;
+  const expectedAmountToCompare = totalTotal;
+  const difference = closingAmount - totalTotal;
   const pendingCount = entries.filter(e => !e.confirmed).length;
   const isBlind = userRole === "vendedor";
 
@@ -266,7 +274,7 @@ const Caixa = () => {
     if (closeForm.receipt) receiptUrl = await uploadReceipt(closeForm.receipt, `fechamento/${currentRegister.id}-${Date.now()}`);
 
     await supabase.from("cash_registers" as any).update({
-      closing_amount: closingAmount, expected_amount: expectedAmount, difference,
+      closing_amount: closingAmount, expected_amount: totalTotal, difference,
       difference_reason: closeForm.reason || null,
       closing_note: closeForm.note || null,
       closing_receipt_url: receiptUrl,
@@ -297,15 +305,22 @@ const Caixa = () => {
   const handleSangria = async () => {
     if (!currentRegister || !user) return;
     setLoading(true);
-    await supabase.from("cash_entries" as any).insert({
+    const { error } = await supabase.from("cash_entries" as any).insert({
       cash_register_id: currentRegister.id, store_id: currentRegister.store_id,
       type: "sangria", amount: parseFloat(sangriaForm.amount) || 0,
       description: "Sangria: " + sangriaForm.description, payment_method: "dinheiro",
       confirmed: true, created_by: user.id,
-    });
-    setSangriaDialog(false);
-    toast.success("Sangria realizada!");
-    fetchRegister(activeStoreId);
+    } as any);
+
+    if (error) {
+      toast.error("Erro na sangria: " + error.message);
+    } else {
+      setSangriaDialog(false);
+      setSangriaForm({ amount: "", description: "" });
+      toast.success("Sangria realizada!");
+      fetchRegister(activeStoreId);
+    }
+    setLoading(false);
   };
 
   const openConfirmDialog = (entry: CashEntry) => {
@@ -501,12 +516,12 @@ const Caixa = () => {
                 </CardContent>
               </Card>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 {[
                   { label: "Fundo Inicial",  value: Number(currentRegister.opening_amount), color: "text-blue-500", visible: true },
-                  { label: "Total Entradas", value: totalEntradas,  color: "text-primary", visible: !isBlind },
-                  { label: "Total Saídas",   value: totalSaidas,    color: "text-destructive", visible: !isBlind },
-                  { label: "Saldo Esperado", value: expectedAmount, color: "text-primary", visible: !isBlind },
+                  { label: "Saldo Dinheiro", value: expectedCash, color: "text-primary", visible: !isBlind },
+                  { label: "PIX / Cartão",   value: totalPix + totalCard, color: "text-purple-500", visible: !isBlind },
+                  { label: "Saldo Total",    value: totalTotal, color: "text-primary font-extrabold", visible: !isBlind },
                 ].map(card => (
                   <Card key={card.label} className="border-border/50">
                     <CardContent className="p-4">
@@ -652,15 +667,58 @@ const Caixa = () => {
         <DialogContent>
           <DialogTitle>Fechar Caixa</DialogTitle>
           <div className="space-y-4 mt-2">
-            <Label className="text-xs">Valor contado (R$)</Label>
-            <Input type="number" step="0.01" value={closeForm.amount} onChange={e => setCloseForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
-            {!isBlind && <p className="text-xs">Diferença: {formatCurrency(difference)}</p>}
-            {Math.abs(difference) > 5 && <Textarea value={closeForm.reason} onChange={e => setCloseForm(f => ({ ...f, reason: e.target.value }))} placeholder="Motivo da diferença..." />}
+            {!isBlind && (
+              <div className="space-y-1 bg-muted/30 p-3 rounded-lg border border-border/50">
+                <div className="flex justify-between text-[10px] uppercase text-muted-foreground font-bold">
+                  <span>Dinheiro (Gaveta):</span>
+                  <span>{formatCurrency(expectedCash)}</span>
+                </div>
+                <div className="flex justify-between text-[10px] uppercase text-muted-foreground font-bold border-b pb-1">
+                  <span>PIX e Cartão:</span>
+                  <span>{formatCurrency(totalPix + totalCard)}</span>
+                </div>
+                <div className="flex justify-between text-xs font-bold pt-1 text-primary">
+                  <span>Total Geral Esperado:</span>
+                  <span>{formatCurrency(totalTotal)}</span>
+                </div>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Valor Total Informado (R$)</Label>
+              <Input type="number" step="0.01" value={closeForm.amount} onChange={e => setCloseForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
+              {!isBlind && (
+                <p className={`text-xs font-semibold ${Math.abs(difference) < 0.1 ? "text-primary" : "text-destructive"}`}>
+                  Diferença: {formatCurrency(difference)}
+                </p>
+              )}
+            </div>
+            {Math.abs(difference) > 0.1 && (
+              <Textarea value={closeForm.reason} onChange={e => setCloseForm(f => ({ ...f, reason: e.target.value }))} placeholder="Motivo da diferença..." className="min-h-[60px]" />
+            )}
             <div className="space-y-2">
               <Label className="text-xs">Comprovante</Label>
               <Input type="file" onChange={e => setCloseForm(f => ({ ...f, receipt: e.target.files?.[0] || null }))} />
             </div>
             <Button className="w-full bg-destructive text-white" onClick={handleCloseRegister} disabled={loading || !closeForm.amount}>Fechar Caixa</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={sangriaDialog} onOpenChange={setSangriaDialog}>
+        <DialogContent>
+          <DialogTitle>Realizar Sangria</DialogTitle>
+          <div className="space-y-4 mt-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Valor da Sangria (Dinheiro)</Label>
+              <Input type="number" step="0.01" value={sangriaForm.amount} onChange={e => setSangriaForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Descrição / Destino</Label>
+              <Input value={sangriaForm.description} onChange={e => setSangriaForm(f => ({ ...f, description: e.target.value }))} placeholder="Ex: Retirada para o banco, pagamento fornecedor..." />
+            </div>
+            <Button className="w-full bg-yellow-600 hover:bg-yellow-700 text-white" onClick={handleSangria} disabled={loading || !sangriaForm.amount}>
+              Confirmar Sangria
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

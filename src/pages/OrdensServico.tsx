@@ -61,7 +61,7 @@ const paymentLabels: Record<string, string> = {
 
 // ── Cria cash_entry pendente no caixa aberto ou solto na loja ──────────────────────────────
 const createPendingCashEntry = async (
-  storeId: string, userId: string, amount: number, description: string,
+  storeId: string, userId: string, amount: number, description: string, paymentMethod = "dinheiro",
 ) => {
   if (!storeId || amount <= 0) return;
   const { data: register } = await supabase
@@ -72,9 +72,10 @@ const createPendingCashEntry = async (
   await supabase.from("cash_entries" as any).insert({
     cash_register_id: registerId, store_id: storeId,
     type: "entrada", amount, description,
-    payment_method: "dinheiro", receipt_url: null,
-    confirmed: false, created_by: userId,
-  });
+    payment_method: paymentMethod, receipt_url: null,
+    confirmed: paymentMethod !== "dinheiro", // PIX/Cartão can be auto-confirmed or marked differently
+    created_by: userId,
+  } as any);
 };
 
 // ── Gera PDF via jsPDF (importado dinamicamente) ──────────────────────────
@@ -591,10 +592,24 @@ const OrdensServico = () => {
     if (newStatus === "delivered") {
       const order = orders.find(o => o.id === orderId);
       if (order && (order as any).store_id) {
-        const amount = Number((order as any).final_price || (order as any).estimated_price || 0);
-        const desc = `OS #${(order as any).order_number} — ${(order as any).requested_service} (${(order as any).customer_name})`;
-        await createPendingCashEntry((order as any).store_id, user.id, amount, desc);
-        if (amount > 0) toast.info("Entrada pendente criada no caixa.");
+        const o = order as any;
+        const desc = `OS #${o.order_number} — ${o.requested_service} (${o.customer_name})`;
+        
+        const cash = Number(o.payment_cash || 0);
+        const card = Number(o.payment_card || 0);
+        const pix = Number(o.payment_pix || 0);
+        const other = Number(o.payment_other || 0);
+        
+        if (cash === 0 && card === 0 && pix === 0 && other === 0) {
+          const amount = Number(o.final_price || o.estimated_price || 0);
+          if (amount > 0) await createPendingCashEntry(o.store_id, user.id, amount, desc, "dinheiro");
+        } else {
+          if (cash > 0) await createPendingCashEntry(o.store_id, user.id, cash, desc, "dinheiro");
+          if (card > 0) await createPendingCashEntry(o.store_id, user.id, card, desc, "cartao_credito");
+          if (pix > 0) await createPendingCashEntry(o.store_id, user.id, pix, desc, "pix");
+          if (other > 0) await createPendingCashEntry(o.store_id, user.id, other, desc, "outro");
+        }
+        toast.info("Lançamentos financeiros registrados.");
       }
     }
 
