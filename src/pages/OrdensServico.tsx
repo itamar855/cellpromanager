@@ -496,7 +496,27 @@ const OrdensServico = () => {
     if (!user) return;
     setLoading(true);
 
-    const { error } = await supabase.from("service_orders").insert({
+    const storeIdToUse = activeStoreId === "all" ? form.store_id || stores[0]?.id : activeStoreId;
+
+    if (form.customer_name) {
+      let query = supabase.from("customers" as any).select("id").eq("name", form.customer_name);
+      if (form.customer_phone) query = query.eq("phone", form.customer_phone);
+      if (form.customer_cpf) query = query.eq("cpf", form.customer_cpf);
+      
+      const { data: extCust } = await query.limit(1).maybeSingle();
+      
+      if (!extCust) {
+        await supabase.from("customers" as any).insert({
+          name: form.customer_name,
+          phone: form.customer_phone || null,
+          cpf: form.customer_cpf || null,
+          created_by: user.id,
+          store_id: storeIdToUse,
+        });
+      }
+    }
+
+    const { error, data } = await supabase.from("service_orders").insert({
       customer_name: form.customer_name,
       customer_phone: form.customer_phone || null,
       customer_cpf: form.customer_cpf || null,
@@ -509,7 +529,7 @@ const OrdensServico = () => {
       device_accessories: form.device_accessories || null,
       reported_defect: form.reported_defect,
       requested_service: form.requested_service,
-      store_id: activeStoreId === "all" ? form.store_id || stores[0]?.id : activeStoreId,
+      store_id: storeIdToUse,
       technician_id: form.technician_id || null,
       estimated_price: form.estimated_price ? parseFloat(form.estimated_price) : 0,
       estimated_completion: form.estimated_completion || null,
@@ -529,7 +549,7 @@ const OrdensServico = () => {
       setDialogOpen(false); 
       resetForm(); 
       fetchData(); 
-      logAction("CREATE_RECORD", "service_orders", (error as any)?.id, null, form, activeStoreId === "all" ? form.store_id : activeStoreId);
+      logAction("CREATE_RECORD", "service_orders" as any, (data as any)?.id, null, form, storeIdToUse);
     }
     setLoading(false);
   };

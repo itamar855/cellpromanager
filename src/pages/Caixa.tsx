@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Wallet, RefreshCw, Plus, Minus, History, Trash2, CheckCircle, 
-  Clock, AlertTriangle, Filter, Store, User, Camera, Upload, Receipt, ArrowUpRight, Unlock
+  Clock, AlertTriangle, Filter, Store, User, Camera, Upload, Receipt, ArrowUpRight, Unlock, Eye
 } from "lucide-react";
 import { toast } from "sonner";
 import { logAction } from "@/utils/auditLogger";
@@ -38,6 +38,8 @@ interface CashRegister {
   closing_amount: number | null;
   expected_amount: number | null;
   difference: number | null;
+  difference_reason?: string | null;
+  closing_note?: string | null;
   status: "open" | "closed";
   profiles?: { display_name: string };
   stores?: { name: string };
@@ -70,6 +72,12 @@ const Caixa = () => {
   const [confirmFile, setConfirmFile] = useState<File | null>(null);
   const [justification, setJustification] = useState("");
   const [pendingAction, setPendingAction] = useState<{type: "delete" | "unconfirm" | "reopen", id: string} | null>(null);
+
+  // View Details
+  const [viewDialog, setViewDialog] = useState(false);
+  const [viewRegister, setViewRegister] = useState<CashRegister | null>(null);
+  const [historyEntries, setHistoryEntries] = useState<CashEntry[]>([]);
+  const [loadingHistoryEntries, setLoadingHistoryEntries] = useState(false);
   
   // Media Upload Utilities
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -173,7 +181,14 @@ const Caixa = () => {
       
       const { data: historyData, error: historyError } = await historyQuery;
       if (historyError) console.error("Error fetching history:", historyError);
-      setRegistersHistory((historyData as unknown as CashRegister[]) ?? []);
+      
+      const mappedHistoryData = (historyData || []).map((reg: any) => ({
+        ...reg,
+        profiles: { display_name: profileMap.get(reg.opened_by) },
+        stores: { name: storeMap.get(reg.store_id) }
+      }));
+
+      setRegistersHistory(mappedHistoryData as unknown as CashRegister[]);
       setHistoryLoading(false);
     }
     setLoading(false);
@@ -328,6 +343,25 @@ const Caixa = () => {
     toast.success("Lançamento desconfirmado!");
     fetchRegister(activeStoreId);
     setLoading(false);
+  };
+
+  const openViewDialog = async (reg: CashRegister) => {
+    setViewRegister(reg);
+    setViewDialog(true);
+    setLoadingHistoryEntries(true);
+    
+    const { data: entriesData, error } = await supabase
+      .from("cash_entries" as any)
+      .select("*")
+      .eq("cash_register_id", reg.id)
+      .order("created_at", { ascending: false });
+      
+    if (error) {
+      toast.error("Erro ao carregar detalhes: " + error.message);
+    } else {
+      setHistoryEntries(entriesData as unknown as CashEntry[]);
+    }
+    setLoadingHistoryEntries(false);
   };
 
   const handleReopenRegister = async (id: string, reason: string) => {
@@ -557,7 +591,11 @@ const Caixa = () => {
                           <td className={`py-2 text-right ${Math.abs(reg.difference || 0) < 0.1 ? "text-primary" : "text-destructive"}`}>
                             {formatCurrency(reg.difference || 0)}
                           </td>
-                          <td className="py-2 text-center flex items-center justify-center gap-1">
+                          <td className="py-2 text-center flex items-center justify-center gap-2">
+                            <Button variant="outline" className="h-6 px-2 text-[9px] gap-1"
+                              onClick={() => openViewDialog(reg)}>
+                              <Eye className="h-3 w-3" /> Visualizar
+                            </Button>
                             {userRole === "admin" && (
                               <Button className="h-6 text-[9px]" 
                                 onClick={() => {
@@ -639,6 +677,106 @@ const Caixa = () => {
              <Input type="number" step="0.01" value={entryForm.amount} onChange={e => setEntryForm(f => ({ ...f, amount: e.target.value }))} placeholder="Valor" />
              <Button className="w-full" onClick={handleEntry} disabled={loading}>Salvar</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={viewDialog} onOpenChange={setViewDialog}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogTitle>Detalhes do Caixa Fechado</DialogTitle>
+          {viewRegister && (
+            <div className="space-y-4 mt-2">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-muted/20 p-4 rounded-lg border">
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase font-semibold">Abertura</p>
+                  <p className="font-medium text-sm">{new Date(viewRegister.opened_at).toLocaleString("pt-BR")}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase font-semibold">Fechamento</p>
+                  <p className="font-medium text-sm">{viewRegister.closed_at ? new Date(viewRegister.closed_at).toLocaleString("pt-BR") : "-"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase font-semibold">Usuário</p>
+                  <p className="font-medium text-sm">{viewRegister.profiles?.display_name || "Desconhecido"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase font-semibold">Loja</p>
+                  <p className="font-medium text-sm text-primary">{viewRegister.stores?.name || "Desconhecida"}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Card className="border-border/50">
+                  <CardContent className="p-3">
+                    <p className="text-[10px] text-muted-foreground uppercase">Fundo Inicial</p>
+                    <p className="font-bold text-blue-500">{formatCurrency(viewRegister.opening_amount)}</p>
+                  </CardContent>
+                </Card>
+                <Card className="border-border/50">
+                  <CardContent className="p-3">
+                    <p className="text-[10px] text-muted-foreground uppercase">Valor Informado</p>
+                    <p className="font-bold text-primary">{formatCurrency(viewRegister.closing_amount)}</p>
+                  </CardContent>
+                </Card>
+                <Card className="border-border/50">
+                  <CardContent className="p-3">
+                    <p className="text-[10px] text-muted-foreground uppercase">Valor Esperado</p>
+                    <p className="font-bold text-muted-foreground">{formatCurrency(viewRegister.expected_amount)}</p>
+                  </CardContent>
+                </Card>
+                <Card className={`border-border/50 ${Math.abs(viewRegister.difference || 0) > 0 ? "border-destructive/30 bg-destructive/5" : ""}`}>
+                  <CardContent className="p-3">
+                    <p className="text-[10px] text-muted-foreground uppercase">Diferença</p>
+                    <p className={`font-bold ${Math.abs(viewRegister.difference || 0) > 0 ? "text-destructive" : "text-primary"}`}>
+                      {formatCurrency(viewRegister.difference)}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+              
+              {viewRegister.difference_reason && (
+                <div className="bg-destructive/10 border border-destructive/20 p-3 rounded-md text-sm text-destructive">
+                  <p className="font-semibold text-xs uppercase mb-1 flex items-center gap-1"><AlertTriangle className="h-3 w-3"/> Motivo da Diferença</p>
+                  <p>{viewRegister.difference_reason}</p>
+                </div>
+              )}
+              {viewRegister.closing_note && (
+                <div className="bg-muted p-3 rounded-md text-sm">
+                  <p className="font-semibold text-xs uppercase mb-1">Observação do Fechamento</p>
+                  <p>{viewRegister.closing_note}</p>
+                </div>
+              )}
+
+              <div className="mt-6 border rounded-lg overflow-hidden">
+                <div className="bg-muted px-4 py-2 border-b">
+                  <h3 className="text-sm font-semibold">Lançamentos ({historyEntries.length})</h3>
+                </div>
+                <div className="p-2 space-y-2 max-h-64 overflow-y-auto">
+                  {loadingHistoryEntries ? (
+                    <p className="text-center py-4 text-xs text-muted-foreground">Carregando...</p>
+                  ) : historyEntries.length === 0 ? (
+                    <p className="text-center py-4 text-xs text-muted-foreground">Nenhum lançamento registrado neste caixa.</p>
+                  ) : (
+                    historyEntries.map(entry => (
+                      <div key={entry.id} className="flex items-center justify-between text-xs border rounded-lg p-2 bg-muted/20">
+                        <div>
+                          <p className="font-medium">{entry.description}</p>
+                          <p className="text-muted-foreground">
+                            {paymentLabels[entry.payment_method || ""] || "Outro"} · {new Date(entry.created_at).toLocaleTimeString("pt-BR")}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className={`font-bold ${["entrada","abertura"].includes(entry.type) ? "text-primary" : "text-destructive"}`}>
+                            {["entrada","abertura"].includes(entry.type) ? "+" : "-"}{formatCurrency(Number(entry.amount))}
+                          </p>
+                          {!entry.confirmed && <Badge className="text-[8px] bg-orange-500/20 text-orange-600 mt-1">Não confirmado</Badge>}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
