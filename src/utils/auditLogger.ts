@@ -43,10 +43,6 @@ export const logAction = async (
       entity_id: entityId,
       before_state: oldValues,
       after_state: newValues,
-      old_data: oldValues,
-      new_data: newValues,
-      old_values: oldValues,
-      new_values: newValues,
     } as any);
 
     if (error) {

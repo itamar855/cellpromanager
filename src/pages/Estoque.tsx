@@ -60,7 +60,7 @@ const Estoque = () => {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [editProductOpen, setEditProductOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<Tables<"products"> | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", brand: "iPhone", model: "", imei: "", serial_number: "", cost_price: "", sale_price: "", store_id: "", condition: "used", color: "", capacity: "", justification: "" });
+  const [editForm, setEditForm] = useState({ name: "", brand: "iPhone", model: "", imei: "", serial_number: "", cost_price: "", sale_price: "", store_id: "", condition: "used", color: "", capacity: "", battery_percentage: "", justification: "" });
   const [historyProduct, setHistoryProduct] = useState<Tables<"products"> | null>(null);
   const [productHistory, setProductHistory] = useState<any[]>([]);
   const [justification, setJustification] = useState("");
@@ -72,6 +72,7 @@ const Estoque = () => {
     name: "", brand: "iPhone" as string, model: "", imei: "",
     serial_number: "", cost_price: "", sale_price: "", store_id: "",
     product_type: "celular", condition: "used", color: "", capacity: "",
+    battery_percentage: "",
   });
 
   const [accForm, setAccForm] = useState({
@@ -122,7 +123,9 @@ const Estoque = () => {
       sale_price: form.sale_price ? parseFloat(form.sale_price) : null,
       store_id: activeStoreId, created_by: user.id,
       product_type: form.product_type, condition: form.condition,
-      color: form.color || null, capacity: form.capacity || null,
+      color: form.color || null, 
+      capacity: form.capacity ? (form.capacity.toUpperCase().endsWith("GB") ? form.capacity.toUpperCase() : `${form.capacity.toUpperCase()}GB`) : null,
+      battery_percentage: form.battery_percentage ? parseInt(form.battery_percentage) : null,
     }).select().single();
     
     if (error) {
@@ -133,7 +136,7 @@ const Estoque = () => {
       });
       toast.success("Aparelho cadastrado!");
       setDialogOpen(false);
-      setForm({ name: "", brand: "iPhone", model: "", imei: "", serial_number: "", cost_price: "", sale_price: "", store_id: "", product_type: "celular", condition: "used", color: "", capacity: "" });
+      setForm({ name: "", brand: "iPhone", model: "", imei: "", serial_number: "", cost_price: "", sale_price: "", store_id: "", product_type: "celular", condition: "used", color: "", capacity: "", battery_percentage: "" });
       fetchData();
     }
     setLoading(false);
@@ -259,6 +262,7 @@ const Estoque = () => {
       condition: p.condition || "used",
       color: p.color || "",
       capacity: p.capacity || "",
+      battery_percentage: (p as any).battery_percentage ? String((p as any).battery_percentage) : "",
       justification: "",
     });
     setEditProductOpen(true);
@@ -282,7 +286,8 @@ const Estoque = () => {
       store_id: editForm.store_id,
       condition: editForm.condition,
       color: editForm.color || null,
-      capacity: editForm.capacity || null,
+      capacity: editForm.capacity ? (editForm.capacity.toUpperCase().endsWith("GB") ? editForm.capacity.toUpperCase() : `${editForm.capacity.toUpperCase()}GB`) : null,
+      battery_percentage: editForm.battery_percentage ? parseInt(editForm.battery_percentage) : null,
     };
     const { error } = await supabase.from("products").update(updatePayload as any).eq("id", editProduct.id);
 
@@ -451,14 +456,18 @@ const Estoque = () => {
                       </Select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Capacidade</Label>
-                      <Input value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} placeholder="128GB" className="h-10" />
+                      <Label className="text-xs">Capacidade (GB)</Label>
+                      <Input value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} placeholder="128" className="h-10" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Cor</Label>
                       <Input value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} placeholder="Preto" className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Bateria (%)</Label>
+                      <Input type="number" value={form.battery_percentage} onChange={(e) => setForm({ ...form, battery_percentage: e.target.value })} placeholder="100" className="h-10" />
                     </div>
                   </div>
                   <div className="space-y-1.5">
@@ -504,7 +513,7 @@ const Estoque = () => {
                             </Badge>
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            {p.brand} · {p.model} {p.capacity && `· ${p.capacity}`} {p.color && `· ${p.color}`} · {conditionLabel}
+                            {p.brand} · {p.model} {p.capacity && `· ${p.capacity}`} {p.color && `· ${p.color}`} {(p as any).battery_percentage && `· 🔋 ${(p as any).battery_percentage}%`} · {conditionLabel}
                             {p.imei && ` · IMEI: ${p.imei}`}
                           </p>
                           {activeStoreId === "all" && (
@@ -765,9 +774,10 @@ const Estoque = () => {
               <div className="space-y-1.5"><Label className="text-xs">Modelo</Label><Input value={editForm.model} onChange={e => setEditForm(f => ({ ...f, model: e.target.value }))} required className="h-10" /></div>
               <div className="space-y-1.5"><Label className="text-xs">Condição</Label><Select value={editForm.condition} onValueChange={v => setEditForm(f => ({ ...f, condition: v }))}><SelectTrigger className="h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="new">Novo</SelectItem><SelectItem value="used">Usado</SelectItem><SelectItem value="refurbished">Recondicionado</SelectItem><SelectItem value="seminovo_americano">Seminovo (Americano)</SelectItem></SelectContent></Select></div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label className="text-xs">Capacidade</Label><Input value={editForm.capacity} onChange={e => setEditForm(f => ({ ...f, capacity: e.target.value }))} placeholder="128GB" className="h-10" /></div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5"><Label className="text-xs">Capacidade (GB)</Label><Input value={editForm.capacity} onChange={e => setEditForm(f => ({ ...f, capacity: e.target.value }))} placeholder="128" className="h-10" /></div>
               <div className="space-y-1.5"><Label className="text-xs">Cor</Label><Input value={editForm.color} onChange={e => setEditForm(f => ({ ...f, color: e.target.value }))} placeholder="Preto" className="h-10" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">Bateria (%)</Label><Input type="number" value={editForm.battery_percentage} onChange={e => setEditForm(f => ({ ...f, battery_percentage: e.target.value }))} placeholder="100" className="h-10" /></div>
             </div>
             <div className="space-y-1.5"><Label className="text-xs">IMEI</Label><Input value={editForm.imei} onChange={e => setEditForm(f => ({ ...f, imei: e.target.value }))} className="h-10" /></div>
             <div className="grid grid-cols-2 gap-3">
