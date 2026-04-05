@@ -92,7 +92,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
               <Smartphone className="h-5 w-5 text-primary" />
             </div>
             <h1 className="font-display text-lg font-bold text-sidebar-foreground tracking-tight">
-              CellManager
+              Cell Pro 360
             </h1>
           </div>
         </div>
@@ -161,7 +161,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
             <div className="rounded-md bg-primary/15 p-1">
               <Smartphone className="h-4 w-4 text-primary" />
             </div>
-            <span className="font-display font-bold text-sm">CellManager</span>
+            <span className="font-display font-bold text-sm">Cell Pro 360</span>
           </div>
           <div className="flex items-center gap-1">
             {stores.length > 1 ? (

@@ -239,7 +239,7 @@ export const gerarNotaFiscalInterna = async (data: NotaFiscalData): Promise<any>
     doc.text(
       data.lojaNome + (data.lojaCnpj ? "  |  CNPJ: " + data.lojaCnpj : "") +
       "  |  Gerado em " + new Date().toLocaleString("pt-BR") +
-      "  |  CellManager  |  Pg " + i + "/" + pageCount,
+      "  |  Cell Pro 360  |  Pg " + i + "/" + pageCount,
       W/2, 289, { align:"center" }
     );
     doc.text(

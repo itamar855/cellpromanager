@@ -40,7 +40,7 @@ const Instalar = () => {
             <Smartphone className="h-12 w-12 text-primary" />
           </div>
           <div>
-            <h1 className="font-display text-2xl font-bold">CellManager Pro</h1>
+            <h1 className="font-display text-2xl font-bold">Cell Pro 360</h1>
             <p className="text-muted-foreground text-sm mt-2">
               Instale o app no seu celular para acesso rápido
             </p>

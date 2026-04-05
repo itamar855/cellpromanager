@@ -336,7 +336,7 @@ const generateOSPdf = async (order: any, store: any, techName: string, publicUrl
       doc.text(store.pdf_footer, W / 2, 290, { align: "center", maxWidth: CW });
     }
     doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(...SOFT);
-    doc.text(`${storeName}  |  ${new Date().toLocaleString("pt-BR")}  |  CellManager PRO  |  Página ${i}/${pageCount}`, W / 2, 294, { align: "center" });
+    doc.text(`${storeName}  |  ${new Date().toLocaleString("pt-BR")}  |  Cell Pro 360  |  Página ${i}/${pageCount}`, W / 2, 294, { align: "center" });
   }
 
   return doc;
