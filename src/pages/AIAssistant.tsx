@@ -263,15 +263,16 @@ const AIAssistant = () => {
             </p>
             <div className="flex flex-wrap gap-2">
               {[
+                { format: "full_backup", label: "Backup Completo (.sql)", className: "bg-emerald-500 hover:bg-emerald-600 text-white border-0" },
                 { format: "sql", label: "PostgreSQL (.sql)", desc: "Formato nativo" },
                 { format: "json", label: "JSON (.json)", desc: "Universal" },
                 { format: "csv", label: "CSV (.csv)", desc: "Planilhas" },
               ].map((opt) => (
                 <Button
                   key={opt.format}
-                  variant="outline"
+                  variant={opt.className ? "default" : "outline"}
                   size="sm"
-                  className="gap-1.5"
+                  className={`gap-1.5 ${opt.className || ""}`}
                   onClick={() => handleExport(opt.format)}
                   disabled={!!exportLoading}
                 >

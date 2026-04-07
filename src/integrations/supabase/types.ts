@@ -14,82 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      product_history: {
-        Row: {
-          action: string
-          created_at: string
-          created_by: string
-          id: string
-          new_cost: number | null
-          notes: string | null
-          old_cost: number | null
-          product_id: string
-        }
-        Insert: {
-          action: string
-          created_at?: string
-          created_by: string
-          id?: string
-          new_cost?: number | null
-          notes?: string | null
-          old_cost?: number | null
-          product_id: string
-        }
-        Update: {
-          action?: string
-          created_at?: string
-          created_by?: string
-          id?: string
-          new_cost?: number | null
-          notes?: string | null
-          old_cost?: number | null
-          product_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "product_history_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      webhooks: {
-        Row: {
-          created_at: string
-          event_type: string
-          id: string
-          is_active: boolean
-          store_id: string
-          url: string
-        }
-        Insert: {
-          created_at?: string
-          event_type: string
-          id?: string
-          is_active?: boolean
-          store_id: string
-          url: string
-        }
-        Update: {
-          created_at?: string
-          event_type?: string
-          id?: string
-          is_active?: boolean
-          store_id?: string
-          url?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "webhooks_store_id_fkey"
-            columns: ["store_id"]
-            isOneToOne: false
-            referencedRelation: "stores"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       customers: {
         Row: {
           address: string | null
@@ -128,110 +52,6 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
-      }
-      leads: {
-        Row: {
-          created_at: string
-          created_by: string | null
-          email: string | null
-          id: string
-          name: string
-          notes: string | null
-          phone: string | null
-          source: string | null
-          status: string | null
-          store_id: string | null
-          updated_at: string
-          assigned_to: string | null
-          last_message_at: string | null
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string | null
-          email?: string | null
-          id?: string
-          name: string
-          notes?: string | null
-          phone?: string | null
-          source?: string | null
-          status?: string | null
-          store_id?: string | null
-          updated_at?: string
-          assigned_to?: string | null
-          last_message_at?: string | null
-        }
-        Update: {
-          created_at?: string
-          created_by?: string | null
-          email?: string | null
-          id?: string
-          name?: string
-          notes?: string | null
-          phone?: string | null
-          source?: string | null
-          status?: string | null
-          store_id?: string | null
-          updated_at?: string
-          assigned_to?: string | null
-          last_message_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "leads_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "leads_store_id_fkey"
-            columns: ["store_id"]
-            isOneToOne: false
-            referencedRelation: "stores"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      lead_messages: {
-        Row: {
-          content: string | null
-          created_at: string
-          id: string
-          lead_id: string | null
-          sender: string | null
-          sender_user_id: string | null
-          message_type: string | null
-          media_url: string | null
-        }
-        Insert: {
-          content?: string | null
-          created_at?: string
-          id?: string
-          lead_id?: string | null
-          sender?: string | null
-          sender_user_id?: string | null
-          message_type?: string | null
-          media_url?: string | null
-        }
-        Update: {
-          content?: string | null
-          created_at?: string
-          id?: string
-          lead_id?: string | null
-          sender?: string | null
-          sender_user_id?: string | null
-          message_type?: string | null
-          media_url?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "lead_messages_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       products: {
         Row: {
@@ -297,101 +117,6 @@ export type Database = {
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      whatsapp_config: {
-        Row: {
-          id: string
-          store_id: string | null
-          api_url: string
-          api_key: string
-          instance_name: string
-          is_active: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          store_id?: string | null
-          api_url: string
-          api_key: string
-          instance_name: string
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          store_id?: string | null
-          api_url?: string
-          api_key?: string
-          instance_name?: string
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "whatsapp_config_store_id_fkey"
-            columns: ["store_id"]
-            isOneToOne: false
-            referencedRelation: "stores"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      fixed_expenses: {
-        Row: {
-          id: string
-          description: string
-          amount: number
-          category: string | null
-          due_day: number | null
-          is_pf: boolean
-          store_id: string | null
-          active: boolean
-          created_at: string
-          created_by: string | null
-        }
-        Insert: {
-          id?: string
-          description: string
-          amount: number
-          category?: string | null
-          due_day?: number | null
-          is_pf?: boolean
-          store_id?: string | null
-          active?: boolean
-          created_at?: string
-          created_by?: string | null
-        }
-        Update: {
-          id?: string
-          description?: string
-          amount?: number
-          category?: string | null
-          due_day?: number | null
-          is_pf?: boolean
-          store_id?: string | null
-          active?: boolean
-          created_at?: string
-          created_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "fixed_expenses_store_id_fkey"
-            columns: ["store_id"]
-            isOneToOne: false
-            referencedRelation: "stores"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "fixed_expenses_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -586,14 +311,10 @@ export type Database = {
           device_imei: string | null
           device_model: string
           device_password: string | null
-          entry_checklist: Json | null
-          entry_signature: string | null
           estimated_completion: string | null
           estimated_price: number | null
           final_price: number | null
           id: string
-          exit_checklist: Json | null
-          exit_signature: string | null
           internal_notes: string | null
           order_number: number
           reported_defect: string
@@ -605,8 +326,6 @@ export type Database = {
           terms_accepted: boolean | null
           terms_text: string | null
           updated_at: string
-          warranty_end_date: string | null
-          receipt_url: string | null
         }
         Insert: {
           completed_at?: string | null
@@ -624,8 +343,6 @@ export type Database = {
           device_imei?: string | null
           device_model: string
           device_password?: string | null
-          entry_checklist?: Json | null
-          entry_signature?: string | null
           estimated_completion?: string | null
           estimated_price?: number | null
           final_price?: number | null
@@ -641,8 +358,6 @@ export type Database = {
           terms_accepted?: boolean | null
           terms_text?: string | null
           updated_at?: string
-          warranty_end_date?: string | null
-          receipt_url?: string | null
         }
         Update: {
           completed_at?: string | null
@@ -660,14 +375,10 @@ export type Database = {
           device_imei?: string | null
           device_model?: string
           device_password?: string | null
-          entry_checklist?: Json | null
-          entry_signature?: string | null
           estimated_completion?: string | null
           estimated_price?: number | null
           final_price?: number | null
           id?: string
-          exit_checklist?: Json | null
-          exit_signature?: string | null
           internal_notes?: string | null
           order_number?: number
           reported_defect?: string
@@ -679,8 +390,6 @@ export type Database = {
           terms_accepted?: boolean | null
           terms_text?: string | null
           updated_at?: string
-          warranty_end_date?: string | null
-          receipt_url?: string | null
         }
         Relationships: [
           {
@@ -706,19 +415,11 @@ export type Database = {
           agency: string | null
           bank_name: string
           created_at: string
-          credit_fee_percent: number | null
-          credit_settlement_days: number | null
-          debit_fee_percent: number | null
-          debit_settlement_days: number | null
           holder_cpf_cnpj: string | null
           holder_name: string | null
           id: string
-          is_cashbox: boolean | null
           is_primary: boolean | null
-          owner_type: string | null
-          pix_fee_percent: number | null
           pix_key: string | null
-          pix_settlement_days: number | null
           store_id: string
           updated_at: string
         }
@@ -728,19 +429,11 @@ export type Database = {
           agency?: string | null
           bank_name: string
           created_at?: string
-          credit_fee_percent?: number | null
-          credit_settlement_days?: number | null
-          debit_fee_percent?: number | null
-          debit_settlement_days?: number | null
           holder_cpf_cnpj?: string | null
           holder_name?: string | null
           id?: string
-          is_cashbox?: boolean | null
           is_primary?: boolean | null
-          owner_type?: string | null
-          pix_fee_percent?: number | null
           pix_key?: string | null
-          pix_settlement_days?: number | null
           store_id: string
           updated_at?: string
         }
@@ -750,19 +443,11 @@ export type Database = {
           agency?: string | null
           bank_name?: string
           created_at?: string
-          credit_fee_percent?: number | null
-          credit_settlement_days?: number | null
-          debit_fee_percent?: number | null
-          debit_settlement_days?: number | null
           holder_cpf_cnpj?: string | null
           holder_name?: string | null
           id?: string
-          is_cashbox?: boolean | null
           is_primary?: boolean | null
-          owner_type?: string | null
-          pix_fee_percent?: number | null
           pix_key?: string | null
-          pix_settlement_days?: number | null
           store_id?: string
           updated_at?: string
         }
@@ -810,16 +495,10 @@ export type Database = {
           created_at: string
           created_by: string
           description: string | null
-          destination_account_id: string | null
-          expected_settlement_date: string | null
           id: string
-          net_amount: number | null
           product_id: string | null
-          reconciled: boolean | null
-          source_account_id: string | null
           store_id: string | null
           type: string
-          receipt_url: string | null
         }
         Insert: {
           amount: number
@@ -827,16 +506,10 @@ export type Database = {
           created_at?: string
           created_by: string
           description?: string | null
-          destination_account_id?: string | null
-          expected_settlement_date?: string | null
           id?: string
-          net_amount?: number | null
           product_id?: string | null
-          reconciled?: boolean | null
-          source_account_id?: string | null
           store_id?: string | null
           type: string
-          receipt_url?: string | null
         }
         Update: {
           amount?: number
@@ -844,16 +517,10 @@ export type Database = {
           created_at?: string
           created_by?: string
           description?: string | null
-          destination_account_id?: string | null
-          expected_settlement_date?: string | null
           id?: string
-          net_amount?: number | null
           product_id?: string | null
-          reconciled?: boolean | null
-          source_account_id?: string | null
           store_id?: string | null
           type?: string
-          receipt_url?: string | null
         }
         Relationships: [
           {
@@ -890,220 +557,6 @@ export type Database = {
         }
         Relationships: []
       }
-      cash_registers: {
-        Row: {
-          id: string
-          store_id: string
-          user_id: string | null
-          status: string
-          opened_at: string | null
-          closed_at: string | null
-          current_balance: number
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          store_id: string
-          user_id?: string | null
-          status?: string
-          opened_at?: string | null
-          closed_at?: string | null
-          current_balance?: number
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          store_id?: string
-          user_id?: string | null
-          status?: string
-          opened_at?: string | null
-          closed_at?: string | null
-          current_balance?: number
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "cash_registers_store_id_fkey"
-            columns: ["store_id"]
-            isOneToOne: false
-            referencedRelation: "stores"
-            referencedColumns: ["id"]
-          }
-        ]
-      }
-      cash_closures: {
-        Row: {
-          id: string
-          cash_register_id: string
-          store_id: string
-          user_id: string
-          opened_at: string
-          closed_at: string
-          reported_cash: number
-          system_cash: number
-          difference: number
-          status: string
-          notes: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          cash_register_id: string
-          store_id: string
-          user_id: string
-          opened_at: string
-          closed_at?: string
-          reported_cash: number
-          system_cash: number
-          difference: number
-          status?: string
-          notes?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          cash_register_id?: string
-          store_id?: string
-          user_id?: string
-          opened_at?: string
-          closed_at?: string
-          reported_cash?: number
-          system_cash?: number
-          difference?: number
-          status?: string
-          notes?: string | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "cash_closures_cash_register_id_fkey"
-            columns: ["cash_register_id"]
-            isOneToOne: false
-            referencedRelation: "cash_registers"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "cash_closures_store_id_fkey"
-            columns: ["store_id"]
-            isOneToOne: false
-            referencedRelation: "stores"
-            referencedColumns: ["id"]
-          }
-        ]
-      }
-      audit_logs: {
-        Row: {
-          id: string
-          user_id: string | null
-          action: string
-          entity_type: string
-          entity_id: string | null
-          before_state: Json | null
-          after_state: Json | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id?: string | null
-          action: string
-          entity_type: string
-          entity_id?: string | null
-          before_state?: Json | null
-          after_state?: Json | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string | null
-          action?: string
-          entity_type?: string
-          entity_id?: string | null
-          before_state?: Json | null
-          after_state?: Json | null
-          created_at?: string
-        }
-        Relationships: []
-      }
-      service_order_photos: {
-        Row: {
-          id: string
-          service_order_id: string
-          photo_url: string
-          stage: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          service_order_id: string
-          photo_url: string
-          stage: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          service_order_id?: string
-          photo_url?: string
-          stage?: string
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "service_order_photos_service_order_id_fkey"
-            columns: ["service_order_id"]
-            isOneToOne: false
-            referencedRelation: "service_orders"
-            referencedColumns: ["id"]
-          }
-        ]
-      }
-      service_order_items: {
-        Row: {
-          id: string
-          service_order_id: string
-          product_id: string
-          quantity: number
-          unit_price: number
-          unit_cost: number
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          service_order_id: string
-          product_id: string
-          quantity?: number
-          unit_price: number
-          unit_cost: number
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          service_order_id?: string
-          product_id?: string
-          quantity?: number
-          unit_price?: number
-          unit_cost?: number
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "service_order_items_service_order_id_fkey"
-            columns: ["service_order_id"]
-            isOneToOne: false
-            referencedRelation: "service_orders"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "service_order_items_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["id"]
-          }
-        ]
-      }
     }
     Views: {
       [_ in never]: never
@@ -1118,7 +571,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "gerente" | "vendedor" | "tecnico"
+      app_role: "admin" | "gerente" | "vendedor"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1246,7 +699,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "gerente", "vendedor", "tecnico"],
+      app_role: ["admin", "gerente", "vendedor"],
     },
   },
 } as const
