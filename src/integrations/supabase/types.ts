@@ -118,39 +118,129 @@ export type Database = {
           },
         ]
       }
+      cash_entries: {
+        Row: {
+          amount: number
+          cash_register_id: string
+          category: string | null
+          confirmed: boolean | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          payment_method: string | null
+          receipt_url: string | null
+          sale_id: string | null
+          service_order_id: string | null
+          store_id: string
+          type: string
+        }
+        Insert: {
+          amount: number
+          cash_register_id: string
+          category?: string | null
+          confirmed?: boolean | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          payment_method?: string | null
+          receipt_url?: string | null
+          sale_id?: string | null
+          service_order_id?: string | null
+          store_id: string
+          type: string
+        }
+        Update: {
+          amount?: number
+          cash_register_id?: string
+          category?: string | null
+          confirmed?: boolean | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          payment_method?: string | null
+          receipt_url?: string | null
+          sale_id?: string | null
+          service_order_id?: string | null
+          store_id?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_entries_cash_register_id_fkey"
+            columns: ["cash_register_id"]
+            isOneToOne: false
+            referencedRelation: "cash_registers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_entries_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cash_registers: {
         Row: {
           closed_at: string | null
+          closing_amount: number | null
+          closing_note: string | null
+          closing_receipt_url: string | null
           created_at: string
           current_balance: number
+          difference: number | null
+          difference_reason: string | null
+          expected_amount: number | null
           id: string
           opened_at: string | null
+          opened_by: string | null
+          opening_amount: number
+          opening_receipt_url: string | null
           status: string
           store_id: string
           updated_at: string
-          user_id: string | null
         }
         Insert: {
           closed_at?: string | null
+          closing_amount?: number | null
+          closing_note?: string | null
+          closing_receipt_url?: string | null
           created_at?: string
           current_balance?: number
+          difference?: number | null
+          difference_reason?: string | null
+          expected_amount?: number | null
           id?: string
           opened_at?: string | null
+          opened_by?: string | null
+          opening_amount?: number
+          opening_receipt_url?: string | null
           status?: string
           store_id: string
           updated_at?: string
-          user_id?: string | null
         }
         Update: {
           closed_at?: string | null
+          closing_amount?: number | null
+          closing_note?: string | null
+          closing_receipt_url?: string | null
           created_at?: string
           current_balance?: number
+          difference?: number | null
+          difference_reason?: string | null
+          expected_amount?: number | null
           id?: string
           opened_at?: string | null
+          opened_by?: string | null
+          opening_amount?: number
+          opening_receipt_url?: string | null
           status?: string
           store_id?: string
           updated_at?: string
-          user_id?: string | null
         }
         Relationships: [
           {
@@ -987,7 +1077,10 @@ export type Database = {
           id: string
           net_amount: number | null
           product_id: string | null
+          receipt_url: string | null
+          reconciled: boolean | null
           source_account_id: string | null
+          status: string | null
           store_id: string | null
           type: string
         }
@@ -1002,7 +1095,10 @@ export type Database = {
           id?: string
           net_amount?: number | null
           product_id?: string | null
+          receipt_url?: string | null
+          reconciled?: boolean | null
           source_account_id?: string | null
+          status?: string | null
           store_id?: string | null
           type: string
         }
@@ -1017,7 +1113,10 @@ export type Database = {
           id?: string
           net_amount?: number | null
           product_id?: string | null
+          receipt_url?: string | null
+          reconciled?: boolean | null
           source_account_id?: string | null
+          status?: string | null
           store_id?: string | null
           type?: string
         }
