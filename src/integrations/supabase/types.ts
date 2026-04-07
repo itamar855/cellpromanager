@@ -379,6 +379,7 @@ export type Database = {
       }
       products: {
         Row: {
+          battery_percentage: number | null
           brand: string
           capacity: string | null
           color: string | null
@@ -391,6 +392,7 @@ export type Database = {
           model: string
           name: string
           product_type: string | null
+          ram: string | null
           sale_price: number | null
           serial_number: string | null
           status: string
@@ -398,6 +400,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          battery_percentage?: number | null
           brand: string
           capacity?: string | null
           color?: string | null
@@ -410,6 +413,7 @@ export type Database = {
           model: string
           name: string
           product_type?: string | null
+          ram?: string | null
           sale_price?: number | null
           serial_number?: string | null
           status?: string
@@ -417,6 +421,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          battery_percentage?: number | null
           brand?: string
           capacity?: string | null
           color?: string | null
@@ -429,6 +434,7 @@ export type Database = {
           model?: string
           name?: string
           product_type?: string | null
+          ram?: string | null
           sale_price?: number | null
           serial_number?: string | null
           status?: string
@@ -753,8 +759,12 @@ export type Database = {
           device_imei: string | null
           device_model: string
           device_password: string | null
+          entry_checklist: Json | null
+          entry_signature: string | null
           estimated_completion: string | null
           estimated_price: number | null
+          exit_checklist: Json | null
+          exit_signature: string | null
           final_price: number | null
           id: string
           internal_notes: string | null
@@ -768,6 +778,7 @@ export type Database = {
           terms_accepted: boolean | null
           terms_text: string | null
           updated_at: string
+          warranty_end_date: string | null
         }
         Insert: {
           completed_at?: string | null
@@ -785,8 +796,12 @@ export type Database = {
           device_imei?: string | null
           device_model: string
           device_password?: string | null
+          entry_checklist?: Json | null
+          entry_signature?: string | null
           estimated_completion?: string | null
           estimated_price?: number | null
+          exit_checklist?: Json | null
+          exit_signature?: string | null
           final_price?: number | null
           id?: string
           internal_notes?: string | null
@@ -800,6 +815,7 @@ export type Database = {
           terms_accepted?: boolean | null
           terms_text?: string | null
           updated_at?: string
+          warranty_end_date?: string | null
         }
         Update: {
           completed_at?: string | null
@@ -817,8 +833,12 @@ export type Database = {
           device_imei?: string | null
           device_model?: string
           device_password?: string | null
+          entry_checklist?: Json | null
+          entry_signature?: string | null
           estimated_completion?: string | null
           estimated_price?: number | null
+          exit_checklist?: Json | null
+          exit_signature?: string | null
           final_price?: number | null
           id?: string
           internal_notes?: string | null
@@ -832,6 +852,7 @@ export type Database = {
           terms_accepted?: boolean | null
           terms_text?: string | null
           updated_at?: string
+          warranty_end_date?: string | null
         }
         Relationships: [
           {
@@ -857,11 +878,19 @@ export type Database = {
           agency: string | null
           bank_name: string
           created_at: string
+          credit_fee_percent: number | null
+          credit_settlement_days: number | null
+          debit_fee_percent: number | null
+          debit_settlement_days: number | null
           holder_cpf_cnpj: string | null
           holder_name: string | null
           id: string
+          is_cashbox: boolean | null
           is_primary: boolean | null
+          owner_type: string | null
+          pix_fee_percent: number | null
           pix_key: string | null
+          pix_settlement_days: number | null
           store_id: string
           updated_at: string
         }
@@ -871,11 +900,19 @@ export type Database = {
           agency?: string | null
           bank_name: string
           created_at?: string
+          credit_fee_percent?: number | null
+          credit_settlement_days?: number | null
+          debit_fee_percent?: number | null
+          debit_settlement_days?: number | null
           holder_cpf_cnpj?: string | null
           holder_name?: string | null
           id?: string
+          is_cashbox?: boolean | null
           is_primary?: boolean | null
+          owner_type?: string | null
+          pix_fee_percent?: number | null
           pix_key?: string | null
+          pix_settlement_days?: number | null
           store_id: string
           updated_at?: string
         }
@@ -885,11 +922,19 @@ export type Database = {
           agency?: string | null
           bank_name?: string
           created_at?: string
+          credit_fee_percent?: number | null
+          credit_settlement_days?: number | null
+          debit_fee_percent?: number | null
+          debit_settlement_days?: number | null
           holder_cpf_cnpj?: string | null
           holder_name?: string | null
           id?: string
+          is_cashbox?: boolean | null
           is_primary?: boolean | null
+          owner_type?: string | null
+          pix_fee_percent?: number | null
           pix_key?: string | null
+          pix_settlement_days?: number | null
           store_id?: string
           updated_at?: string
         }
@@ -937,8 +982,12 @@ export type Database = {
           created_at: string
           created_by: string
           description: string | null
+          destination_account_id: string | null
+          expected_settlement_date: string | null
           id: string
+          net_amount: number | null
           product_id: string | null
+          source_account_id: string | null
           store_id: string | null
           type: string
         }
@@ -948,8 +997,12 @@ export type Database = {
           created_at?: string
           created_by: string
           description?: string | null
+          destination_account_id?: string | null
+          expected_settlement_date?: string | null
           id?: string
+          net_amount?: number | null
           product_id?: string | null
+          source_account_id?: string | null
           store_id?: string | null
           type: string
         }
@@ -959,17 +1012,35 @@ export type Database = {
           created_at?: string
           created_by?: string
           description?: string | null
+          destination_account_id?: string | null
+          expected_settlement_date?: string | null
           id?: string
+          net_amount?: number | null
           product_id?: string | null
+          source_account_id?: string | null
           store_id?: string | null
           type?: string
         }
         Relationships: [
           {
+            foreignKeyName: "transactions_destination_account_id_fkey"
+            columns: ["destination_account_id"]
+            isOneToOne: false
+            referencedRelation: "store_bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "transactions_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_source_account_id_fkey"
+            columns: ["source_account_id"]
+            isOneToOne: false
+            referencedRelation: "store_bank_accounts"
             referencedColumns: ["id"]
           },
           {
