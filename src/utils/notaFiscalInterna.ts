@@ -129,7 +129,8 @@ export const gerarNotaFiscalInterna = async (data: NotaFiscalData): Promise<any>
   doc.text(keyFormatted, M + 137, y + 10, { maxWidth: CW - 137 - 2 });
 
   doc.rect(M + 137, y + 14, CW - 137 - 5, 12);
-  doc.text("PROTOCOLO DE AUTORIZAÇÃO (SIMULADO)\n351234567890123 01/01/2026 12:00:00", M + 139, y + 18, { fontSize: 6 });
+  doc.setFontSize(6);
+  doc.text("PROTOCOLO DE AUTORIZAÇÃO (SIMULADO)\n351234567890123 01/01/2026 12:00:00", M + 139, y + 18);
 
   y += 30;
 
