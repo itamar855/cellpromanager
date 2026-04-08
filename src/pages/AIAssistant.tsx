@@ -162,8 +162,21 @@ const AIAssistant = () => {
       );
 
       if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: "Erro" }));
-        toast.error(err.error || "Erro ao exportar");
+        // Tenta ler como JSON primeiro, se falhar (ex: erro de texto puro do debug), lê como texto
+        let errorMsg = "Erro ao exportar";
+        try {
+          const contentType = resp.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            const err = await resp.json();
+            errorMsg = err.error || errorMsg;
+          } else {
+            errorMsg = await resp.text();
+          }
+        } catch (e) {
+          console.error("Erro ao processar resposta de erro:", e);
+        }
+        
+        toast.error(errorMsg);
         setExportLoading(null);
         return;
       }

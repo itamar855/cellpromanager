@@ -6,109 +6,121 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req) => {
+  const requestId = Math.random().toString(36).substring(7);
+  console.log(`[${requestId}] EXTREME_DEBUG: Função iniciada. Método: ${req.method}`);
+
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    console.log("Iniciando exportação de backup...");
+    const url = Deno.env.get("SUPABASE_URL");
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    console.log(`[${requestId}] DEBUG: SUPABASE_URL existe? ${!!url}`);
+    console.log(`[${requestId}] DEBUG: SERVICE_KEY existe? ${!!key}`);
 
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    );
+    if (!url || !key) {
+        throw new Error("Variáveis de ambiente do Supabase não configuradas no servidor.");
+    }
 
-    // 1. Verificação de Autenticação
+    const supabaseAdmin = createClient(url, key, { 
+        auth: { autoRefreshToken: false, persistSession: false } 
+    });
+
+    // 1. Auth check
     const authHeader = req.headers.get("authorization");
-    if (!authHeader) throw new Error("Não autorizado: Cabeçalho ausente");
+    console.log(`[${requestId}] DEBUG: Auth Header presente? ${!!authHeader}`);
+
+    if (!authHeader) throw new Error("Cabeçalho Authorization ausente.");
 
     const token = authHeader.replace("Bearer ", "");
+    console.log(`[${requestId}] DEBUG: Verificando token JWT...`);
+    
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
     
-    if (authError || !user) throw new Error("Não autorizado: Sessão inválida");
+    if (authError) {
+        console.error(`[${requestId}] ERROR: Auth failed:`, authError);
+        return new Response(`ERRO_AUTENTICACAO: ${authError.message}`, { status: 401, headers: corsHeaders });
+    }
 
-    // 2. Verificação de Admin
-    const { data: callerRole } = await supabaseAdmin
+    if (!user) {
+        console.error(`[${requestId}] ERROR: No user found for token.`);
+        return new Response("ERRO_AUTENTICACAO: Usuário não encontrado no token.", { status: 401, headers: corsHeaders });
+    }
+
+    console.log(`[${requestId}] DEBUG: Usuário validado: ${user.email}`);
+
+    // 2. Admin Check
+    console.log(`[${requestId}] DEBUG: Verificando role de admin...`);
+    const { data: roleData, error: roleError } = await supabaseAdmin
       .from("user_roles")
       .select("role")
       .eq("user_id", user.id)
       .maybeSingle();
 
-    if (callerRole?.role !== "admin") {
-      throw new Error("Apenas administradores podem exportar o banco de dados");
+    if (roleError) {
+        console.error(`[${requestId}] ERROR: Role query failed:`, roleError);
+        return new Response(`ERRO_PERMISSAO: Falha ao consultar banco: ${roleError.message}`, { status: 500, headers: corsHeaders });
     }
 
-    console.log(`Usuário autorizado: ${user.email}. Gerando SQL...`);
+    if (roleData?.role !== "admin") {
+        console.warn(`[${requestId}] WARN: Tentativa de acesso não-admin por ${user.email}`);
+        return new Response("ERRO_PERMISSAO: Apenas administradores podem exportar.", { status: 403, headers: corsHeaders });
+    }
 
-    // 3. Geração do SQL de Backup
-    let sql = `-- Cell Pro 360 - Database Backup\n-- Exportado por: ${user.email}\n-- Data: ${new Date().toISOString()}\n\n`;
-    sql += "BEGIN;\n\n";
-    sql += "SET statement_timeout = 0;\nSET client_encoding = 'UTF8';\nSET row_security = off;\n\n";
+    console.log(`[${requestId}] DEBUG: Admin confirmado. Iniciando exportação SQL...`);
 
-    const TABLES_TO_EXPORT = [
-        "profiles", "user_roles", "stores", "store_bank_accounts", "products", 
-        "customers", "sales", "transactions", "service_orders", 
-        "service_order_history", "cash_registers", "cash_entries", 
-        "inventory_movements", "leads", "whatsapp_config", "webhooks"
-    ];
+    // 3. SQL generation
+    let sql = `-- Backup Deep Debug [${requestId}]\n-- Exportado por: ${user.email}\n-- Data: ${new Date().toISOString()}\n\n`;
+    sql += "BEGIN;\n";
 
-    for (const table of TABLES_TO_EXPORT) {
-        console.log(`Processando tabela: ${table}`);
-        sql += `-- Tabela: ${table}\n`;
-        sql += `ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY;\n\n`;
-
-        const { data: rows, error: dataError } = await supabaseAdmin.from(table).select("*");
+    const TABLES = ["profiles", "user_roles", "stores", "products", "customers", "sales", "service_orders"];
+    
+    for (const table of TABLES) {
+        console.log(`[${requestId}] DEBUG: Extraindo tabela ${table}...`);
+        const { data: rows, error: dErr } = await supabaseAdmin.from(table).select("*").limit(100);
         
-        if (dataError) {
-            console.error(`Erro ao ler tabela ${table}:`, dataError);
-            sql += `-- Erro ao exportar dados da tabela ${table}: ${dataError.message}\n\n`;
+        if (dErr) {
+            console.error(`[${requestId}] ERROR: Falha na tabela ${table}:`, dErr);
+            sql += `-- Erro na tabela ${table}: ${dErr.message}\n`;
             continue;
         }
 
         if (rows && rows.length > 0) {
             const cols = Object.keys(rows[0]);
-            const batchSize = 100;
-            for (let i = 0; i < rows.length; i += batchSize) {
-                const batch = rows.slice(i, i + batchSize);
-                sql += `INSERT INTO public.${table} (${cols.join(", ")}) VALUES\n`;
-                
-                const insertRows = batch.map(row => {
-                    const values = cols.map(c => {
-                        const val = row[c];
-                        if (val === null || val === undefined) return "NULL";
-                        if (typeof val === "number") return String(val);
-                        if (typeof val === "boolean") return val ? "TRUE" : "FALSE";
-                        if (typeof val === "object") {
-                            return `'${JSON.stringify(val).replace(/'/g, "''")}'::jsonb`;
-                        }
-                        return `'${String(val).replace(/'/g, "''")}'`;
-                    });
-                    return `(${values.join(", ")})`;
+            sql += `INSERT INTO public.${table} (${cols.join(", ")}) VALUES\n`;
+            const rowStrings = rows.map(r => {
+                const vals = cols.map(c => {
+                    const v = r[c];
+                    if (v === null) return "NULL";
+                    if (typeof v === "object") return `'${JSON.stringify(v).replace(/'/g, "''")}'::jsonb`;
+                    return `'${String(v).replace(/'/g, "''")}'`;
                 });
-                
-                sql += insertRows.join(",\n") + ";\n";
-            }
-            sql += "\n";
+                return `(${vals.join(", ")})`;
+            });
+            sql += rowStrings.join(",\n") + ";\n\n";
+        } else {
+            sql += `-- Tabela ${table} está vazia.\n\n`;
         }
     }
 
     sql += "COMMIT;\n";
-    console.log("Backup gerado com sucesso.");
+    console.log(`[${requestId}] SUCCESS: Backup gerado com sucesso.`);
 
     return new Response(sql, {
       headers: {
         ...corsHeaders,
         "Content-Type": "application/sql",
-        "Content-Disposition": `attachment; filename="cellpro360_backup_${new Date().toISOString().split("T")[0]}.sql"`,
+        "Content-Disposition": `attachment; filename="debug_backup_${requestId}.sql"`,
       },
     });
 
-  } catch (error) {
-    console.error("Erro crítico na exportação:", error.message);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+  } catch (err: any) {
+    console.error(`[${requestId}] CRITICAL:`, err);
+    return new Response(`ERRO_CRITICO: ${err.message || String(err)}`, {
+      status: 500,
+      headers: corsHeaders,
     });
   }
 });
