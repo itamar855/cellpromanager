@@ -255,6 +255,7 @@ export type Database = {
       customers: {
         Row: {
           address: string | null
+          birth_date: string | null
           cpf: string | null
           created_at: string
           created_by: string
@@ -263,10 +264,12 @@ export type Database = {
           name: string
           notes: string | null
           phone: string | null
+          store_id: string | null
           updated_at: string
         }
         Insert: {
           address?: string | null
+          birth_date?: string | null
           cpf?: string | null
           created_at?: string
           created_by: string
@@ -275,10 +278,12 @@ export type Database = {
           name: string
           notes?: string | null
           phone?: string | null
+          store_id?: string | null
           updated_at?: string
         }
         Update: {
           address?: string | null
+          birth_date?: string | null
           cpf?: string | null
           created_at?: string
           created_by?: string
@@ -287,9 +292,18 @@ export type Database = {
           name?: string
           notes?: string | null
           phone?: string | null
+          store_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "customers_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       fixed_expenses: {
         Row: {

@@ -88,7 +88,7 @@ const Clientes = () => {
     setForm({
       name: customer.name, phone: customer.phone || "",
       email: customer.email || "", cpf: customer.cpf || "",
-      address: customer.address || "", notes: customer.notes || "", birth_date: (customer as any).birth_date || "",
+      address: customer.address || "", notes: customer.notes || "", birth_date: customer.birth_date || "",
     });
     setSelected(null);
     setDialogOpen(true);
@@ -257,9 +257,9 @@ const Clientes = () => {
                     {selected.email && <p className="text-sm flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-muted-foreground" /> {selected.email}</p>}
                     {selected.address && <p className="text-sm flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-muted-foreground" /> {selected.address}</p>}
                     {selected.cpf && <p className="text-sm text-muted-foreground">CPF: {selected.cpf}</p>}
-                    {(selected as any).birth_date && (
+                    {selected.birth_date && (
                       <p className="text-sm text-muted-foreground">
-                        Nascimento: {new Date((selected as any).birth_date + "T00:00:00").toLocaleDateString("pt-BR")}
+                        Nascimento: {new Date(selected.birth_date + "T00:00:00").toLocaleDateString("pt-BR")}
                       </p>
                     )}
                   </div>
