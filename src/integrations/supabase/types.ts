@@ -643,6 +643,10 @@ export type Database = {
           commission_value: number | null
           created_at: string
           created_by: string
+          customer_address: string | null
+          customer_cpf: string | null
+          customer_email: string | null
+          customer_id: string | null
           customer_name: string | null
           customer_phone: string | null
           has_trade_in: boolean
@@ -666,6 +670,10 @@ export type Database = {
           commission_value?: number | null
           created_at?: string
           created_by: string
+          customer_address?: string | null
+          customer_cpf?: string | null
+          customer_email?: string | null
+          customer_id?: string | null
           customer_name?: string | null
           customer_phone?: string | null
           has_trade_in?: boolean
@@ -689,6 +697,10 @@ export type Database = {
           commission_value?: number | null
           created_at?: string
           created_by?: string
+          customer_address?: string | null
+          customer_cpf?: string | null
+          customer_email?: string | null
+          customer_id?: string | null
           customer_name?: string | null
           customer_phone?: string | null
           has_trade_in?: boolean

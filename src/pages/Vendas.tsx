@@ -34,6 +34,7 @@ type Sale = {
   trade_in_value: number | null; payment_cash: number; payment_card: number;
   payment_pix: number; customer_name: string | null; customer_phone: string | null;
   customer_cpf: string | null; customer_address: string | null;
+  customer_email: string | null; customer_id: string | null;
   notes: string | null; created_by: string; created_at: string;
   commission_value: number | null; discount: number | null;
   warranty_days: number | null; installments: number | null; seller_id: string | null;
@@ -277,12 +278,13 @@ const Vendas = () => {
       customer_phone: selectedCustomer?.phone ?? null,
       customer_cpf: selectedCustomer?.cpf ?? null,
       customer_address: selectedCustomer?.address ?? null,
+      customer_email: selectedCustomer?.email ?? null,
       notes: form.notes || null, commission_percent: commissionPercent,
       commission_value: commissionValue, created_by: user.id,
       seller_id: user.id, discount: discount,
       warranty_days: parseInt(form.warranty_days) || 90,
       installments: parseInt(form.installments) || 1,
-    } as any).select().single();
+    }).select().single();
 
     if (saleError) { toast.error(saleError.message); setLoading(false); return; }
 
@@ -388,8 +390,8 @@ const Vendas = () => {
         clienteNome: sale.customer_name ?? undefined,
         clienteCpf: sale.customer_cpf ?? undefined,
         clienteTelefone: sale.customer_phone ?? undefined,
-        clienteEmail: customers.find(c => c.phone === sale.customer_phone || c.name === sale.customer_name)?.email ?? undefined,
-        clienteEndereco: sale.customer_address ?? customers.find(c => c.phone === sale.customer_phone || c.name === sale.customer_name)?.address ?? undefined,
+        clienteEmail: sale.customer_email ?? undefined,
+        clienteEndereco: sale.customer_address ?? undefined,
         produtoNome: product?.name ?? "Produto", produtoMarca: product?.brand ?? "",
         produtoModelo: product?.model, produtoImei: product?.imei ?? undefined, produtoCor: product?.color ?? undefined,
         valorVenda: Number(sale.sale_price), valorDinheiro: Number(sale.payment_cash) || undefined,
