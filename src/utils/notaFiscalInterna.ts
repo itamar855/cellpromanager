@@ -24,6 +24,8 @@ export interface NotaFiscalData {
   clienteNome?: string;
   clienteCpf?: string;
   clienteTelefone?: string;
+  clienteEmail?: string;
+  clienteEndereco?: string;
   produtoNome: string;
   produtoMarca: string;
   produtoModelo?: string;
@@ -138,7 +140,7 @@ export const gerarNotaFiscalInterna = async (data: NotaFiscalData): Promise<any>
   //  RECIPIENT (DESTINATÁRIO / REMETENTE)
   // ══════════════════════════════════════════════════════════════════════════
   y += 2;
-  box(21, "DESTINATÁRIO / REMETENTE");
+  box(30, "DESTINATÁRIO / REMETENTE");
   field("NOME / RAZÃO SOCIAL", data.clienteNome || "CONSUMIDOR FINAL", M, CW - 110);
   vLine(CW - 110, 10);
   field("CNPJ / CPF", data.clienteCpf || "000.000.000-00", M + CW - 110, 60);
@@ -147,9 +149,13 @@ export const gerarNotaFiscalInterna = async (data: NotaFiscalData): Promise<any>
   row(10);
   field("TELEFONE", data.clienteTelefone || "-", M, 60);
   vLine(60, 5);
-  field("UF", "ES", M + 60, 15);
-  vLine(75, 5);
-  field("HORA DA SAÍDA", new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }), M + 75, CW - 75, "right");
+  field("E-MAIL", data.clienteEmail || "-", M + 60, 90);
+  vLine(150, 5);
+  field("HORA DA SAÍDA", new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }), M + 150, CW - 150, "right");
+  row(5);
+  field("ENDEREÇO", data.clienteEndereco || "-", M, CW - 45);
+  vLine(CW - 45, 5);
+  field("UF", "ES", M + CW - 45, 45, "right");
   row(5);
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -205,7 +211,7 @@ export const gerarNotaFiscalInterna = async (data: NotaFiscalData): Promise<any>
   doc.text("1", M + 160, y + 6);
   doc.text(formatCurrency(data.valorVenda), M + CW - 1, y + 6, { align: "right" });
   
-  y = M + 30 + 2 + 21 + 2 + 14 + 2 + 15 + 2 + 80; // Correct snap to table bottom
+  y = M + 30 + 2 + 30 + 2 + 14 + 2 + 15 + 2 + 80; // Correct snap to table bottom
 
   // ══════════════════════════════════════════════════════════════════════════
   //  COMPLEMENTARY INFO
