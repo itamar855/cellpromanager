@@ -29,6 +29,8 @@ const Clientes = () => {
   const [editCustomer, setEditCustomer] = useState<Tables<"customers"> | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
+  const [selectedSale, setSelectedSale] = useState<any | null>(null);
+  const [selectedOS, setSelectedOS] = useState<any | null>(null);
 
   const fetchData = async () => {
     if (!activeStoreId) return;
@@ -274,7 +276,11 @@ const Clientes = () => {
                       <ShoppingBag className="h-3 w-3" /> Histórico de Compras ({custSales.length})
                     </p>
                     {custSales.length > 0 ? custSales.map((sale) => (
-                      <div key={sale.id} className="rounded-lg bg-muted/50 p-2.5 text-xs">
+                      <div 
+                        key={sale.id} 
+                        className="rounded-lg bg-muted/50 p-2.5 text-xs cursor-pointer hover:bg-muted transition-colors border border-transparent hover:border-primary/20"
+                        onClick={() => setSelectedSale(sale)}
+                      >
                         <div className="flex justify-between">
                           <span className="font-medium">{productMap.get(sale.product_id) || "Produto"}</span>
                           <span className="font-bold text-primary">{formatCurrency(Number(sale.sale_price))}</span>
@@ -289,7 +295,11 @@ const Clientes = () => {
                       <Wrench className="h-3 w-3" /> Ordens de Serviço ({custOrders.length})
                     </p>
                     {custOrders.length > 0 ? custOrders.map((order) => (
-                      <div key={order.id} className="rounded-lg bg-muted/50 p-2.5 text-xs">
+                      <div 
+                        key={order.id} 
+                        className="rounded-lg bg-muted/50 p-2.5 text-xs cursor-pointer hover:bg-muted transition-colors border border-transparent hover:border-accent/20"
+                        onClick={() => setSelectedOS(order)}
+                      >
                         <div className="flex justify-between">
                           <span className="font-medium">OS #{order.order_number} - {order.device_brand} {order.device_model}</span>
                           <Badge variant="outline" className="text-[10px]">{order.status}</Badge>
@@ -309,6 +319,88 @@ const Clientes = () => {
               </>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Detalhe Venda */}
+      <Dialog open={!!selectedSale} onOpenChange={(open) => !open && setSelectedSale(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display">Detalhes da Venda</DialogTitle>
+          </DialogHeader>
+          {selectedSale && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-primary/10 p-4 border border-primary/20">
+                <p className="text-xs text-primary font-semibold uppercase tracking-wider">Produto</p>
+                <p className="text-lg font-bold">{productMap.get(selectedSale.product_id) || "Aparelho"}</p>
+                <p className="text-2xl font-black mt-2 text-primary">{formatCurrency(Number(selectedSale.sale_price))}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground text-xs uppercase">Data da Venda</p>
+                  <p className="font-medium">{new Date(selectedSale.created_at).toLocaleString("pt-BR")}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs uppercase">Loja</p>
+                  <p className="font-medium">Santa Luzia</p>
+                </div>
+              </div>
+
+              {selectedSale.notes && (
+                <div>
+                  <p className="text-muted-foreground text-xs uppercase">Observações</p>
+                  <p className="text-sm italic">"{selectedSale.notes}"</p>
+                </div>
+              )}
+              
+              <div className="pt-2">
+                <Button className="w-full gap-2" variant="outline" onClick={() => window.location.href = '/vendas'}>
+                  Ir para página de Vendas
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Detalhe OS */}
+      <Dialog open={!!selectedOS} onOpenChange={(open) => !open && setSelectedOS(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display">Ordem de Serviço #{selectedOS?.order_number}</DialogTitle>
+          </DialogHeader>
+          {selectedOS && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <Badge className="text-xs px-3 py-1 uppercase">{selectedOS.status}</Badge>
+                <p className="text-sm text-muted-foreground">{new Date(selectedOS.created_at).toLocaleDateString("pt-BR")}</p>
+              </div>
+
+              <div className="rounded-lg bg-accent/10 p-4 border border-accent/20">
+                <p className="text-xs text-accent font-semibold uppercase tracking-wider">Aparelho</p>
+                <p className="text-lg font-bold">{selectedOS.device_brand} {selectedOS.device_model}</p>
+                <p className="text-sm text-muted-foreground mt-1">IMEI: {selectedOS.device_imei || "Não informado"}</p>
+              </div>
+
+              <div className="space-y-2">
+                <div>
+                  <p className="text-muted-foreground text-xs uppercase">Serviço Realizado</p>
+                  <p className="text-sm font-medium">{selectedOS.requested_service}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs uppercase">Valor do Serviço</p>
+                  <p className="text-xl font-bold text-accent">{formatCurrency(Number(selectedOS.final_price || selectedOS.estimated_price || 0))}</p>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <Button className="w-full gap-2" variant="outline" onClick={() => window.location.href = '/os'}>
+                  Ir para Ordens de Serviço
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
