@@ -201,7 +201,12 @@ const Leads = () => {
   useEffect(() => {
     const scrollContainer = document.querySelector('[data-radix-scroll-area-viewport]');
     if (scrollContainer) {
-      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      const isAtBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 100;
+      const isOpening = chatModalOpen && (!chatMessages || chatMessages.length <= 1);
+      
+      if (isAtBottom || isOpening) {
+        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      }
     }
   }, [chatMessages, chatModalOpen]);
 
