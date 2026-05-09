@@ -147,7 +147,7 @@ const Leads = () => {
 
     // Multi-agent filtering: only see assigned leads if not admin/gerente
     if (userRole !== "admin" && userRole !== "gerente") {
-      query = query.eq("assigned_to", user?.id);
+      query = query.or(`assigned_to.eq.${user?.id},assigned_to.is.null`);
     }
 
     if (activeStoreId && activeStoreId !== "all") {
