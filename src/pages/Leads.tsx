@@ -520,7 +520,14 @@ const Leads = () => {
             )}
             <Select value={filterSource} onValueChange={setFilterSource}>
               <SelectTrigger className="w-[140px] h-10 bg-muted/20 border-border/40"><SelectValue placeholder="Origem" /></SelectTrigger>
-              <SelectContent><SelectItem value="all">Todas Origens</SelectItem><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="instagram">Instagram</SelectItem><SelectItem value="trafego_pago">Tráfego Pago</SelectItem><SelectItem value="indicacao">Indicação</SelectItem></SelectContent>
+              <SelectContent>
+                <SelectItem value="all">Todas Origens</SelectItem>
+                <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                <SelectItem value="instagram">Instagram</SelectItem>
+                <SelectItem value="trafego_pago">Tráfego Pago</SelectItem>
+                <SelectItem value="indicacao">Indicação</SelectItem>
+                <SelectItem value="os_vendas">Importado (OS/Vendas)</SelectItem>
+              </SelectContent>
             </Select>
           </div>
         </div>
