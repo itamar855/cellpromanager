@@ -57,22 +57,65 @@ serve(async (req) => {
 
             let leadId = lead?.id;
 
-            if (!leadId) {
-              // Get profile info if possible (simplified here)
-              const { data: newLead, error: createError } = await supabaseClient
-                .from('leads')
-                .insert({
-                  name: `IG User ${senderId.substring(0, 5)}`,
-                  instagram_user_id: senderId,
-                  source: 'instagram',
-                  status: 'novo',
-                })
-                .select('id')
-                .single();
-              
-              if (createError) throw createError;
-              leadId = newLead.id;
-            }
+             if (!leadId || leadId) {
+               // Se o lead já existe mas o nome ainda é o padrão "IG User...", ou se é novo
+               let userName = `IG User ${senderId.substring(0, 5)}`;
+
+               try {
+                 // Buscar configurações para pegar o Access Token
+                 const { data: config } = await supabaseClient
+                   .from('instagram_config')
+                   .select('page_access_token')
+                   .eq('is_active', true)
+                   .limit(1)
+                   .single();
+
+                 if (config?.page_access_token) {
+                   // Consultar a Graph API do Facebook/Instagram para obter o nome do usuário
+                   // Endpoint: https://graph.facebook.com/v19.0/{user-id}?fields=name,profile_pic&access_token={access-token}
+                   const graphUrl = `https://graph.facebook.com/v19.0/${senderId}?fields=name&access_token=${config.page_access_token}`;
+                   const response = await fetch(graphUrl);
+                   const userData = await response.json();
+                   
+                   if (userData && userData.name) {
+                     userName = userData.name;
+                     console.log(`Nome capturado do Instagram: ${userName}`);
+                   }
+                 }
+               } catch (profileError) {
+                 console.error('Erro ao buscar perfil do Instagram:', profileError);
+               }
+
+               if (!leadId) {
+                 // Get profile info if possible (simplified here)
+                 const { data: newLead, error: createError } = await supabaseClient
+                   .from('leads')
+                   .insert({
+                     name: userName,
+                     instagram_user_id: senderId,
+                     source: 'instagram',
+                     status: 'novo',
+                   })
+                   .select('id')
+                   .single();
+                 
+                 if (createError) throw createError;
+                 leadId = newLead.id;
+               } else {
+                 // Se o lead já existe, opcionalmente atualizamos o nome se ele for o padrão
+                 const { data: currentLead } = await supabaseClient
+                   .from('leads')
+                   .select('name')
+                   .eq('id', leadId)
+                   .single();
+                 
+                 if (currentLead?.name?.startsWith('IG User')) {
+                   await supabaseClient
+                     .from('leads')
+                     .update({ name: userName })
+                     .eq('id', leadId);
+                 }
+               }
 
             // 2. Insert message
             await supabaseClient.from('lead_messages').insert({
