@@ -65,7 +65,9 @@ serve(async (req) => {
               .limit(1)
               .single();
 
-            const configStoreId = config?.store_id || null;
+             const configStoreId = config?.store_id || null;
+             // Fallback admin user ID
+             const fallbackUserId = "2bce7f09-1688-43e5-8b61-4e8d11517d0c";
 
             const cached = profileCache.get(senderId);
             const now = Date.now();
@@ -105,9 +107,10 @@ serve(async (req) => {
                   name: userName,
                   instagram_user_id: senderId,
                   avatar_url: avatarUrl,
-                  source: 'instagram',
-                  status: 'novo',
-                  store_id: configStoreId // Usar store_id da configuração
+                   source: 'instagram',
+                   status: 'novo',
+                   store_id: configStoreId, // Usar store_id da configuração
+                   created_by: fallbackUserId
                 })
                 .select('id')
                 .single();
