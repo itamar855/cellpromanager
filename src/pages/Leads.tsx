@@ -138,7 +138,7 @@ const Leads = () => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     let query = supabase.from("leads").select(`
       *,
       assigned_user:profiles!leads_assigned_to_fkey(display_name),
@@ -158,10 +158,14 @@ const Leads = () => {
     const { data: storesData } = await supabase.from("stores").select("*");
     const { data: profilesData } = await supabase.from("profiles").select("user_id, display_name");
 
-    setLeads(leadsData ?? []);
+    // Add a check to avoid constant re-renders if needed, but for now simple update
+    setLeads(prev => {
+      const isSame = JSON.stringify(prev) === JSON.stringify(leadsData);
+      return isSame ? prev : (leadsData ?? []);
+    });
     setStores(storesData ?? []);
     setVendedores(profilesData ?? []);
-  };
+  }, [activeStoreId, userRole, user?.id]);
 
   const fetchMessages = useCallback(async (leadId: string) => {
     const { data } = await supabase.from("lead_messages").select("*").eq("lead_id", leadId).order("created_at", { ascending: true });
