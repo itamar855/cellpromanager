@@ -18,7 +18,7 @@ import {
   Trash2, MoreVertical, MessageSquare, ChevronRight, Download,
   MessageCircle, Phone, Plus, Users, Mail, Search, Shield, Store,
   Image as ImageIcon, Mic, Send, Paperclip, UserPlus, Filter,
-  Play, Pause, X, CheckCheck, Clock
+  Play, Pause, X, CheckCheck, Clock, RefreshCw
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
