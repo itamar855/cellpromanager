@@ -36,7 +36,7 @@ const statusColors: Record<string, string> = {
 type BankAccount = {
   id: string; store_id: string; bank_name: string; account_type: string;
   agency: string | null; account_number: string | null; pix_key: string | null;
-  holder_name: string | null; holder_cpf_cnpj: string | null; is_primary: boolean;
+  holder_name: string | null; holder_document?: string | null; holder_cpf_cnpj?: string | null; is_primary: boolean;
   credit_fee_percent?: number | null; credit_settlement_days?: number | null;
   debit_fee_percent?: number | null; debit_settlement_days?: number | null;
   pix_fee_percent?: number | null; pix_settlement_days?: number | null;
@@ -100,7 +100,10 @@ const Lojas = () => {
       supabase.from("fixed_expenses").select("*").eq("is_pf", false).order("due_day"),
     ]);
     setStores(storesRes.data ?? []);
-    setBankAccounts((bankRes.data as BankAccount[]) ?? []);
+    setBankAccounts((bankRes.data as any[])?.map(acc => ({
+      ...acc,
+      holder_cpf_cnpj: acc.holder_document || acc.holder_cpf_cnpj
+    })) ?? []);
     setFixedExpenses(fixedRes.data ?? []);
   };
 
