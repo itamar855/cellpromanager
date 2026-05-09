@@ -6,6 +6,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Cache em memória (dura enquanto a instância da Edge Function estiver quente)
+const profileCache = new Map<string, { name: string, avatarUrl: string, timestamp: number }>();
+const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 horas
+
 serve(async (req) => {
   const { method } = req;
   
@@ -53,7 +57,16 @@ serve(async (req) => {
             let userName = lead?.name || "IG User " + senderId.substring(0, 5);
             let avatarUrl = lead?.avatar_url || null;
 
-            if (!leadId || userName.startsWith('IG User') || !avatarUrl) {
+            // Verificar cache em memória primeiro
+            const cached = profileCache.get(senderId);
+            const now = Date.now();
+
+            if (cached && (now - cached.timestamp) < CACHE_TTL) {
+              userName = cached.name;
+              avatarUrl = cached.avatarUrl;
+              console.log("Perfil recuperado do cache em memória para:", senderId);
+            } else if (!leadId || userName.startsWith('IG User') || !avatarUrl) {
+              // Se não está no cache ou o lead é novo/incompleto, consulta a Graph API
               try {
                 const { data: config } = await supabaseClient
                   .from('instagram_config')
@@ -73,6 +86,13 @@ serve(async (req) => {
                   if (userData && userData.profile_pic) {
                     avatarUrl = userData.profile_pic;
                   }
+
+                  // Salvar no cache
+                  profileCache.set(senderId, {
+                    name: userName,
+                    avatarUrl: avatarUrl || "",
+                    timestamp: now
+                  });
                 }
               } catch (profileError) {
                 console.error('Erro profile:', profileError);
