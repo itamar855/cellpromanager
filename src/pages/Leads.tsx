@@ -16,9 +16,9 @@ import {
 import { toast } from "sonner";
 import { 
   Trash2, MoreVertical, MessageSquare, ChevronRight, Download,
-  MessageCircle, Phone, Plus, Users, Mail, Search, Shield,
+  MessageCircle, Phone, Plus, Users, Mail, Search, Shield, Store,
   Image as ImageIcon, Mic, Send, Paperclip, UserPlus, Filter,
-  Play, Pause, X, CheckCheck, Clock
+  Play, Pause, X, CheckCheck, Clock, RefreshCw
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
@@ -68,6 +68,65 @@ const Leads = () => {
   const [chatModalOpen, setChatModalOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const handleSyncLeads = async () => {
+    setSyncing(true);
+    const toastId = toast.loading("Sincronizando todos os leads...");
+    
+    try {
+      // 1. Buscar todos os leads atuais para conferência real
+      const { data: currentLeads } = await supabase.from("leads").select("phone");
+      const existingPhones = new Set(currentLeads?.map(l => l.phone) || []);
+
+      // 2. Buscar dados de OS e Vendas que tenham telefone e nome
+      const [osRes, salesRes] = await Promise.all([
+        supabase.from("service_orders").select("customer_name, customer_phone, store_id, created_by").not("customer_phone", "is", null).limit(2000),
+        supabase.from("sales").select("customer_name, customer_phone, store_id, created_by").not("customer_phone", "is", null).limit(2000)
+      ]);
+      
+      const allLegacy = [...(osRes.data || []), ...(salesRes.data || [])];
+      
+      // 3. Filtrar apenas quem não existe e remover duplicatas do próprio lote
+      const toAdd = new Map();
+      allLegacy.forEach(legacy => {
+        if (!legacy.customer_phone) return;
+        const phone = legacy.customer_phone.trim();
+        
+        if (!existingPhones.has(phone) && !toAdd.has(phone)) {
+          toAdd.set(phone, {
+            name: legacy.customer_name || "Lead Importado",
+            phone: phone,
+            source: "os_vendas",
+            status: "novo",
+            store_id: legacy.store_id || (activeStoreId !== "all" ? activeStoreId : null),
+            created_by: legacy.created_by || user?.id,
+            notes: "Sincronizado automaticamente de OS/Vendas"
+          });
+        }
+      });
+
+      if (toAdd.size === 0) {
+        toast.dismiss(toastId);
+        toast.info("Todos os potenciais leads já estão sincronizados!");
+        return;
+      }
+
+      const entries = Array.from(toAdd.values());
+      const { error } = await supabase.from("leads").insert(entries);
+
+      if (error) throw error;
+
+      toast.dismiss(toastId);
+      toast.success(`${entries.length} novos leads sincronizados!`);
+      fetchData();
+    } catch (err: any) {
+      toast.dismiss(toastId);
+      toast.error("Erro na sincronização: " + err.message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const [filterStore, setFilterStore] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
   const [filterVendedor, setFilterVendedor] = useState("all");
@@ -82,7 +141,8 @@ const Leads = () => {
   const fetchData = async () => {
     let query = supabase.from("leads").select(`
       *,
-      assigned_user:profiles!leads_assigned_to_fkey(display_name)
+      assigned_user:profiles!leads_assigned_to_fkey(display_name),
+      store:stores(name)
     `).order("last_message_at", { ascending: false, nullsFirst: false });
 
     // Multi-agent filtering: only see assigned leads if not admin/gerente
@@ -353,14 +413,26 @@ const Leads = () => {
         <div className="flex items-center justify-between">
           <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight text-white">CRM de Leads</h1>
           <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="gap-2 h-9 border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
-              onClick={() => window.open(`https://github.com/itamar855/cellpromanager/archive/refs/heads/main.zip`, '_blank')}
-            >
-              <Download className="h-4 w-4" /> Instalar Extensão
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="gap-2 h-9 border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
+                onClick={handleSyncLeads}
+                disabled={syncing}
+              >
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} /> 
+                {syncing ? "Sincronizando..." : "Sincronizar Leads"}
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="gap-2 h-9 border-border text-muted-foreground hidden md:flex"
+                onClick={() => window.open(`https://github.com/itamar855/cellpromanager/archive/refs/heads/main.zip`, '_blank')}
+              >
+                <Download className="h-4 w-4" /> Extensão
+              </Button>
+            </div>
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="gap-2 h-9 shadow-lg shadow-primary/20"><Plus className="h-4 w-4" /> Novo Lead</Button>
@@ -378,7 +450,14 @@ const Leads = () => {
                         <Label className="text-xs">Origem</Label>
                         <Select value={form.source} onValueChange={v => setForm({...form, source: v})}>
                           <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                          <SelectContent><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="instagram">Instagram</SelectItem><SelectItem value="trafego_pago">Tráfego Pago</SelectItem><SelectItem value="indicacao">Indicação</SelectItem><SelectItem value="outro">Outro</SelectItem></SelectContent>
+                  <SelectContent>
+                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                    <SelectItem value="instagram">Instagram</SelectItem>
+                    <SelectItem value="trafego_pago">Tráfego Pago</SelectItem>
+                    <SelectItem value="indicacao">Indicação</SelectItem>
+                    <SelectItem value="os_vendas">Importado (OS/Vendas)</SelectItem>
+                    <SelectItem value="outro">Outro</SelectItem>
+                  </SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-1.5">
@@ -441,7 +520,14 @@ const Leads = () => {
             )}
             <Select value={filterSource} onValueChange={setFilterSource}>
               <SelectTrigger className="w-[140px] h-10 bg-muted/20 border-border/40"><SelectValue placeholder="Origem" /></SelectTrigger>
-              <SelectContent><SelectItem value="all">Todas Origens</SelectItem><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="instagram">Instagram</SelectItem><SelectItem value="trafego_pago">Tráfego Pago</SelectItem><SelectItem value="indicacao">Indicação</SelectItem></SelectContent>
+              <SelectContent>
+                <SelectItem value="all">Todas Origens</SelectItem>
+                <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                <SelectItem value="instagram">Instagram</SelectItem>
+                <SelectItem value="trafego_pago">Tráfego Pago</SelectItem>
+                <SelectItem value="indicacao">Indicação</SelectItem>
+                <SelectItem value="os_vendas">Importado (OS/Vendas)</SelectItem>
+              </SelectContent>
             </Select>
           </div>
         </div>
@@ -504,12 +590,28 @@ const Leads = () => {
                           <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
                         )}
                       </div>
-                      {lead.source === 'whatsapp' ? <MessageCircle className="h-3 w-3 text-green-500" /> : <Instagram className="h-3 w-3 text-pink-500" />}
+                      <div className="flex flex-col items-end gap-1">
+                        {lead.source === 'whatsapp' ? (
+                          <MessageCircle className="h-3 w-3 text-green-500" />
+                        ) : lead.source === 'instagram' ? (
+                          <Instagram className="h-3 w-3 text-pink-500" />
+                        ) : (
+                          <Badge variant="outline" className="text-[7px] h-3 px-1 border-primary/20 bg-primary/5 text-primary">CRM</Badge>
+                        )}
+                      </div>
                     </div>
                     {lead.phone && <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Phone className="h-2.5 w-2.5" /> {lead.phone}</div>}
-                    <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground mt-1">
-                      <Users className="h-2.5 w-2.5" /> 
-                      {lead.assigned_user?.display_name || "Sem Responsável"}
+                    <div className="flex flex-col gap-1 mt-1">
+                      <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground">
+                        <Users className="h-2.5 w-2.5" /> 
+                        {lead.assigned_user?.display_name || "Sem Responsável"}
+                      </div>
+                      {lead.store?.name && (
+                        <div className="flex items-center gap-1.5 text-[9px] text-primary/70">
+                          <Store className="h-2.5 w-2.5" /> 
+                          {lead.store.name}
+                        </div>
+                      )}
                     </div>
                     {lead.notes && <p className="text-[10px] text-muted-foreground line-clamp-2 italic">"{lead.notes}"</p>}
                     
@@ -630,7 +732,14 @@ const Leads = () => {
                 <Label className="text-xs">Origem</Label>
                 <Select value={form.source} onValueChange={v => setForm({...form, source: v})}>
                   <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="instagram">Instagram</SelectItem><SelectItem value="trafego_pago">Tráfego Pago</SelectItem><SelectItem value="indicacao">Indicação</SelectItem></SelectContent>
+                  <SelectContent>
+                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                    <SelectItem value="instagram">Instagram</SelectItem>
+                    <SelectItem value="trafego_pago">Tráfego Pago</SelectItem>
+                    <SelectItem value="indicacao">Indicação</SelectItem>
+                    <SelectItem value="os_vendas">Importado (OS/Vendas)</SelectItem>
+                    <SelectItem value="outro">Outro</SelectItem>
+                  </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
