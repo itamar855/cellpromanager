@@ -185,7 +185,21 @@ const Clientes = () => {
       const entries = Array.from(toAdd.values());
       const { error } = await supabase.from("customers").insert(entries);
 
-      if (error) throw error;
+      if (error) {
+        // Se der erro de cache (coluna store_id não encontrada), tenta de novo sem a coluna
+        if (error.message.includes("schema cache") || error.message.includes("store_id")) {
+          const fallbackEntries = entries.map(({ store_id, ...rest }) => rest);
+          const { error: fallbackError } = await supabase.from("customers").insert(fallbackEntries);
+          
+          if (fallbackError) throw fallbackError;
+          
+          toast.dismiss(toastId);
+          toast.success(`${entries.length} novos clientes sincronizados (Modo de Segurança)!`);
+          fetchData();
+          return;
+        }
+        throw error;
+      }
 
       toast.dismiss(toastId);
       toast.success(`${entries.length} novos clientes sincronizados!`);
