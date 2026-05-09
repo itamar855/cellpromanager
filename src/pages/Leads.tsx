@@ -82,7 +82,8 @@ const Leads = () => {
   const fetchData = async () => {
     let query = supabase.from("leads").select(`
       *,
-      assigned_user:profiles!leads_assigned_to_fkey(display_name)
+      assigned_user:profiles!leads_assigned_to_fkey(display_name),
+      store:stores(name)
     `).order("last_message_at", { ascending: false, nullsFirst: false });
 
     // Multi-agent filtering: only see assigned leads if not admin/gerente
