@@ -44,203 +44,136 @@ export interface NotaFiscalData {
 export const gerarNotaFiscalInterna = async (data: NotaFiscalData): Promise<any> => {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const W = 210;
-  const M = 7; // Narrow margins for official look
+  const M = 10; // Slightly larger margins for a clean look
   const CW = W - M * 2;
   let y = M;
 
-  // --- COLORS (Grayscale for official look) ---
+  // --- COLORS ---
   const BLACK: [number, number, number] = [0, 0, 0];
   const DARK: [number, number, number] = [40, 40, 40];
   const GRAY: [number, number, number] = [100, 100, 100];
-  const BORDER: [number, number, number] = [0, 0, 0]; // Thin black borders
   const WHITE: [number, number, number] = [255, 255, 255];
+  const PRIMARY: [number, number, number] = [20, 20, 20];
 
-  doc.setLineWidth(0.2);
-  doc.setDrawColor(...BORDER);
+  doc.setLineWidth(0.1);
 
   // --- HELPERS ---
   const box = (h: number, title?: string) => {
+    doc.setDrawColor(200);
     doc.rect(M, y, CW, h);
     if (title) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(6.5);
-      doc.setTextColor(...DARK);
-      doc.text(title.toUpperCase(), M + 1.5, y + 4.5);
-      y += 6;
-      h -= 6;
+      doc.setFillColor(245, 245, 245);
+      doc.rect(M, y, CW, 6, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(...DARK);
+      doc.text(title.toUpperCase(), M + 3, y + 4.2);
+      y += 6; h -= 6;
     }
     return { x: M, y: y, w: CW, h: h };
   };
 
-  const field = (label: string, value: any, x: number, w: number, align: "left" | "right" = "left") => {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(5.5);
-    doc.setTextColor(...GRAY);
-    doc.text(label.toUpperCase(), x + 1.5, y + 3.5);
-    doc.setFont("helvetica", "bold"); // Bold for values too
-    doc.setFontSize(8.5);
-    doc.setTextColor(...BLACK);
-    const textX = align === "left" ? x + 1.5 : x + w - 1.5;
-    doc.text(String(value || ""), textX, y + 8, { align });
-  };
-
-  const row = (h: number) => {
-    doc.line(M, y + h, M + CW, y + h);
-    y += h;
+  const field = (label: string, value: any, x: number, w: number, align: "left" | "right" = "left", size = 9) => {
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6); doc.setTextColor(...GRAY);
+    doc.text(label.toUpperCase(), x + 3, y + 4);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(size); doc.setTextColor(...BLACK);
+    const textX = align === "left" ? x + 3 : x + w - 3;
+    doc.text(String(value || "-"), textX, y + 9, { align });
   };
 
   const vLine = (x: number, h: number) => {
+    doc.setDrawColor(200);
     doc.line(M + x, y, M + x, y + h);
   };
 
   // ══════════════════════════════════════════════════════════════════════════
-  //  HEADER (ISSUER INFO)
+  // 1. SIMPLE CLEAN HEADER
   // ══════════════════════════════════════════════════════════════════════════
-  doc.rect(M, y, CW, 30);
-  
-  // Issuer on the left
   if (data.lojaLogoUrl) {
-    try { doc.addImage(data.lojaLogoUrl, "PNG", M + 2, y + 3, 24, 24); } catch (_) {}
+    try { doc.addImage(data.lojaLogoUrl, "PNG", M, y, 22, 22); } catch (_) {}
   }
   
-  const tx = data.lojaLogoUrl ? 32 : 5;
-  doc.setFont("helvetica", "bold"); doc.setFontSize(11);
-  doc.text(data.lojaNome.toUpperCase(), M + tx, y + 8);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
-  doc.text(data.lojaEndereco || "-", M + tx, y + 13, { maxWidth: 60 });
-  doc.text(`Fone: ${data.lojaTelefone || "-"}`, M + tx, y + 22);
-  doc.text(`CNPJ: ${data.lojaCnpj || "-"}`, M + tx, y + 26);
+  const tx = data.lojaLogoUrl ? 26 : 0;
+  doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(...PRIMARY);
+  doc.text(data.lojaNome.toUpperCase(), M + tx, y + 6);
+  
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...DARK);
+  doc.text(data.lojaEndereco || "-", M + tx, y + 11, { maxWidth: 100 });
+  doc.text(`WhatsApp/Fone: ${data.lojaWhatsapp || data.lojaTelefone || "-"}`, M + tx, y + 16);
+  if (data.lojaCnpj) doc.text(`CNPJ: ${data.lojaCnpj}`, M + tx, y + 20);
 
-  // Center: "DANFE"
-  vLine(95, 30);
-  doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.text("DANFE", M + 115, y + 8, { align: "center" } );
-  doc.setFontSize(6.5);
-  doc.text("Documento Auxiliar da\nNota Fiscal Eletrônica\n(Simulado)", M + 115, y + 12, { align: "center" });
-  doc.text("0 - ENTRADA\n1 - SAÍDA", M + 97, y + 21);
-  doc.setFontSize(12); doc.rect(M + 116, y + 19, 6, 8); doc.text("1", M + 119, y + 25, { align: "center" });
-  doc.setFontSize(8); doc.setFont("helvetica", "bold");
-  doc.text(`Nº ${data.numeroNota}\nSÉRIE 1`, M + 115, y + 30, { align: "center" });
+  // Right Side Header: Document Title
+  doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(...BLACK);
+  doc.text("COMPROVANTE DE VENDA", M + CW, y + 6, { align: "right" });
+  doc.setFontSize(9); doc.setTextColor(...GRAY);
+  doc.text(`Nº ${data.numeroNota}`, M + CW, y + 12, { align: "right" });
+  doc.text(data.dataVenda, M + CW, y + 17, { align: "right" });
 
-  // Right: Access Key Placeholder
-  vLine(135, 30);
-  doc.setFontSize(6.5); doc.text("CHAVE DE ACESSO (SIMULADO)", M + 137, y + 5);
-  doc.setFontSize(8);
-  const key = Array.from({length: 44}, () => Math.floor(Math.random() * 10)).join("");
-  const keyFormatted = key.match(/.{1,4}/g)?.join(" ") || "";
-  doc.text(keyFormatted, M + 137, y + 10, { maxWidth: CW - 137 - 2 });
+  y += 26;
 
-  doc.rect(M + 137, y + 14, CW - 137 - 5, 12);
-  doc.setFontSize(6);
-  doc.text("PROTOCOLO DE AUTORIZAÇÃO (SIMULADO)\n351234567890123 01/01/2026 12:00:00", M + 139, y + 18);
+  // ══════════════════════════════════════════════════════════════════════════
+  // 2. GARANTIA HIGHLIGHT
+  // ══════════════════════════════════════════════════════════════════════════
+  doc.setFillColor(20, 20, 20); doc.rect(M, y, CW, 12, "F");
+  doc.setTextColor(...WHITE); doc.setFont("helvetica", "bold"); doc.setFontSize(7);
+  doc.text("PRAZO DE GARANTIA DO PRODUTO", M + 5, y + 5);
+  doc.setFontSize(14);
+  const diasG = data.garantiaDays || 90;
+  doc.text(`${diasG} DIAS${diasG > 90 ? " (ESTENDIDA)" : ""}`, M + 5, y + 10);
+  
+  y += 15;
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // 3. DADOS DO CLIENTE
+  // ══════════════════════════════════════════════════════════════════════════
+  box(24, "DADOS DO CLIENTE");
+  field("NOME DO CLIENTE", data.clienteNome || "CONSUMIDOR FINAL", M, CW - 60); vLine(CW - 60, 9);
+  field("CPF / CNPJ", data.clienteCpf, M + CW - 60, 60);
+  y += 9; doc.setDrawColor(230); doc.line(M, y, M + CW, y);
+  field("ENDEREÇO", data.clienteEndereco, M, CW - 100); vLine(CW - 100, 9);
+  field("TELEFONE / WHATSAPP", data.clienteTelefone, M + CW - 100, 100);
+  y += 15;
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 4. DETALHES DO PRODUTO
+  // ══════════════════════════════════════════════════════════════════════════
+  box(45, "DETALHES DO PRODUTO ADQUIRIDO");
+  field("PRODUTO / MODELO", `${data.produtoNome} ${data.produtoModelo || ""}`, M, CW - 80); vLine(CW - 80, 9);
+  field("MARCA", data.produtoMarca, M + CW - 80, 40); vLine(CW - 40, 9);
+  field("COR", data.produtoCor, M + CW - 40, 40);
+  y += 9; doc.line(M, y, M + CW, y);
+  field("IMEI / NÚMERO DE SÉRIE", data.produtoImei, M, CW - 60); vLine(CW - 60, 9);
+  field("VALOR DO PRODUTO", formatCurrency(data.valorVenda), M + CW - 60, 60, "right", 12);
   y += 30;
 
   // ══════════════════════════════════════════════════════════════════════════
-  //  DADOS DA VENDA E GARANTIA
+  // 5. RESUMO DE PAGAMENTO
   // ══════════════════════════════════════════════════════════════════════════
-  y += 2;
-  box(12, "DADOS DA VENDA E GARANTIA");
-  field("NÚMERO DA NOTA", data.numeroNota, M, 40);
-  field("DATA DA VENDA", data.dataVenda, M + 45, 45);
-  
-  const diasGarantia = data.garantiaDays || 90;
-  const garantiaTexto = diasGarantia > 90 ? `${diasGarantia} DIAS (ESTENDIDA)` : `${diasGarantia} DIAS`;
-  field("TEMPO DE GARANTIA", garantiaTexto, M + 95, 50, "right");
-  y += 12;
-
-  // ══════════════════════════════════════════════════════════════════════════
-  //  RECIPIENT (DESTINATÁRIO / REMETENTE)
-  // ══════════════════════════════════════════════════════════════════════════
-  y += 2;
-  box(22, "DESTINATÁRIO / REMETENTE");
-  field("NOME / RAZÃO SOCIAL", data.clienteNome || "CONSUMIDOR FINAL", M, CW - 110);
-  vLine(CW - 110, 10);
-  field("CNPJ / CPF", data.clienteCpf || "-", M + CW - 110, 60);
-  
-  row(10);
-  field("TELEFONE", data.clienteTelefone || "-", M, 60);
-  vLine(60, 5);
-  field("E-MAIL", data.clienteEmail || "-", M + 60, 90);
-  vLine(150, 5);
-  field("HORA DA SAÍDA", new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }), M + 150, CW - 150, "right");
-  row(5);
-  field("ENDEREÇO", data.clienteEndereco || "-", M, CW - 45);
-  row(5);
-
-  // ══════════════════════════════════════════════════════════════════════════
-  //  PAYMENT (FATURA / DUPLICATA)
-  // ══════════════════════════════════════════════════════════════════════════
-  y += 2;
-  box(14, "FATURA / DUPLICATA");
+  box(12, "FORMA DE PAGAMENTO");
   const pays: string[] = [];
-  if (data.valorDinheiro) pays.push(`Dinheiro: ${formatCurrency(data.valorDinheiro)}`);
+  if (data.valorDinheiro) pays.push(`DINHEIRO: ${formatCurrency(data.valorDinheiro)}`);
   if (data.valorPix) pays.push(`PIX: ${formatCurrency(data.valorPix)}`);
-  if (data.valorCartao) pays.push(`Cartão: ${formatCurrency(data.valorCartao)}`);
-  if (data.tradeInValor) pays.push(`Troca: ${formatCurrency(data.tradeInValor)}`);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
-  doc.text(pays.length ? pays.join("    |    ") : "Pagamento à vista", M + 3, y + 4.5);
-  row(8);
+  if (data.valorCartao) pays.push(`CARTÃO: ${formatCurrency(data.valorCartao)}`);
+  if (data.tradeInValor) pays.push(`TROCA (VALE): ${formatCurrency(data.tradeInValor)}`);
+  doc.setFontSize(9); doc.setTextColor(...BLACK);
+  doc.text(pays.join("   |   ") || "PAGAMENTO À VISTA", M + 4, y + 4.5);
+  y += 16;
 
   // ══════════════════════════════════════════════════════════════════════════
-  //  TOTALS (CÁLCULO DO IMPOSTO)
+  // 6. TERMOS E ASSINATURA
   // ══════════════════════════════════════════════════════════════════════════
-  y += 2;
-  box(15, "CÁLCULO DO IMPOSTO");
-  const colW = CW / 5;
-  field("BASE CÁLC. ICMS", "0,00", M, colW); vLine(colW, 9);
-  field("VALOR ICMS", "0,00", M + colW, colW); vLine(colW * 2, 9);
-  field("VALOR ICMS SUBS.", "0,00", M + colW * 2, colW); vLine(colW * 3, 9);
-  field("VALOR TOTAL TRIB.", "0,00", M + colW * 3, colW); vLine(colW * 4, 9);
-  field("VALOR TOTAL PROD.", formatCurrency(data.valorVenda), M + colW * 4, colW, "right");
-  row(9);
-
-  // ══════════════════════════════════════════════════════════════════════════
-  //  PRODUCTS TABLE
-  // ══════════════════════════════════════════════════════════════════════════
-  y += 2;
-  box(80, "DADOS DO PRODUTO / SERVIÇO");
-  doc.setFillColor(...WHITE); doc.rect(M, y, CW, 6, "F"); 
-  doc.setFontSize(6.5); doc.setTextColor(...DARK);
-  doc.text("CÓDIGO", M + 2, y + 4.5);
-  doc.text("DESCRIÇÃO DO PRODUTO / SERVIÇO", M + 22, y + 4.5);
-  doc.text("NCM", M + 105, y + 4.5);
-  doc.text("VALOR UNIT", M + 130, y + 4.5);
-  doc.text("QTD", M + 160, y + 4.5);
-  doc.text("VALOR TOTAL", M + CW - 1, y + 4.5, { align: "right" });
-  row(6);
+  y = 230; // Push to bottom
+  doc.setDrawColor(200); doc.rect(M, y, CW, 50);
+  doc.setFontSize(7); doc.setTextColor(...DARK);
+  doc.text("TERMOS DE GARANTIA E CONDIÇÕES", M + 3, y + 5);
   
-  // Single Product Row (Main Product)
-  doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...BLACK);
-  doc.text("001", M + 2, y + 6);
-  const desc = `${data.produtoNome} - ${data.produtoMarca}${data.produtoModelo ? " " + data.produtoModelo : ""}${data.produtoImei ? " (IMEI: " + data.produtoImei + ")" : ""}`;
-  const descLines = doc.splitTextToSize(desc, 80);
-  doc.text(descLines, M + 22, y + 6);
-  doc.text("85171231", M + 105, y + 6);
-  doc.text(formatCurrency(data.valorVenda), M + 130, y + 6);
-  doc.text("1", M + 160, y + 6);
-  doc.text(formatCurrency(data.valorVenda), M + CW - 1, y + 6, { align: "right" });
-  
-  y = M + 30 + 2 + 30 + 2 + 14 + 2 + 15 + 2 + 80; // Correct snap to table bottom
-
-  // ══════════════════════════════════════════════════════════════════════════
-  //  COMPLEMENTARY INFO
-  // ══════════════════════════════════════════════════════════════════════════
-  y += 2;
-  box(CW > 160 ? 40 : 50, "INFORMAÇÕES COMPLEMENTARES");
-  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...DARK);
   const garantiaStr = data.garantiaDays ? `${data.garantiaDays} dias` : "90 dias";
-  const termsWithWarranty = TERMOS.replace("90 dias", garantiaStr);
-  const terms = doc.splitTextToSize(termsWithWarranty + (data.observacoes ? "\n\nObservações: " + data.observacoes : ""), CW - 10);
-  doc.text(terms, M + 5, y + 4);
-  
-  // Footer page info
-  const pageCount = (doc as any).internal.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
-    doc.setFontSize(6.5); doc.setTextColor(...GRAY);
-    const footerText = `${data.lojaNome}  |  Simulado DANFE  |  Página ${i} de ${pageCount}`;
-    doc.text(footerText, W / 2, 290, { align: "center" });
-  }
+  const finalTerms = TERMOS.replace("90 dias", garantiaStr) + (data.observacoes ? "\n\nOBSERVAÇÕES: " + data.observacoes : "");
+  const termLines = doc.splitTextToSize(finalTerms, CW - 8);
+  doc.text(termLines, M + 4, y + 10);
+
+  // Signatures
+  y += 38;
+  doc.line(M + 10, y, M + 80, y); doc.text("ASSINATURA DA LOJA", M + 45, y + 4, { align: "center" });
+  doc.line(M + CW - 80, y, M + CW - 10, y); doc.text("ASSINATURA DO CLIENTE", M + CW - 45, y + 4, { align: "center" });
 
   return doc;
 };
