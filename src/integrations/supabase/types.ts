@@ -525,6 +525,7 @@ export type Database = {
       customers: {
         Row: {
           address: string | null
+          birth_date: string | null
           cpf: string | null
           created_at: string
           created_by: string
@@ -533,10 +534,12 @@ export type Database = {
           name: string
           notes: string | null
           phone: string | null
+          store_id: string | null
           updated_at: string
         }
         Insert: {
           address?: string | null
+          birth_date?: string | null
           cpf?: string | null
           created_at?: string
           created_by: string
@@ -545,10 +548,12 @@ export type Database = {
           name: string
           notes?: string | null
           phone?: string | null
+          store_id?: string | null
           updated_at?: string
         }
         Update: {
           address?: string | null
+          birth_date?: string | null
           cpf?: string | null
           created_at?: string
           created_by?: string
@@ -557,9 +562,18 @@ export type Database = {
           name?: string
           notes?: string | null
           phone?: string | null
+          store_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "customers_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       duplicate_prevention_logs: {
         Row: {
@@ -989,6 +1003,7 @@ export type Database = {
           display_name: string | null
           id: string
           phone: string | null
+          store_id: string | null
           updated_at: string
           user_id: string
         }
@@ -998,6 +1013,7 @@ export type Database = {
           display_name?: string | null
           id?: string
           phone?: string | null
+          store_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -1007,10 +1023,19 @@ export type Database = {
           display_name?: string | null
           id?: string
           phone?: string | null
+          store_id?: string | null
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sales: {
         Row: {
@@ -1858,14 +1883,20 @@ export type Database = {
           agency: string | null
           bank_name: string | null
           created_at: string | null
+          credit_fee_percent: number | null
+          credit_settlement_days: number | null
+          debit_fee_percent: number | null
+          debit_settlement_days: number | null
           holder_document: string | null
           holder_name: string | null
           id: string | null
           is_primary: boolean | null
           notes: string | null
           owner_type: string | null
+          pix_fee_percent: number | null
           pix_key: string | null
           pix_key_type: string | null
+          pix_settlement_days: number | null
           store_id: string | null
           updated_at: string | null
         }
@@ -1875,14 +1906,20 @@ export type Database = {
           agency?: string | null
           bank_name?: string | null
           created_at?: string | null
+          credit_fee_percent?: number | null
+          credit_settlement_days?: number | null
+          debit_fee_percent?: number | null
+          debit_settlement_days?: number | null
           holder_document?: string | null
           holder_name?: string | null
           id?: string | null
           is_primary?: boolean | null
           notes?: string | null
           owner_type?: string | null
+          pix_fee_percent?: number | null
           pix_key?: string | null
           pix_key_type?: string | null
+          pix_settlement_days?: number | null
           store_id?: string | null
           updated_at?: string | null
         }
@@ -1892,14 +1929,20 @@ export type Database = {
           agency?: string | null
           bank_name?: string | null
           created_at?: string | null
+          credit_fee_percent?: number | null
+          credit_settlement_days?: number | null
+          debit_fee_percent?: number | null
+          debit_settlement_days?: number | null
           holder_document?: string | null
           holder_name?: string | null
           id?: string | null
           is_primary?: boolean | null
           notes?: string | null
           owner_type?: string | null
+          pix_fee_percent?: number | null
           pix_key?: string | null
           pix_key_type?: string | null
+          pix_settlement_days?: number | null
           store_id?: string | null
           updated_at?: string | null
         }
