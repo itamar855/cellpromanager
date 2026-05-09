@@ -128,6 +128,7 @@ const Relatorios = () => {
   const [caixaStats, setCaixaStats] = useState<any>({});
   const [ranking, setRanking] = useState<any[]>([]);
   const [comissoes, setComissoes] = useState<any[]>([]);
+  const [leadsData, setLeadsData] = useState<any>({ total: 0, bySource: [], conversion: 0 });
 
   useEffect(() => {
     supabase.from("stores").select("*").then(r => setStores(r.data ?? []));
@@ -280,6 +281,31 @@ const Relatorios = () => {
   useEffect(() => { if (tab === "os") fetchOS(); }, [tab, fetchOS]);
   useEffect(() => { if (tab === "caixa") fetchCaixa(); }, [tab, fetchCaixa]);
   useEffect(() => { if (tab === "ranking" || tab === "comissoes") fetchRanking(); }, [tab, fetchRanking]);
+  
+  const fetchLeads = useCallback(async () => {
+    const { start, end } = getPeriodDates(period, customStart, customEnd);
+    const effectiveStoreId = userRole === "admin" ? storeId : activeStoreId;
+    let q = supabase.from("leads").select("*").gte("created_at", start).lte("created_at", end);
+    if (effectiveStoreId && effectiveStoreId !== "all") q = q.eq("store_id", effectiveStoreId);
+    
+    const { data } = await q;
+    if (!data) return;
+
+    const total = data.length;
+    const sourceMap: Record<string, number> = {};
+    data.forEach(l => { 
+      const src = l.source || 'outro';
+      sourceMap[src] = (sourceMap[src] || 0) + 1; 
+    });
+    
+    const bySource = Object.entries(sourceMap).map(([name, value]) => ({ name, value }));
+    const converted = data.filter(l => l.status === 'concluido').length;
+    const conversion = total > 0 ? (converted / total) * 100 : 0;
+
+    setLeadsData({ total, bySource, conversion });
+  }, [period, storeId, customStart, customEnd]);
+
+  useEffect(() => { if (tab === "leads") fetchLeads(); }, [tab, fetchLeads]);
 
   // ── GERAR NOTA ────────────────────────────────────────────────────────────
   const handleGerarNota = async (row: any, enviarWhatsApp = false) => {
@@ -357,6 +383,42 @@ const Relatorios = () => {
           <TabsTrigger value="caixa" className="text-xs gap-1.5"><Wallet className="h-3.5 w-3.5" /> Caixa</TabsTrigger>
           <TabsTrigger value="ranking" className="text-xs gap-1.5"><Trophy className="h-3.5 w-3.5" /> Ranking</TabsTrigger>
           <TabsTrigger value="comissoes" className="text-xs gap-1.5"><Star className="h-3.5 w-3.5" /> Comissões</TabsTrigger>
+          <TabsTrigger value="leads" className="text-xs gap-1.5"><Users className="h-3.5 w-3.5" /> Leads</TabsTrigger>
+        {/* ── LEADS ───────────────────────────────────────────────────────── */}
+        <TabsContent value="leads" className="space-y-4 mt-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <Filters {...filterProps} />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="border-border/50">
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-display">Conversão de Leads</CardTitle></CardHeader>
+              <CardContent className="flex flex-col items-center justify-center py-6">
+                <div className="text-4xl font-bold text-primary">{leadsData.conversion.toFixed(1)}%</div>
+                <p className="text-xs text-muted-foreground mt-1">Taxa de fechamento</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/50 md:col-span-2">
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-display text-pink-500 flex items-center gap-2"><Camera className="h-4 w-4" /> Origem dos Leads</CardTitle></CardHeader>
+              <CardContent>
+                <div className="h-[200px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={leadsData.bySource} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                      <XAxis type="number" hide />
+                      <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 10 }} />
+                      <Tooltip />
+                      <Bar dataKey="value" fill="hsl(330, 80%, 60%)" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="rounded-lg bg-pink-500/5 border border-pink-500/10 p-4">
+            <h4 className="text-sm font-bold text-pink-700 mb-2">Dica de Performance</h4>
+            <p className="text-xs text-pink-800/80">Leads vindos do Instagram costumam ter uma taxa de conversão 20% maior quando respondidos em menos de 5 minutos.</p>
+          </div>
+        </TabsContent>
         </TabsList>
 
         {/* ── DRE ─────────────────────────────────────────────────────────── */}
