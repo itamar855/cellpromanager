@@ -150,7 +150,7 @@ const Leads = () => {
       query = query.eq("assigned_to", user?.id);
     }
 
-    if (activeStoreId) {
+    if (activeStoreId && activeStoreId !== "all") {
       query = query.eq("store_id", activeStoreId);
     }
 
