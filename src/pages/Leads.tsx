@@ -508,9 +508,17 @@ const Leads = () => {
                       {lead.source === 'whatsapp' ? <MessageCircle className="h-3 w-3 text-green-500" /> : <Instagram className="h-3 w-3 text-pink-500" />}
                     </div>
                     {lead.phone && <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Phone className="h-2.5 w-2.5" /> {lead.phone}</div>}
-                    <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground mt-1">
-                      <Users className="h-2.5 w-2.5" /> 
-                      {lead.assigned_user?.display_name || "Sem Responsável"}
+                    <div className="flex flex-col gap-1 mt-1">
+                      <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground">
+                        <Users className="h-2.5 w-2.5" /> 
+                        {lead.assigned_user?.display_name || "Sem Responsável"}
+                      </div>
+                      {lead.store?.name && (
+                        <div className="flex items-center gap-1.5 text-[9px] text-primary/70">
+                          <Store className="h-2.5 w-2.5" /> 
+                          {lead.store.name}
+                        </div>
+                      )}
                     </div>
                     {lead.notes && <p className="text-[10px] text-muted-foreground line-clamp-2 italic">"{lead.notes}"</p>}
                     
