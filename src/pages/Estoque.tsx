@@ -84,7 +84,7 @@ const Estoque = () => {
     if (!activeStoreId) return;
     setLoading(true);
     
-    let productsQuery = supabase.from("products").select("*");
+    let productsQuery = supabase.from("products").select("*").eq("status", "in_stock");
     let accQuery = supabase.from("accessories" as any).select("*");
 
     if (activeStoreId !== "all") {

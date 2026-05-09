@@ -65,7 +65,7 @@ const Dashboard = () => {
     // Mantenha array de promessas
     const fetches = [
       can("estoque") 
-        ? (!isFiltered ? supabase.from("products").select("*") : supabase.from("products").select("*").eq("store_id", effectiveStoreId))
+        ? (!isFiltered ? supabase.from("products").select("*").eq("status", "in_stock") : supabase.from("products").select("*").eq("store_id", effectiveStoreId).eq("status", "in_stock"))
         : Promise.resolve({ data: [] }),
       (can("transacoes") || can("caixa"))
         ? (!isFiltered ? supabase.from("transactions").select("*") : supabase.from("transactions").select("*").eq("store_id", effectiveStoreId))
@@ -116,7 +116,7 @@ const Dashboard = () => {
 
     if (isAdmin) {
       const storeMap = new Map(stores.map((s: any) => [s.id, s.name]));
-      const allProductsRes = await supabase.from("products").select("*");
+      const allProductsRes = await supabase.from("products").select("*").eq("status", "in_stock");
       const allAccRes = await supabase.from("accessories" as any).select("*");
       const allProducts = (allProductsRes.data ?? []).filter((p: any) => p.status === "in_stock");
       const allAcc = (allAccRes.data ?? []) as any[];
