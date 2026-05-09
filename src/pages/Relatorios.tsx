@@ -14,7 +14,7 @@ import {
 } from "recharts";
 import {
   FileText, TrendingUp, TrendingDown, ShoppingBag, Wrench,
-  Wallet, Trophy, Medal, Download, Star, Crown, Users, MessageCircle,
+  Wallet, Trophy, Medal, Download, Star, Crown, Users, MessageCircle, Camera,
 } from "lucide-react";
 import { toast } from "sonner";
 import { gerarNotaFiscalInterna, type NotaFiscalData } from "@/utils/notaFiscalInterna";
