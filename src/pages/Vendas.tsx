@@ -398,6 +398,7 @@ const Vendas = () => {
         valorCartao: Number(sale.payment_card) || undefined, valorPix: Number(sale.payment_pix) || undefined,
         tradeIn: sale.has_trade_in, tradeInValor: sale.trade_in_value ? Number(sale.trade_in_value) : undefined,
         tradeInNome: sale.trade_in_device_name ?? undefined, observacoes: sale.notes ?? undefined,
+        garantiaDays: sale.warranty_days ?? undefined,
       };
       const doc = await gerarNotaFiscalInterna(data);
       if (whatsapp) {

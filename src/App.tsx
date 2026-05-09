@@ -27,6 +27,7 @@ import OSPublica from "./pages/OSPublica";
 import Configuracoes from "./pages/Configuracoes";
 import FinancasPF from "./pages/FinancasPF";
 import Leads from "./pages/Leads";
+import Avaliacao from "./pages/Avaliacao";
 
 const queryClient = new QueryClient();
 
@@ -79,6 +80,7 @@ const App = () => (
               <Route path="/reset-password" element={<ResetPassword />} />
               {/* Rota pública para o cliente acompanhar a OS */}
               <Route path="/os/:id" element={<OSPublica />} />
+              <Route path="/avaliacao" element={<Avaliacao />} />
               <Route path="/auditoria" element={<ProtectedRoute><Auditoria /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>

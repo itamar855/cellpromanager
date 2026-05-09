@@ -1,5 +1,4 @@
-// src/utils/notaFiscalInterna.ts
-// Gera nota fiscal interna (comprovante de venda) em PDF via jsPDF
+import { jsPDF } from "jspdf";
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -39,10 +38,10 @@ export interface NotaFiscalData {
   tradeInValor?: number;
   tradeInNome?: string;
   observacoes?: string;
+  garantiaDays?: number;
 }
 
 export const gerarNotaFiscalInterna = async (data: NotaFiscalData): Promise<any> => {
-  const { default: jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const W = 210;
   const M = 7; // Narrow margins for official look
@@ -137,15 +136,27 @@ export const gerarNotaFiscalInterna = async (data: NotaFiscalData): Promise<any>
   y += 30;
 
   // ══════════════════════════════════════════════════════════════════════════
+  //  DADOS DA VENDA E GARANTIA
+  // ══════════════════════════════════════════════════════════════════════════
+  y += 2;
+  box(12, "DADOS DA VENDA E GARANTIA");
+  field("NÚMERO DA NOTA", data.numeroNota, M, 40);
+  field("DATA DA VENDA", data.dataVenda, M + 45, 45);
+  
+  const diasGarantia = data.garantiaDays || 90;
+  const garantiaTexto = diasGarantia > 90 ? `${diasGarantia} DIAS (ESTENDIDA)` : `${diasGarantia} DIAS`;
+  field("TEMPO DE GARANTIA", garantiaTexto, M + 95, 50, "right");
+  y += 12;
+
+  // ══════════════════════════════════════════════════════════════════════════
   //  RECIPIENT (DESTINATÁRIO / REMETENTE)
   // ══════════════════════════════════════════════════════════════════════════
   y += 2;
-  box(30, "DESTINATÁRIO / REMETENTE");
+  box(22, "DESTINATÁRIO / REMETENTE");
   field("NOME / RAZÃO SOCIAL", data.clienteNome || "CONSUMIDOR FINAL", M, CW - 110);
   vLine(CW - 110, 10);
-  field("CNPJ / CPF", data.clienteCpf || "000.000.000-00", M + CW - 110, 60);
-  vLine(CW - 45, 10);
-  field("DATA DA EMISSÃO", data.dataVenda, M + CW - 45, 45, "right");
+  field("CNPJ / CPF", data.clienteCpf || "-", M + CW - 110, 60);
+  
   row(10);
   field("TELEFONE", data.clienteTelefone || "-", M, 60);
   vLine(60, 5);
@@ -154,8 +165,6 @@ export const gerarNotaFiscalInterna = async (data: NotaFiscalData): Promise<any>
   field("HORA DA SAÍDA", new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }), M + 150, CW - 150, "right");
   row(5);
   field("ENDEREÇO", data.clienteEndereco || "-", M, CW - 45);
-  vLine(CW - 45, 5);
-  field("UF", "ES", M + CW - 45, 45, "right");
   row(5);
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -219,7 +228,9 @@ export const gerarNotaFiscalInterna = async (data: NotaFiscalData): Promise<any>
   y += 2;
   box(CW > 160 ? 40 : 50, "INFORMAÇÕES COMPLEMENTARES");
   doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...DARK);
-  const terms = doc.splitTextToSize(TERMOS + (data.observacoes ? "\n\nObservações: " + data.observacoes : ""), CW - 10);
+  const garantiaStr = data.garantiaDays ? `${data.garantiaDays} dias` : "90 dias";
+  const termsWithWarranty = TERMOS.replace("90 dias", garantiaStr);
+  const terms = doc.splitTextToSize(termsWithWarranty + (data.observacoes ? "\n\nObservações: " + data.observacoes : ""), CW - 10);
   doc.text(terms, M + 5, y + 4);
   
   // Footer page info
