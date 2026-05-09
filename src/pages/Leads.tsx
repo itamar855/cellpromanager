@@ -332,78 +332,85 @@ const Leads = () => {
     
     setLoading(true);
     try {
-      let currentPhone = selectedLead.phone;
-      if (!currentPhone && form.phone) {
-        const { data: updatedLead } = await supabase
-          .from("leads")
-          .update({ phone: form.phone })
-          .eq("id", selectedLead.id)
-          .select()
-          .single();
-        if (updatedLead) {
-          currentPhone = updatedLead.phone;
-          setSelectedLead(updatedLead);
-        }
-      }
-
-      if (!currentPhone) throw new Error("Telefone do lead é necessário.");
-
-      // Check for direct WhatsApp API config
-      const { data: waConfig } = await supabase.from("whatsapp_config").select("id").eq("is_active", true).maybeSingle();
-
-      if (waConfig) {
-        // Use Direct API
-        let mediaUrlToUpload = null;
-        let finalMessageType = 'text';
-
-        if (imageFile) {
-          const path = `chat/${Date.now()}_${imageFile.name}`;
-          const { data: uploadData, error: uploadError } = await supabase.storage.from("chat_media").upload(path, imageFile);
-          if (uploadError) throw uploadError;
-          const { data: urlData } = supabase.storage.from("chat_media").getPublicUrl(uploadData.path);
-          mediaUrlToUpload = urlData.publicUrl;
-          finalMessageType = 'image';
-        } else if (audioBlob) {
-          const path = `chat/${Date.now()}.ogg`;
-          const { data: uploadData, error: uploadError } = await supabase.storage.from("chat_media").upload(path, audioBlob);
-          if (uploadError) throw uploadError;
-          const { data: urlData } = supabase.storage.from("chat_media").getPublicUrl(uploadData.path);
-          mediaUrlToUpload = urlData.publicUrl;
-          finalMessageType = 'audio';
-        }
-
-        const { data: callRes, error: callError } = await supabase.functions.invoke('whatsapp-send', {
-          body: {
-            phone: currentPhone,
-            content: responseText,
-            messageType: finalMessageType,
-            mediaUrl: mediaUrlToUpload,
-            leadId: selectedLead.id,
-            userId: user?.id
-          }
-        });
-
-        if (callError) throw callError;
-        toast.success("Mensagem enviada via API!");
-      } else {
-        // Fallback or old logic (Lead Responses table for extension)
-        const { error: queueError } = await (supabase as any).from("lead_responses")
-          .insert({
-            lead_id: selectedLead.id,
-            content: responseText,
-            status: 'pending'
+      // Check if it's an Instagram Lead
+      if (selectedLead.source === 'instagram' && selectedLead.instagram_user_id) {
+        const { data: igConfig } = await supabase.from("instagram_config").select("*").eq("is_active", true).maybeSingle();
+        
+        if (igConfig) {
+          const response = await fetch(`https://graph.facebook.com/v19.0/${igConfig.instagram_business_account_id}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${igConfig.page_access_token}` },
+            body: JSON.stringify({
+              recipient: { id: selectedLead.instagram_user_id },
+              message: { text: responseText }
+            })
           });
 
-        if (queueError) throw queueError;
-        toast.success("Enviado para a fila da extensão.");
+          const result = await response.json();
+          if (!response.ok) throw new Error(`Erro Instagram: ${result.error?.message || 'Erro desconhecido'}`);
+          
+          await supabase.from('lead_messages').insert({
+            lead_id: selectedLead.id,
+            content: responseText,
+            sender: 'vendedor',
+            message_type: 'text',
+          });
+          
+          toast.success("Mensagem enviada via Instagram!");
+        } else {
+          throw new Error("Instagram não configurado.");
+        }
+      } else {
+        // WhatsApp Logic (Existing)
+        let currentPhone = selectedLead.phone;
+        if (!currentPhone && form.phone) {
+          const { data: updatedLead } = await supabase.from("leads").update({ phone: form.phone }).eq("id", selectedLead.id).select().single();
+          if (updatedLead) {
+            currentPhone = updatedLead.phone;
+            setSelectedLead(updatedLead);
+          }
+        }
+
+        if (!currentPhone) throw new Error("Telefone do lead é necessário.");
+
+        const { data: waConfig } = await supabase.from("whatsapp_config").select("id").eq("is_active", true).maybeSingle();
+
+        if (waConfig) {
+          let mediaUrlToUpload = null;
+          let finalMessageType = 'text';
+
+          if (imageFile) {
+            const path = `chat/${Date.now()}_${imageFile.name}`;
+            const { data: uploadData, error: uploadError } = await supabase.storage.from("chat_media").upload(path, imageFile);
+            if (uploadError) throw uploadError;
+            const { data: urlData } = supabase.storage.from("chat_media").getPublicUrl(uploadData.path);
+            mediaUrlToUpload = urlData.publicUrl;
+            finalMessageType = 'image';
+          } else if (audioBlob) {
+            const path = `chat/${Date.now()}.ogg`;
+            const { data: uploadData, error: uploadError } = await supabase.storage.from("chat_media").upload(path, audioBlob);
+            if (uploadError) throw uploadError;
+            const { data: urlData } = supabase.storage.from("chat_media").getPublicUrl(uploadData.path);
+            mediaUrlToUpload = urlData.publicUrl;
+            finalMessageType = 'audio';
+          }
+
+          const { data: callRes, error: callError } = await supabase.functions.invoke('whatsapp-send', {
+            body: { phone: currentPhone, content: responseText, messageType: finalMessageType, mediaUrl: mediaUrlToUpload, leadId: selectedLead.id, userId: user?.id }
+          });
+
+          if (callError) throw callError;
+          toast.success("Mensagem enviada via WhatsApp API!");
+        } else {
+          const { error: queueError } = await (supabase as any).from("lead_responses").insert({ lead_id: selectedLead.id, content: responseText, status: 'pending' });
+          if (queueError) throw queueError;
+          toast.success("Enviado para a fila da extensão.");
+        }
       }
       
-      // 3. Mark as atendimento if it was novo
-      if (selectedLead.status === 'novo') {
-        await updateStatus(selectedLead.id, 'atendimento');
-      }
-
+      if (selectedLead.status === 'novo') await updateStatus(selectedLead.id, 'atendimento');
       setResponseModalOpen(false);
+      setChatModalOpen(false);
       setResponseText("");
     } catch (err: any) {
       toast.error("Erro ao enviar: " + err.message);
