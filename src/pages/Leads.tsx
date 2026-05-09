@@ -68,6 +68,65 @@ const Leads = () => {
   const [chatModalOpen, setChatModalOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const handleSyncLeads = async () => {
+    setSyncing(true);
+    const toastId = toast.loading("Sincronizando todos os leads...");
+    
+    try {
+      // 1. Buscar todos os leads atuais para conferência real
+      const { data: currentLeads } = await supabase.from("leads").select("phone");
+      const existingPhones = new Set(currentLeads?.map(l => l.phone) || []);
+
+      // 2. Buscar dados de OS e Vendas que tenham telefone e nome
+      const [osRes, salesRes] = await Promise.all([
+        supabase.from("service_orders").select("customer_name, customer_phone, store_id, created_by").not("customer_phone", "is", null).limit(2000),
+        supabase.from("sales").select("customer_name, customer_phone, store_id, created_by").not("customer_phone", "is", null).limit(2000)
+      ]);
+      
+      const allLegacy = [...(osRes.data || []), ...(salesRes.data || [])];
+      
+      // 3. Filtrar apenas quem não existe e remover duplicatas do próprio lote
+      const toAdd = new Map();
+      allLegacy.forEach(legacy => {
+        if (!legacy.customer_phone) return;
+        const phone = legacy.customer_phone.trim();
+        
+        if (!existingPhones.has(phone) && !toAdd.has(phone)) {
+          toAdd.set(phone, {
+            name: legacy.customer_name || "Lead Importado",
+            phone: phone,
+            source: "os_vendas",
+            status: "novo",
+            store_id: legacy.store_id || (activeStoreId !== "all" ? activeStoreId : null),
+            created_by: legacy.created_by || user?.id,
+            notes: "Sincronizado automaticamente de OS/Vendas"
+          });
+        }
+      });
+
+      if (toAdd.size === 0) {
+        toast.dismiss(toastId);
+        toast.info("Todos os potenciais leads já estão sincronizados!");
+        return;
+      }
+
+      const entries = Array.from(toAdd.values());
+      const { error } = await supabase.from("leads").insert(entries);
+
+      if (error) throw error;
+
+      toast.dismiss(toastId);
+      toast.success(`${entries.length} novos leads sincronizados!`);
+      fetchData();
+    } catch (err: any) {
+      toast.dismiss(toastId);
+      toast.error("Erro na sincronização: " + err.message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const [filterStore, setFilterStore] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
   const [filterVendedor, setFilterVendedor] = useState("all");
