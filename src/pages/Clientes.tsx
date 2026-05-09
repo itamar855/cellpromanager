@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Search, Users, Phone, Mail, MapPin, ShoppingBag, Wrench, Plus, Pencil, Trash2 } from "lucide-react";
+import { Search, Users, Phone, Mail, MapPin, ShoppingBag, Wrench, Plus, Pencil, Trash2, History } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 const formatCurrency = (value: number) =>
@@ -140,6 +140,51 @@ const Clientes = () => {
     else { toast.success("Cliente removido!"); setSelected(null); fetchData(); }
   };
 
+  const handleSyncCustomers = async () => {
+    setLoading(true);
+    toast.info("Sincronizando clientes das Ordens de Serviço e Vendas...");
+    
+    try {
+      // 1. Buscar nomes únicos de OS
+      const { data: osData } = await supabase.from("service_orders").select("customer_name, customer_phone, customer_cpf, store_id, created_by");
+      
+      // 2. Buscar nomes únicos de Vendas
+      const { data: salesData } = await supabase.from("sales").select("customer_name, customer_phone, customer_cpf, store_id, created_by");
+      
+      const allLegacy = [...(osData || []), ...(salesData || [])];
+      let addedCount = 0;
+
+      for (const legacy of allLegacy) {
+        if (!legacy.customer_name) continue;
+
+        // Verificar se já existe (pelo nome - case insensitive)
+        const exists = customers.some(c => c.name.toLowerCase() === legacy.customer_name.toLowerCase());
+        
+        if (!exists) {
+          const { error } = await supabase.from("customers").insert({
+            name: legacy.customer_name,
+            phone: legacy.customer_phone || null,
+            cpf: legacy.customer_cpf || null,
+            store_id: legacy.store_id || (activeStoreId !== "all" ? activeStoreId : null),
+            created_by: legacy.created_by || user?.id,
+          });
+          if (!error) addedCount++;
+        }
+      }
+
+      if (addedCount > 0) {
+        toast.success(`${addedCount} novos clientes sincronizados!`);
+        fetchData();
+      } else {
+        toast.info("Todos os clientes já estão na lista.");
+      }
+    } catch (err) {
+      toast.error("Erro na sincronização.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -147,9 +192,14 @@ const Clientes = () => {
           <h1 className="font-display text-xl md:text-3xl font-bold tracking-tight">Clientes</h1>
           <p className="text-muted-foreground text-sm mt-0.5">{customers.length} clientes cadastrados</p>
         </div>
-        <Button className="gap-2 h-10" onClick={openCreate}>
-          <Plus className="h-4 w-4" /> Novo Cliente
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-2 h-10 border-primary/30 text-primary hover:bg-primary/10" onClick={handleSyncCustomers} disabled={loading}>
+            <History className="h-4 w-4" /> Sincronizar
+          </Button>
+          <Button className="gap-2 h-10" onClick={openCreate}>
+            <Plus className="h-4 w-4" /> Novo Cliente
+          </Button>
+        </div>
       </div>
 
       <div className="relative">
