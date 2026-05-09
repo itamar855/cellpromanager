@@ -45,14 +45,15 @@ serve(async (req) => {
           if (message && message.text) {
             const { data: lead } = await supabaseClient
               .from('leads')
-              .select('id, name')
+              .select('id, name, avatar_url')
               .eq('instagram_user_id', senderId)
               .maybeSingle();
 
             let leadId = lead?.id;
             let userName = lead?.name || "IG User " + senderId.substring(0, 5);
+            let avatarUrl = lead?.avatar_url || null;
 
-            if (!leadId || userName.startsWith('IG User')) {
+            if (!leadId || userName.startsWith('IG User') || !avatarUrl) {
               try {
                 const { data: config } = await supabaseClient
                   .from('instagram_config')
@@ -62,12 +63,15 @@ serve(async (req) => {
                   .single();
 
                 if (config?.page_access_token) {
-                  const graphUrl = "https://graph.facebook.com/v19.0/" + senderId + "?fields=name&access_token=" + config.page_access_token;
+                  const graphUrl = "https://graph.facebook.com/v19.0/" + senderId + "?fields=name,profile_pic&access_token=" + config.page_access_token;
                   const response = await fetch(graphUrl);
                   const userData = await response.json();
                   
                   if (userData && userData.name) {
                     userName = userData.name;
+                  }
+                  if (userData && userData.profile_pic) {
+                    avatarUrl = userData.profile_pic;
                   }
                 }
               } catch (profileError) {
@@ -81,6 +85,7 @@ serve(async (req) => {
                 .insert({
                   name: userName,
                   instagram_user_id: senderId,
+                  avatar_url: avatarUrl,
                   source: 'instagram',
                   status: 'novo',
                 })
@@ -89,10 +94,13 @@ serve(async (req) => {
               
               if (createError) throw createError;
               leadId = newLead.id;
-            } else if (userName !== lead.name) {
+            } else if (userName !== lead.name || avatarUrl !== lead.avatar_url) {
               await supabaseClient
                 .from('leads')
-                .update({ name: userName })
+                .update({ 
+                  name: userName,
+                  avatar_url: avatarUrl
+                })
                 .eq('id', leadId);
             }
 
