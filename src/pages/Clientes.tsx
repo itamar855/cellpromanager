@@ -142,44 +142,57 @@ const Clientes = () => {
 
   const handleSyncCustomers = async () => {
     setLoading(true);
-    toast.info("Sincronizando clientes das Ordens de Serviço e Vendas...");
+    const toastId = toast.loading("Sincronizando todos os clientes...");
     
     try {
-      // 1. Buscar nomes únicos de OS
-      const { data: osData } = await supabase.from("service_orders").select("customer_name, customer_phone, customer_cpf, store_id, created_by");
-      
-      // 2. Buscar nomes únicos de Vendas
-      const { data: salesData } = await supabase.from("sales").select("customer_name, customer_phone, customer_cpf, store_id, created_by");
-      
-      const allLegacy = [...(osData || []), ...(salesData || [])];
-      let addedCount = 0;
+      // 1. Buscar todos os clientes atuais para conferência real
+      const { data: currentCusts } = await supabase.from("customers").select("name");
+      const existingNames = new Set(currentCusts?.map(c => c.name.toLowerCase().trim()) || []);
 
-      for (const legacy of allLegacy) {
-        if (!legacy.customer_name) continue;
-
-        // Verificar se já existe (pelo nome - case insensitive)
-        const exists = customers.some(c => c.name.toLowerCase() === legacy.customer_name.toLowerCase());
+      // 2. Buscar nomes de OS e Vendas (com limite maior)
+      const [osRes, salesRes] = await Promise.all([
+        supabase.from("service_orders").select("customer_name, customer_phone, customer_cpf, store_id, created_by").limit(5000),
+        supabase.from("sales").select("customer_name, customer_phone, customer_cpf, store_id, created_by").limit(5000)
+      ]);
+      
+      const allLegacy = [...(osRes.data || []), ...(salesRes.data || [])];
+      
+      // 3. Filtrar apenas quem não existe e remover duplicatas do próprio lote
+      const toAdd = new Map();
+      allLegacy.forEach(legacy => {
+        if (!legacy.customer_name) return;
+        const cleanName = legacy.customer_name.trim();
+        const lowerName = cleanName.toLowerCase();
         
-        if (!exists) {
-          const { error } = await supabase.from("customers").insert({
-            name: legacy.customer_name,
+        if (!existingNames.has(lowerName) && !toAdd.has(lowerName)) {
+          toAdd.set(lowerName, {
+            name: cleanName,
             phone: legacy.customer_phone || null,
             cpf: legacy.customer_cpf || null,
             store_id: legacy.store_id || (activeStoreId !== "all" ? activeStoreId : null),
             created_by: legacy.created_by || user?.id,
           });
-          if (!error) addedCount++;
         }
+      });
+
+      if (toAdd.size === 0) {
+        toast.dismiss(toastId);
+        toast.info("Todos os clientes já estão sincronizados!");
+        return;
       }
 
-      if (addedCount > 0) {
-        toast.success(`${addedCount} novos clientes sincronizados!`);
-        fetchData();
-      } else {
-        toast.info("Todos os clientes já estão na lista.");
-      }
-    } catch (err) {
-      toast.error("Erro na sincronização.");
+      // 4. Inserir em lotes (para ser mais rápido e seguro)
+      const entries = Array.from(toAdd.values());
+      const { error } = await supabase.from("customers").insert(entries);
+
+      if (error) throw error;
+
+      toast.dismiss(toastId);
+      toast.success(`${entries.length} novos clientes sincronizados!`);
+      fetchData();
+    } catch (err: any) {
+      toast.dismiss(toastId);
+      toast.error("Erro na sincronização: " + err.message);
     } finally {
       setLoading(false);
     }
