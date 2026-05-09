@@ -472,7 +472,7 @@ const Clientes = () => {
               </div>
 
               <div className="pt-2">
-                <Button className="w-full gap-2" variant="outline" onClick={() => window.location.href = '/os'}>
+                <Button className="w-full gap-2" variant="outline" onClick={() => window.location.href = '/ordens-servico'}>
                   Ir para Ordens de Serviço
                 </Button>
               </div>
