@@ -147,7 +147,7 @@ const Configuracoes = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 max-w-4xl mx-auto pb-20">
       <div>
         <h1 className="font-display text-xl md:text-3xl font-bold tracking-tight">Configurações & Automação</h1>
         <p className="text-muted-foreground text-sm mt-0.5">Integrações N8N, Zapier e Make para envio de WhatsApp</p>
@@ -260,10 +260,10 @@ const Configuracoes = () => {
               </p>
               <div className="flex items-center gap-2 bg-white/50 p-2 rounded border border-emerald-200">
                 <code className="text-[10px] flex-1 break-all text-emerald-900">
-                  {`https://${window.location.hostname.split('.')[0]}.supabase.co/functions/v1/whatsapp-webhook`}
+                  {`https://jeaazxoeodgwvijutfyb.supabase.co/functions/v1/whatsapp-webhook`}
                 </code>
                 <Button type="button" variant="outline" className="h-7 px-2 text-[10px] border-emerald-200 text-emerald-700 font-bold" onClick={() => {
-                  navigator.clipboard.writeText(`https://${window.location.hostname.split('.')[0]}.supabase.co/functions/v1/whatsapp-webhook`);
+                  navigator.clipboard.writeText(`https://jeaazxoeodgwvijutfyb.supabase.co/functions/v1/whatsapp-webhook`);
                   toast.success("Link copiado!");
                 }}>Copiar</Button>
               </div>
@@ -311,9 +311,9 @@ const Configuracoes = () => {
               <p className="text-[11px] font-bold text-pink-700 uppercase flex items-center gap-1"><Info className="h-3 w-3" /> Webhook para Meta for Developers</p>
               <p className="text-xs text-pink-800/80 leading-relaxed">No painel do seu app no Meta, configure o Webhook para o objeto <b>instagram</b> com a URL:</p>
               <div className="flex items-center gap-2 bg-white/50 p-2 rounded border border-pink-200">
-                <code className="text-[10px] flex-1 break-all text-pink-900">{`https://${window.location.hostname.split('.')[0]}.supabase.co/functions/v1/instagram-webhook`}</code>
+                <code className="text-[10px] flex-1 break-all text-pink-900">{`https://jeaazxoeodgwvijutfyb.supabase.co/functions/v1/instagram-webhook`}</code>
                 <Button type="button" variant="outline" className="h-7 px-2 text-[10px] border-pink-200 text-pink-700 font-bold" onClick={() => {
-                  navigator.clipboard.writeText(`https://${window.location.hostname.split('.')[0]}.supabase.co/functions/v1/instagram-webhook`);
+                  navigator.clipboard.writeText(`https://jeaazxoeodgwvijutfyb.supabase.co/functions/v1/instagram-webhook`);
                   toast.success("Copiado!");
                 }}>Copiar</Button>
               </div>
