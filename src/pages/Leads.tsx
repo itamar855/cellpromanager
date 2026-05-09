@@ -450,7 +450,14 @@ const Leads = () => {
                         <Label className="text-xs">Origem</Label>
                         <Select value={form.source} onValueChange={v => setForm({...form, source: v})}>
                           <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                          <SelectContent><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="instagram">Instagram</SelectItem><SelectItem value="trafego_pago">Tráfego Pago</SelectItem><SelectItem value="indicacao">Indicação</SelectItem><SelectItem value="outro">Outro</SelectItem></SelectContent>
+                  <SelectContent>
+                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                    <SelectItem value="instagram">Instagram</SelectItem>
+                    <SelectItem value="trafego_pago">Tráfego Pago</SelectItem>
+                    <SelectItem value="indicacao">Indicação</SelectItem>
+                    <SelectItem value="os_vendas">Importado (OS/Vendas)</SelectItem>
+                    <SelectItem value="outro">Outro</SelectItem>
+                  </SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-1.5">
@@ -718,7 +725,14 @@ const Leads = () => {
                 <Label className="text-xs">Origem</Label>
                 <Select value={form.source} onValueChange={v => setForm({...form, source: v})}>
                   <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="instagram">Instagram</SelectItem><SelectItem value="trafego_pago">Tráfego Pago</SelectItem><SelectItem value="indicacao">Indicação</SelectItem></SelectContent>
+                  <SelectContent>
+                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                    <SelectItem value="instagram">Instagram</SelectItem>
+                    <SelectItem value="trafego_pago">Tráfego Pago</SelectItem>
+                    <SelectItem value="indicacao">Indicação</SelectItem>
+                    <SelectItem value="os_vendas">Importado (OS/Vendas)</SelectItem>
+                    <SelectItem value="outro">Outro</SelectItem>
+                  </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
