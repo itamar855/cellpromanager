@@ -5,7 +5,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
   LayoutDashboard, Package, ArrowUpDown, ShoppingBag, Store, Landmark, PiggyBank,
-  LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle, FileText, Download, Brain, Settings, Activity, ChevronDown, Wallet, MessageSquare
+  LogOut, Smartphone, Wrench, Users, Sun, Moon, UserCircle, FileText, Download, Brain, Settings, Activity, ChevronDown, Wallet, MessageSquare, ShieldCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ const navItems = [
   { label: "Auditoria", icon: Activity, path: "/auditoria", permission: "auditoria" },
   { label: "Config.", icon: Settings, path: "/configuracoes", permission: "configuracoes" },
   { label: "IA", icon: Brain, path: "/assistente-ia", permission: "ia" },
+  { label: "Teste Meta", icon: ShieldCheck, path: "/teste-meta", permission: "configuracoes" },
 ];
 
 const AppLayout = ({ children }: { children: ReactNode }) => {
@@ -83,7 +84,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
   });
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden">
+    <div className="flex h-[100dvh] overflow-hidden text-foreground bg-background">
       {/* Sidebar - Desktop */}
       <aside className="hidden md:flex w-64 flex-col bg-sidebar-background border-r border-sidebar-border">
         <div className="p-6">
