@@ -40,7 +40,6 @@ const Clientes = () => {
     let productsQuery = supabase.from("products").select("id, name");
     
     if (activeStoreId !== "all") {
-      customersQuery = customersQuery.or(`store_id.eq.${activeStoreId},store_id.is.null`);
       salesQuery = salesQuery.eq("store_id", activeStoreId);
       ordersQuery = ordersQuery.eq("store_id", activeStoreId);
       productsQuery = productsQuery.eq("store_id", activeStoreId);
