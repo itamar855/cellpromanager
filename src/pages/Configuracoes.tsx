@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Webhook, Trash2, Plus, Send, ExternalLink, Info, MessageSquare, ShieldCheck, Globe, Instagram } from "lucide-react";
+import { Webhook, Trash2, Plus, Send, ExternalLink, Info, MessageSquare, ShieldCheck, Globe, Camera } from "lucide-react";
   const [instagramConfig, setInstagramConfig] = useState<any>({
     page_id: "", page_access_token: "", instagram_business_account_id: "", is_active: true
   });
@@ -67,7 +67,7 @@ const Configuracoes = () => {
         <div className="h-1 bg-gradient-to-r from-pink-500 to-purple-600" />
         <CardHeader>
           <CardTitle className="font-display text-lg flex items-center gap-2">
-            <Instagram className="h-5 w-5 text-pink-500" />
+            <Camera className="h-5 w-5 text-pink-500" />
             Captura de Leads Instagram (Graph API)
           </CardTitle>
           <CardDescription>
