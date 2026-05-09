@@ -1,5 +1,3 @@
-import TesteMeta from "./pages/TesteMeta";
-              <Route path="/teste-meta" element={<ProtectedRoute><TesteMeta /></ProtectedRoute>} />
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -30,6 +28,7 @@ import Configuracoes from "./pages/Configuracoes";
 import FinancasPF from "./pages/FinancasPF";
 import Leads from "./pages/Leads";
 import Avaliacao from "./pages/Avaliacao";
+import TesteMeta from "./pages/TesteMeta";
 
 const queryClient = new QueryClient();
 
@@ -78,6 +77,7 @@ const App = () => (
               <Route path="/financas-pf" element={<ProtectedRoute><FinancasPF /></ProtectedRoute>} />
               <Route path="/leads" element={<ProtectedRoute><Leads /></ProtectedRoute>} />
               <Route path="/assistente-ia" element={<ProtectedRoute><AIAssistant /></ProtectedRoute>} />
+              <Route path="/teste-meta" element={<ProtectedRoute><TesteMeta /></ProtectedRoute>} />
               <Route path="/instalar" element={<Instalar />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               {/* Rota pública para o cliente acompanhar a OS */}
