@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -163,40 +163,25 @@ const Leads = () => {
     setVendedores(profilesData ?? []);
   };
 
-  const fetchMessages = async (leadId: string) => {
-    const { data } = await supabase
-      .from("lead_messages")
-      .select("*")
-      .eq("lead_id", leadId)
-      .order("created_at", { ascending: true });
+  const fetchMessages = useCallback(async (leadId: string) => {
+    const { data } = await supabase.from("lead_messages").select("*").eq("lead_id", leadId).order("created_at", { ascending: true });
     setChatMessages(data ?? []);
-  };
+
+    // Mark as read when opening chat
+    await supabase.from("leads").update({ has_unread: false }).eq("id", leadId);
+  }, []);
+
+  useEffect(() => { fetchData(); }, [activeStoreId]);
 
   useEffect(() => {
-    fetchData();
-
-    console.log("Subscribing to realtime...");
-    const leadsChannel = supabase
-      .channel('leads-all')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, (p) => {
-        console.log("Lead change detected!", p);
-        fetchData();
-      })
+    const channel = supabase.channel('crm-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchData())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lead_messages' }, (payload) => {
-        console.log("Message change detected!", payload);
-        if (selectedLead && payload.new.lead_id === selectedLead.id) {
-          fetchMessages(selectedLead.id);
-        }
+        if (selectedLead?.id === payload.new.lead_id) fetchMessages(selectedLead.id);
       })
-      .subscribe((status) => {
-        console.log("Realtime subscription status:", status);
-      });
-
-    return () => {
-      console.log("Unsubscribing from realtime...");
-      supabase.removeChannel(leadsChannel);
-    };
-  }, [selectedLead?.id]); // Only re-subscribe if the selected lead ID changes
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [selectedLead?.id, fetchData, fetchMessages]);
 
   useEffect(() => {
     const scrollContainer = document.querySelector('[data-radix-scroll-area-viewport]');
