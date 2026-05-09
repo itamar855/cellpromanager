@@ -576,7 +576,15 @@ const Leads = () => {
                           <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
                         )}
                       </div>
-                      {lead.source === 'whatsapp' ? <MessageCircle className="h-3 w-3 text-green-500" /> : <Instagram className="h-3 w-3 text-pink-500" />}
+                      <div className="flex flex-col items-end gap-1">
+                        {lead.source === 'whatsapp' ? (
+                          <MessageCircle className="h-3 w-3 text-green-500" />
+                        ) : lead.source === 'instagram' ? (
+                          <Instagram className="h-3 w-3 text-pink-500" />
+                        ) : (
+                          <Badge variant="outline" className="text-[7px] h-3 px-1 border-primary/20 bg-primary/5 text-primary">CRM</Badge>
+                        )}
+                      </div>
                     </div>
                     {lead.phone && <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Phone className="h-2.5 w-2.5" /> {lead.phone}</div>}
                     <div className="flex flex-col gap-1 mt-1">
