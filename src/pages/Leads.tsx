@@ -16,7 +16,7 @@ import {
 import { toast } from "sonner";
 import { 
   Trash2, MoreVertical, MessageSquare, ChevronRight, Download,
-  MessageCircle, Phone, Plus, Users, Mail, Search, Shield,
+  MessageCircle, Phone, Plus, Users, Mail, Search, Shield, Store,
   Image as ImageIcon, Mic, Send, Paperclip, UserPlus, Filter,
   Play, Pause, X, CheckCheck, Clock
 } from "lucide-react";
