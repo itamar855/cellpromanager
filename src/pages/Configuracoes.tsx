@@ -8,7 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Webhook, Trash2, Plus, Send, ExternalLink, Info, MessageSquare, ShieldCheck, Globe } from "lucide-react";
+import { Webhook, Trash2, Plus, Send, ExternalLink, Info, MessageSquare, ShieldCheck, Globe, Camera } from "lucide-react";
+  const [instagramConfig, setInstagramConfig] = useState<any>({
+    page_id: "", page_access_token: "", instagram_business_account_id: "", is_active: true
+  });
 import type { Tables } from "@/integrations/supabase/types";
 
 const eventLabels: Record<string, string> = {
@@ -32,14 +35,82 @@ const Configuracoes = () => {
       setStores([]);
       return;
     }
-    const [wbRes, storesRes, waRes] = await Promise.all([
+    const [wbRes, storesRes, waRes, igRes] = await Promise.all([
       supabase.from("webhooks").select("*").eq("store_id", activeStoreId).order("created_at", { ascending: false }),
       supabase.from("stores").select("*"),
       supabase.from("whatsapp_config").select("*").eq("store_id", activeStoreId).maybeSingle(),
+      supabase.from("instagram_config").select("*").eq("store_id", activeStoreId).maybeSingle(),
     ]);
     setWebhooks(wbRes.data ?? []);
     setStores(storesRes.data ?? []);
     if (waRes.data) setWhatsappConfig(waRes.data);
+    if (igRes.data) setInstagramConfig(igRes.data);
+  const handleSaveInstagramConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    const payload = {
+      ...instagramConfig,
+      store_id: activeStoreId || (stores.length > 0 ? stores[0].id : null)
+    };
+    delete payload.id; delete payload.created_at; delete payload.updated_at;
+
+    const { error } = instagramConfig.id 
+      ? await supabase.from("instagram_config").update(payload).eq("id", instagramConfig.id)
+      : await supabase.from("instagram_config").insert(payload);
+
+    if (error) toast.error("Erro Instagram: " + error.message);
+    else { toast.success("Configuração do Instagram salva!"); fetchData(); }
+    setLoading(false);
+  };
+
+      <Card className="border-border/50 shadow-sm overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-pink-500 to-purple-600" />
+        <CardHeader>
+          <CardTitle className="font-display text-lg flex items-center gap-2">
+            <Camera className="h-5 w-5 text-pink-500" />
+            Captura de Leads Instagram (Graph API)
+          </CardTitle>
+          <CardDescription>
+            Receba DMs do Instagram diretamente no seu CRM como leads novos.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSaveInstagramConfig} className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Page ID (Facebook)</Label>
+                <Input value={instagramConfig.page_id} onChange={e => setInstagramConfig({...instagramConfig, page_id: e.target.value})} placeholder="ID da Página vinculada" className="h-10 text-sm" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Instagram Business ID</Label>
+                <Input value={instagramConfig.instagram_business_account_id} onChange={e => setInstagramConfig({...instagramConfig, instagram_business_account_id: e.target.value})} placeholder="ID da Conta Business" className="h-10 text-sm" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Page Access Token (Permanent)</Label>
+              <Input type="password" value={instagramConfig.page_access_token} onChange={e => setInstagramConfig({...instagramConfig, page_access_token: e.target.value})} placeholder="Seu Token de Acesso da Graph API" className="h-10 text-sm" />
+            </div>
+            
+            <div className="rounded-lg bg-pink-500/5 border border-pink-500/20 p-3 space-y-2">
+              <p className="text-[11px] font-bold text-pink-700 uppercase flex items-center gap-1"><Info className="h-3 w-3" /> Webhook para Meta for Developers</p>
+              <p className="text-xs text-pink-800/80 leading-relaxed">No painel do seu app no Meta, configure o Webhook para o objeto <b>instagram</b> com a URL:</p>
+              <div className="flex items-center gap-2 bg-white/50 p-2 rounded border border-pink-200">
+                <code className="text-[10px] flex-1 break-all text-pink-900">{`https://${window.location.hostname.split('.')[0]}.supabase.co/functions/v1/instagram-webhook`}</code>
+                <Button type="button" variant="outline" className="h-7 px-2 text-[10px] border-pink-200 text-pink-700 font-bold" onClick={() => {
+                  navigator.clipboard.writeText(`https://${window.location.hostname.split('.')[0]}.supabase.co/functions/v1/instagram-webhook`);
+                  toast.success("Copiado!");
+                }}>Copiar</Button>
+              </div>
+              <p className="text-[10px] text-pink-700/60 mt-1">Verify Token: <b>instagram_crm_verify</b> | Eventos: <b>messages</b></p>
+            </div>
+
+            <Button type="submit" className="w-full h-11 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 shadow-lg text-white font-bold" disabled={loading}>
+              {loading ? "Salvando..." : instagramConfig.id ? "Atualizar Integração Instagram" : "Salvar Configurações Instagram"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
     
     if (storesRes.data && storesRes.data.length > 0 && !form.store_id) {
       setForm(f => ({ ...f, store_id: storesRes.data[0].id }));

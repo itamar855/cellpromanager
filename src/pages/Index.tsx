@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Package, TrendingUp, TrendingDown, Wrench,
-  ArrowUpRight, ArrowDownRight, ShoppingBag, AlertTriangle, Zap, Store,
+  ArrowUpRight, ArrowDownRight, ShoppingBag, AlertTriangle, Zap, Store, Users,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -41,7 +41,7 @@ const Dashboard = () => {
     totalStock: 0, totalInvested: 0, totalInvestedAcc: 0,
     totalSalesRevenue: 0, totalProfit: 0,
     expensesPJ: 0, expensesPF: 0, storeCount: 0, openOS: 0, salesCount: 0,
-    totalAccessories: 0,
+    totalAccessories: 0, totalLeads: 0,
   });
   const [storeData, setStoreData] = useState<{ name: string; aparelhos: number; acessorios: number; investido: number }[]>([]);
   const [dailySales, setDailySales] = useState<{ date: string; total: number }[]>([]);
@@ -77,12 +77,15 @@ const Dashboard = () => {
       can("os")
         ? (!isFiltered ? supabase.from("service_orders").select("id, status, store_id") : supabase.from("service_orders").select("id, status, store_id").eq("store_id", effectiveStoreId))
         : Promise.resolve({ data: [] }),
-      can("estoque")
+      can("estoque") 
         ? (!isFiltered ? supabase.from("accessories" as any).select("*") : supabase.from("accessories" as any).select("*").eq("store_id", effectiveStoreId))
+        : Promise.resolve({ data: [] }),
+      can("leads")
+        ? (!isFiltered ? supabase.from("leads").select("id, created_at") : supabase.from("leads").select("id, created_at").eq("store_id", effectiveStoreId))
         : Promise.resolve({ data: [] }),
     ];
 
-    const [productsRes, transactionsRes, storesRes, salesRes, osRes, accRes] = await Promise.all(fetches);
+    const [productsRes, transactionsRes, storesRes, salesRes, osRes, accRes, leadsRes] = await Promise.all(fetches);
 
     const stores = storesRes.data ?? [];
     setStores(stores);
@@ -91,6 +94,7 @@ const Dashboard = () => {
     const sales = salesRes.data ?? [];
     const serviceOrders = osRes.data ?? [];
     const accessories = (accRes.data ?? []) as any[];
+    const leads = leadsRes.data ?? [];
 
     const inStock = products.filter((p: any) => p.status === "in_stock");
     const totalInvested = inStock.reduce((sum: number, p: any) => sum + Number(p.cost_price), 0);
@@ -112,6 +116,7 @@ const Dashboard = () => {
       storeCount: stores.filter((s: any) => s.status === "active").length,
       openOS, salesCount: sales.length,
       totalAccessories: accessories.reduce((sum: number, a: any) => sum + a.quantity, 0),
+      totalLeads: leads.length,
     });
 
     if (isAdmin) {
@@ -187,6 +192,7 @@ const Dashboard = () => {
     },
     can("vendas") && canSeeFinancials && { label: "Lucro", value: formatCurrency(stats.totalProfit), sub: "nas vendas", icon: stats.totalProfit >= 0 ? TrendingUp : TrendingDown, color: stats.totalProfit >= 0 ? "text-primary" : "text-destructive" },
     can("os") && { label: "OS Abertas", value: String(stats.openOS), sub: "em andamento", icon: Wrench, color: "text-accent" },
+    can("leads") && { label: "Leads Funil", value: String(stats.totalLeads), sub: "em prospecção", icon: Users, color: "text-primary" },
   ].filter(Boolean) as { label: string; value: string; sub: string; icon: any; color: string }[];
 
   return (

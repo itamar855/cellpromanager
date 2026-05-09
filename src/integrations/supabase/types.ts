@@ -655,6 +655,71 @@ export type Database = {
           },
         ]
       }
+      instagram_config: {
+        Row: {
+          created_at: string | null
+          id: string
+          instagram_business_account_id: string | null
+          is_active: boolean | null
+          page_access_token: string | null
+          page_id: string | null
+          store_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          instagram_business_account_id?: string | null
+          is_active?: boolean | null
+          page_access_token?: string | null
+          page_id?: string | null
+          store_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          instagram_business_account_id?: string | null
+          is_active?: boolean | null
+          page_access_token?: string | null
+          page_id?: string | null
+          store_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instagram_config_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      instagram_webhooks_logs: {
+        Row: {
+          created_at: string | null
+          error_message: string | null
+          id: string
+          payload: Json | null
+          processed: boolean | null
+        }
+        Insert: {
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          payload?: Json | null
+          processed?: boolean | null
+        }
+        Update: {
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          payload?: Json | null
+          processed?: boolean | null
+        }
+        Relationships: []
+      }
       lead_messages: {
         Row: {
           channel: string | null
@@ -751,6 +816,8 @@ export type Database = {
           email: string | null
           has_unread: boolean | null
           id: string
+          instagram_user_id: string | null
+          instagram_username: string | null
           last_message_at: string | null
           name: string
           notes: string | null
@@ -767,6 +834,8 @@ export type Database = {
           email?: string | null
           has_unread?: boolean | null
           id?: string
+          instagram_user_id?: string | null
+          instagram_username?: string | null
           last_message_at?: string | null
           name: string
           notes?: string | null
@@ -783,6 +852,8 @@ export type Database = {
           email?: string | null
           has_unread?: boolean | null
           id?: string
+          instagram_user_id?: string | null
+          instagram_username?: string | null
           last_message_at?: string | null
           name?: string
           notes?: string | null
