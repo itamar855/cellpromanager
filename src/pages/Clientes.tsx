@@ -35,16 +35,22 @@ const Clientes = () => {
     
     // Filtro de loja para clientes (se a coluna existir)
     let customersQuery = supabase.from("customers").select("*").order("created_at", { ascending: false });
+    let salesQuery = supabase.from("sales").select("*");
+    let ordersQuery = supabase.from("service_orders").select("*");
+    let productsQuery = supabase.from("products").select("id, name");
     
     if (activeStoreId !== "all") {
       customersQuery = customersQuery.or(`store_id.eq.${activeStoreId},store_id.is.null`);
+      salesQuery = salesQuery.eq("store_id", activeStoreId);
+      ordersQuery = ordersQuery.eq("store_id", activeStoreId);
+      productsQuery = productsQuery.eq("store_id", activeStoreId);
     }
 
     const [custRes, salesRes, ordersRes, prodsRes] = await Promise.all([
       customersQuery,
-      supabase.from("sales").select("*").eq("store_id", activeStoreId),
-      supabase.from("service_orders").select("*").eq("store_id", activeStoreId),
-      supabase.from("products").select("id, name").eq("store_id", activeStoreId),
+      salesQuery,
+      ordersQuery,
+      productsQuery,
     ]);
     setCustomers(custRes.data ?? []);
     setSales(salesRes.data ?? []);
