@@ -1,3 +1,5 @@
+import TesteMeta from "./pages/TesteMeta";
+              <Route path="/teste-meta" element={<ProtectedRoute><TesteMeta /></ProtectedRoute>} />
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
