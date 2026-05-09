@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Camera, User, Globe, Search, ShieldCheck } from "lucide-center";
-import { Smartphone, Info } from "lucide-react";
+import { Camera, User, Globe, Search, ShieldCheck, Smartphone, Info } from "lucide-react";
 
 const TesteMeta = () => {
   const [userId, setUserId] = useState("");
@@ -36,7 +35,7 @@ const TesteMeta = () => {
         return;
       }
 
-      const graphUrl = `https://graph.facebook.com/v19.0/${userId}?fields=name,profile_pic&access_token=${config.page_access_token}`;
+      const graphUrl = "https://graph.facebook.com/v19.0/" + userId + "?fields=name,profile_pic&access_token=" + config.page_access_token;
       
       const response = await fetch(graphUrl);
       const data = await response.json();
@@ -59,7 +58,7 @@ const TesteMeta = () => {
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
       <div>
-        <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight">Validador de API Meta</h1>
+        <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight text-foreground">Validador de API Meta</h1>
         <p className="text-muted-foreground text-sm mt-1">Teste a captura de nome e foto de perfil do Instagram usando um ID de usuário.</p>
       </div>
 
