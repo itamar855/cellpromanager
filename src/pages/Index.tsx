@@ -81,7 +81,7 @@ const Dashboard = () => {
         ? (!isFiltered ? supabase.from("accessories" as any).select("*") : supabase.from("accessories" as any).select("*").eq("store_id", effectiveStoreId))
         : Promise.resolve({ data: [] }),
       can("leads")
-        ? (!isFiltered ? supabase.from("leads").select("id, created_at") : supabase.from("leads").select("id, created_at").eq("store_id", effectiveStoreId))
+        ? (!isFiltered ? supabase.from("leads").select("id, created_at") : supabase.from("leads").select("id, created_at").or(`store_id.eq.${effectiveStoreId},store_id.is.null`))
         : Promise.resolve({ data: [] }),
     ];
 
