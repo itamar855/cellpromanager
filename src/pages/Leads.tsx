@@ -147,11 +147,11 @@ const Leads = () => {
 
     // Multi-agent filtering: only see assigned leads if not admin/gerente
     if (userRole !== "admin" && userRole !== "gerente") {
-      query = query.eq("assigned_to", user?.id);
+      query = query.or(`assigned_to.eq.${user?.id},assigned_to.is.null`);
     }
 
     if (activeStoreId && activeStoreId !== "all") {
-      query = query.eq("store_id", activeStoreId);
+      query = query.or(`store_id.eq.${activeStoreId},store_id.is.null`);
     }
 
     const { data: leadsData } = await query;
@@ -283,7 +283,7 @@ const Leads = () => {
   const filteredLeads = leads.filter(lead => {
     const matchesSearch = (lead.name || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
                           (lead.phone && lead.phone.includes(searchTerm));
-    const matchesStore = filterStore === "all" || lead.store_id === filterStore;
+    const matchesStore = filterStore === "all" || lead.store_id === filterStore || !lead.store_id;
     const matchesSource = filterSource === "all" || lead.source === filterSource;
     const matchesVendedor = filterVendedor === "all" || lead.assigned_to === filterVendedor;
     return matchesSearch && matchesStore && matchesSource && matchesVendedor;

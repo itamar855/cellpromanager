@@ -6,9 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Cache em memória (dura enquanto a instância da Edge Function estiver quente)
 const profileCache = new Map<string, { name: string, avatarUrl: string, timestamp: number }>();
-const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 horas
+const CACHE_TTL = 1000 * 60 * 60 * 24;
 
 serve(async (req) => {
   const { method } = req;
@@ -49,32 +48,33 @@ serve(async (req) => {
           if (message && message.text) {
             const { data: lead } = await supabaseClient
               .from('leads')
-              .select('id, name, avatar_url')
+              .select('id, name, avatar_url, store_id')
               .eq('instagram_user_id', senderId)
               .maybeSingle();
 
             let leadId = lead?.id;
             let userName = lead?.name || "IG User " + senderId.substring(0, 5);
             let avatarUrl = lead?.avatar_url || null;
+            let storeId = lead?.store_id || null;
 
-            // Verificar cache em memória primeiro
+            // Buscar configuração para pegar Token e Store ID
+            const { data: config } = await supabaseClient
+              .from('instagram_config')
+              .select('page_access_token, store_id')
+              .eq('is_active', true)
+              .limit(1)
+              .single();
+
+            const configStoreId = config?.store_id || null;
+
             const cached = profileCache.get(senderId);
             const now = Date.now();
 
             if (cached && (now - cached.timestamp) < CACHE_TTL) {
               userName = cached.name;
               avatarUrl = cached.avatarUrl;
-              console.log("Perfil recuperado do cache em memória para:", senderId);
             } else if (!leadId || userName.startsWith('IG User') || !avatarUrl) {
-              // Se não está no cache ou o lead é novo/incompleto, consulta a Graph API
               try {
-                const { data: config } = await supabaseClient
-                  .from('instagram_config')
-                  .select('page_access_token')
-                  .eq('is_active', true)
-                  .limit(1)
-                  .single();
-
                 if (config?.page_access_token) {
                   const graphUrl = "https://graph.facebook.com/v19.0/" + senderId + "?fields=name,profile_pic&access_token=" + config.page_access_token;
                   const response = await fetch(graphUrl);
@@ -87,7 +87,6 @@ serve(async (req) => {
                     avatarUrl = userData.profile_pic;
                   }
 
-                  // Salvar no cache
                   profileCache.set(senderId, {
                     name: userName,
                     avatarUrl: avatarUrl || "",
@@ -108,20 +107,26 @@ serve(async (req) => {
                   avatar_url: avatarUrl,
                   source: 'instagram',
                   status: 'novo',
+                  store_id: configStoreId // Usar store_id da configuração
                 })
                 .select('id')
                 .single();
               
               if (createError) throw createError;
               leadId = newLead.id;
-            } else if (userName !== lead.name || avatarUrl !== lead.avatar_url) {
-              await supabaseClient
-                .from('leads')
-                .update({ 
-                  name: userName,
-                  avatar_url: avatarUrl
-                })
-                .eq('id', leadId);
+            } else {
+              // Atualizar se mudou algo (incluindo store_id se for nulo)
+              const updates: any = {};
+              if (userName !== lead.name) updates.name = userName;
+              if (avatarUrl !== lead.avatar_url) updates.avatar_url = avatarUrl;
+              if (!lead.store_id && configStoreId) updates.store_id = configStoreId;
+
+              if (Object.keys(updates).length > 0) {
+                await supabaseClient
+                  .from('leads')
+                  .update(updates)
+                  .eq('id', leadId);
+              }
             }
 
             await supabaseClient.from('lead_messages').insert({
