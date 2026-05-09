@@ -667,7 +667,7 @@ const Leads = () => {
             <DialogTitle className="flex items-center justify-between w-full pr-6">
               <div className="flex items-center gap-2">
                 {selectedLead?.source === 'whatsapp' ? <MessageCircle className="h-5 w-5 text-green-500" /> : <Instagram className="h-5 w-5 text-pink-500" />}
-                Conversa com {selectedLead?.name}
+                Conversa com {selectedLead?.name || "Lead"}
               </div>
               <Badge variant="outline" className="animate-pulse bg-green-500/10 text-green-500 border-green-500/20 text-[10px]">
                 LIVE SYNC
