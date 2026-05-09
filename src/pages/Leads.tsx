@@ -227,7 +227,7 @@ const Leads = () => {
   };
 
   const filteredLeads = leads.filter(lead => {
-    const matchesSearch = lead.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    const matchesSearch = (lead.name || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
                           (lead.phone && lead.phone.includes(searchTerm));
     const matchesStore = filterStore === "all" || lead.store_id === filterStore;
     const matchesSource = filterSource === "all" || lead.source === filterSource;
@@ -499,7 +499,7 @@ const Leads = () => {
                   <CardContent className="p-3 space-y-2">
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-2">
-                        <p className="font-bold text-sm leading-tight group-hover:text-primary transition-colors">{lead.name}</p>
+                        <p className="font-bold text-sm leading-tight group-hover:text-primary transition-colors">{lead.name || "Lead sem nome"}</p>
                         {(lead as any).has_unread && (
                           <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
                         )}
@@ -574,7 +574,7 @@ const Leads = () => {
           {selectedLead && (
             <div className="space-y-4">
               <div className="rounded-lg bg-primary/5 border border-primary/20 p-3">
-                <p className="text-sm font-semibold">{selectedLead.name}</p>
+                <p className="text-sm font-semibold">{selectedLead.name || "Lead sem nome"}</p>
                 <div className="flex flex-col gap-2 mt-2">
                   <div className="flex items-center gap-2">
                     <Phone className="h-3 w-3 text-muted-foreground" />
@@ -618,7 +618,7 @@ const Leads = () => {
       {/* Edit Lead Modal */}
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Editar Lead: {selectedLead?.name}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Editar Lead: {selectedLead?.name || "Lead sem nome"}</DialogTitle></DialogHeader>
           <form onSubmit={saveEditLead} className="space-y-3">
             <div className="space-y-1.5"><Label className="text-xs">Nome</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required className="h-10" /></div>
             <div className="grid grid-cols-2 gap-3">
