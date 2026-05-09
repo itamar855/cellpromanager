@@ -413,14 +413,26 @@ const Leads = () => {
         <div className="flex items-center justify-between">
           <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight text-white">CRM de Leads</h1>
           <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="gap-2 h-9 border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
-              onClick={() => window.open(`https://github.com/itamar855/cellpromanager/archive/refs/heads/main.zip`, '_blank')}
-            >
-              <Download className="h-4 w-4" /> Instalar Extensão
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="gap-2 h-9 border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
+                onClick={handleSyncLeads}
+                disabled={syncing}
+              >
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} /> 
+                {syncing ? "Sincronizando..." : "Sincronizar Leads"}
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="gap-2 h-9 border-border text-muted-foreground hidden md:flex"
+                onClick={() => window.open(`https://github.com/itamar855/cellpromanager/archive/refs/heads/main.zip`, '_blank')}
+              >
+                <Download className="h-4 w-4" /> Extensão
+              </Button>
+            </div>
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="gap-2 h-9 shadow-lg shadow-primary/20"><Plus className="h-4 w-4" /> Novo Lead</Button>
