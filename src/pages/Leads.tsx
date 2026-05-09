@@ -151,7 +151,7 @@ const Leads = () => {
     }
 
     if (activeStoreId && activeStoreId !== "all") {
-      query = query.eq("store_id", activeStoreId);
+      query = query.or(`store_id.eq.${activeStoreId},store_id.is.null`);
     }
 
     const { data: leadsData } = await query;
