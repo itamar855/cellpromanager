@@ -116,6 +116,20 @@ const Leads = () => {
 
       if (webhookLogs && webhookLogs.length > 0) {
         toast.loading(`Processando ${webhookLogs.length} eventos do Instagram...`, { id: toastId });
+        
+        // Processar logs pendentes chamando o webhook para cada um
+        for (const log of webhookLogs) {
+          try {
+            await supabase.functions.invoke('instagram-webhook', {
+              body: log.payload as Record<string, any>
+            });
+            
+            // Marcar como processado
+            await supabase.from('instagram_webhooks_logs').update({ processed: true }).eq('id', log.id);
+          } catch (processError) {
+            console.error("Erro ao processar log:", log.id, processError);
+          }
+        }
       }
 
       // 2. Buscar todos os leads atuais para evitar duplicidade
