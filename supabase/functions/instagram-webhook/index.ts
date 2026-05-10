@@ -6,9 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const profileCache = new Map<string, { name: string, avatarUrl: string, timestamp: number }>();
-const CACHE_TTL = 1000 * 60 * 60 * 24;
-
 serve(async (req) => {
   const { method } = req;
   
@@ -35,22 +32,20 @@ serve(async (req) => {
 
   try {
     const payload = await req.json();
-    const { data: logEntry, error: logError } = await supabaseClient
-      .from('instagram_webhooks_logs')
-      .insert({ payload })
-      .select('id')
-      .single();
-
-    console.log("Processing webhook payload object:", payload.object);
+    console.log("Processing payload:", JSON.stringify(payload));
+    
     if (payload.object === 'instagram' || payload.object === 'page') {
       for (const entry of payload.entry) {
-        if (!entry.messaging) continue;
-        
-        for (const messaging of entry.messaging) {
-          const senderId = messaging.sender.id;
-          const message = messaging.message;
+        const messagingEvents = entry.messaging || entry.changes;
+        if (!messagingEvents) continue;
 
-          if (message && message.text) {
+        for (const messaging of messagingEvents) {
+          const senderId = messaging.sender?.id || messaging.value?.from?.id;
+          const message = messaging.message || messaging.value?.message;
+          const messageText = message?.text || (typeof message === 'string' ? message : null);
+
+          if (senderId && messageText) {
+            // Buscar lead
             const { data: lead } = await supabaseClient
               .from('leads')
               .select('id, name, avatar_url, store_id')
@@ -59,10 +54,8 @@ serve(async (req) => {
 
             let leadId = lead?.id;
             let userName = lead?.name || "IG User " + senderId.substring(0, 5);
-            let avatarUrl = lead?.avatar_url || null;
-            let storeId = lead?.store_id || null;
 
-            // Buscar configuração para pegar Token e Store ID
+            // Config
             const { data: config } = await supabaseClient
               .from('instagram_config')
               .select('page_access_token, store_id')
@@ -70,40 +63,8 @@ serve(async (req) => {
               .limit(1)
               .single();
 
-             const configStoreId = config?.store_id || null;
-             // Fallback admin user ID
-             const fallbackUserId = "2bce7f09-1688-43e5-8b61-4e8d11517d0c";
-
-            const cached = profileCache.get(senderId);
-            const now = Date.now();
-
-            if (cached && (now - cached.timestamp) < CACHE_TTL) {
-              userName = cached.name;
-              avatarUrl = cached.avatarUrl;
-            } else if (!leadId || userName.startsWith('IG User') || !avatarUrl) {
-              try {
-                if (config?.page_access_token) {
-                  const graphUrl = "https://graph.facebook.com/v19.0/" + senderId + "?fields=name,profile_pic&access_token=" + config.page_access_token;
-                  const response = await fetch(graphUrl);
-                  const userData = await response.json();
-                  
-                  if (userData && userData.name) {
-                    userName = userData.name;
-                  }
-                  if (userData && userData.profile_pic) {
-                    avatarUrl = userData.profile_pic;
-                  }
-
-                  profileCache.set(senderId, {
-                    name: userName,
-                    avatarUrl: avatarUrl || "",
-                    timestamp: now
-                  });
-                }
-              } catch (profileError) {
-                console.error('Erro profile:', profileError);
-              }
-            }
+            const configStoreId = config?.store_id || null;
+            const fallbackUserId = "2bce7f09-1688-43e5-8b61-4e8d11517d0c";
 
             if (!leadId) {
               const { data: newLead, error: createError } = await supabaseClient
@@ -111,39 +72,27 @@ serve(async (req) => {
                 .insert({
                   name: userName,
                   instagram_user_id: senderId,
-                  avatar_url: avatarUrl,
-                   source: 'instagram',
-                   status: 'novo',
-                   store_id: configStoreId, // Usar store_id da configuração
-                   created_by: fallbackUserId
+                  source: 'instagram',
+                  status: 'novo',
+                  store_id: configStoreId,
+                  created_by: fallbackUserId
                 })
                 .select('id')
                 .single();
               
               if (createError) throw createError;
               leadId = newLead.id;
-            } else {
-              // Atualizar se mudou algo (incluindo store_id se for nulo)
-              const updates: any = {};
-              if (userName !== lead.name) updates.name = userName;
-              if (avatarUrl !== lead.avatar_url) updates.avatar_url = avatarUrl;
-              if (!lead.store_id && configStoreId) updates.store_id = configStoreId;
-
-              if (Object.keys(updates).length > 0) {
-                await supabaseClient
-                  .from('leads')
-                  .update(updates)
-                  .eq('id', leadId);
-              }
             }
 
+            // Inserir mensagem
             await supabaseClient.from('lead_messages').insert({
               lead_id: leadId,
-              content: message.text,
+              content: messageText,
               sender: 'cliente',
               message_type: 'text',
             });
 
+            // Atualizar lead
             await supabaseClient.from('leads').update({ 
               last_message_at: new Date().toISOString(),
               has_unread: true 
