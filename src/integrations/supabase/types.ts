@@ -868,6 +868,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "leads_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
             foreignKeyName: "leads_store_id_fkey"
             columns: ["store_id"]
             isOneToOne: false
