@@ -187,6 +187,7 @@ const Leads = () => {
     });
     setStores(storesData ?? []);
     setVendedores(profilesData ?? []);
+    setLoading(false);
   }, [activeStoreId, userRole, user?.id]);
 
   const fetchMessages = useCallback(async (leadId: string) => {
