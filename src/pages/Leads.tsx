@@ -899,9 +899,14 @@ const Leads = () => {
           
           <ScrollArea className="flex-1 p-4 bg-muted/10">
             <div className="space-y-3 pb-4">
-              {chatMessages.length === 0 ? (
+              {messagesLoading ? (
+                <div className="flex flex-col items-center justify-center py-20 space-y-3">
+                  <Clock className="h-6 w-6 animate-spin text-primary" />
+                  <p className="text-sm text-muted-foreground">Carregando histórico...</p>
+                </div>
+              ) : chatMessages.length === 0 ? (
                 <div className="text-center py-10 text-muted-foreground text-sm">
-                  Nenhuma mensagem capturada ainda. <br/> Use o botão "Enviar p/ CRM" na extensão para sincronizar.
+                  Nenhuma mensagem capturada ainda. <br/> Use o botão "Enviar p/ CRM" na extensão para sincronizar ou o Instagram Webhook.
                 </div>
               ) : (
                 chatMessages.map(msg => (
