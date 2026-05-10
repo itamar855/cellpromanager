@@ -716,6 +716,7 @@ const Leads = () => {
           </div>
         ))}
       </div>
+      )}
 
       {/* Response Integrated Modal */}
       <Dialog open={responseModalOpen} onOpenChange={setResponseModalOpen}>
