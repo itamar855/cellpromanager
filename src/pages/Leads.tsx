@@ -271,7 +271,7 @@ const Leads = () => {
         })
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lead_messages' }, (payload) => {
           if (selectedLead?.id === payload.new.lead_id) fetchMessages(selectedLead.id);
-          if (payload.new.sender !== 'vendedor') toast.info("Nova mensagem recebida!");
+          if (payload.new.sender_type !== 'vendedor') toast.info("Nova mensagem recebida!");
         })
         .subscribe((status) => {
           if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
