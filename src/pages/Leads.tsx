@@ -197,7 +197,7 @@ const Leads = () => {
       // Para outros usuários, se não tiver loja, não mostramos nada
     }
 
-    const { data: leadsData, error: leadsError } = await query;
+    let { data: leadsData, error: leadsError } = await query;
     if (leadsError) {
       console.error("Error fetching leads:", leadsError);
       toast.error("Erro ao carregar leads: " + leadsError.message);
@@ -205,7 +205,16 @@ const Leads = () => {
     const { data: storesData } = await supabase.from("stores").select("*");
     const { data: profilesData } = await supabase.from("profiles").select("user_id, display_name");
 
-    console.log("Leads loaded:", leadsData?.length);
+    // Filtragem manual adicional para garantir que leads sem last_message_at 
+    // também apareçam no topo se forem recentes, ou apenas garantir que leadsData exista
+    if (leadsData) {
+      leadsData = leadsData.sort((a, b) => {
+        const dateA = a.last_message_at || a.created_at;
+        const dateB = b.last_message_at || b.created_at;
+        return new Date(dateB).getTime() - new Date(dateA).getTime();
+      });
+    }
+
     setLeads(leadsData ?? []);
     setStores(storesData ?? []);
     setVendedores(profilesData ?? []);
