@@ -197,7 +197,12 @@ const Leads = () => {
       // Para outros usuários, se não tiver loja, não mostramos nada
     }
 
-    let { data: leadsData, error: leadsError } = await query;
+    let { data: leadsData, error: leadsError } = await query.select(`
+      *,
+      assigned_user:profiles!leads_assigned_to_fkey(display_name),
+      store:stores(name),
+      last_msg:lead_messages(content)
+    `);
     if (leadsError) {
       console.error("Error fetching leads:", leadsError);
       toast.error("Erro ao carregar leads: " + leadsError.message);
