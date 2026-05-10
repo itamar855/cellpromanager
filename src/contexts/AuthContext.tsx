@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Enums } from "@/integrations/supabase/types";
@@ -38,11 +38,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [activeStoreId, setActiveStoreIdState] = useState<string | null>(() => localStorage.getItem("cellmanager-active-store-id"));
   const [loading, setLoading] = useState(true);
 
-  const setActiveStoreId = (id: string) => {
+  const setActiveStoreId = useCallback((id: string) => {
     localStorage.setItem("cellmanager-active-store-id", id);
     setActiveStoreIdState(id);
     window.dispatchEvent(new CustomEvent("store-changed", { detail: { id } }));
-  };
+  }, []);
 
   const fetchUserData = async (userId: string) => {
     const [roleRes, storesRes] = await Promise.all([
@@ -104,9 +104,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut();
-  };
+  }, []);
 
   return (
     <AuthContext.Provider value={{ session, user, userRole, userPermissions, userStoreIds, activeStoreId, setActiveStoreId, loading, signOut }}>
