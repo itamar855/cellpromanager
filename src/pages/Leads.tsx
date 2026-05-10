@@ -174,6 +174,10 @@ const Leads = () => {
     
     if (currentStoreId && currentStoreId !== "all") {
       query = query.eq("store_id", currentStoreId);
+    } else if (currentStoreId === "all") {
+      // Se for "all", não filtra por loja e traz tudo
+    } else {
+      // Caso padrão se não houver loja selecionada
     }
 
     const { data: leadsData } = await query;
