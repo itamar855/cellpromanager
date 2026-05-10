@@ -169,8 +169,9 @@ const Leads = () => {
       store:stores(name)
     `).order("last_message_at", { ascending: false, nullsFirst: false });
 
-    if (activeStoreId && activeStoreId !== "all") {
-      query = query.eq("store_id", activeStoreId);
+    const currentStoreId = activeStoreId || localStorage.getItem("cellmanager-active-store-id");
+    if (currentStoreId && currentStoreId !== "all") {
+      query = query.eq("store_id", currentStoreId);
     }
 
     const { data: leadsData } = await query;
