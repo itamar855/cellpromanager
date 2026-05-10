@@ -213,9 +213,11 @@ const Leads = () => {
   }, []);
 
   useEffect(() => { 
-    fetchData(true); 
-    fetchLastSync();
-  }, [activeStoreId, fetchLastSync]);
+    if (!authLoading) {
+      fetchData(true); 
+      fetchLastSync();
+    }
+  }, [activeStoreId, fetchLastSync, authLoading]);
 
   useEffect(() => {
     const channel = supabase.channel('crm-realtime')
