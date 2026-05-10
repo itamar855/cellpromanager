@@ -220,13 +220,12 @@ const Leads = () => {
     const { data: profilesData } = await supabase.from("profiles").select("user_id, display_name");
 
     if (leadsData) {
-      // Buscar última mensagem para cada lead separadamente se necessário ou confiar no last_message_at
       leadsData = leadsData.sort((a, b) => {
         const dateA = a.last_message_at || a.created_at;
         const dateB = b.last_message_at || b.created_at;
         return new Date(dateB).getTime() - new Date(dateA).getTime();
       });
-      console.log(`Leads: Loaded ${leadsData.length} leads`);
+      console.log(`Leads: Loaded ${leadsData.length} leads successfully`);
     }
 
     setLeads(leadsData ?? []);
