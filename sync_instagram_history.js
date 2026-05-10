@@ -27,63 +27,71 @@ async function sync() {
   console.log(`Sincronizando ${leads.length} leads...`);
 
   for (const lead of leads) {
-    console.log(`Processando lead: ${lead.name} (${lead.instagram_user_id})`);
+    console.log(`\n--- Processando lead: ${lead.name} (${lead.instagram_user_id}) ---`);
     
-    // 1. Tentar pegar o nome real se for genérico
-    if (lead.name.startsWith("IG User")) {
-        try {
-            const profileRes = await fetch(`https://graph.facebook.com/v19.0/${lead.instagram_user_id}?fields=name,username&access_token=${config.page_access_token}`);
-            const profile = await profileRes.json();
-            if (profile.name) {
-                await supabase.from('leads').update({ 
-                    name: profile.name,
-                    instagram_username: profile.username 
-                }).eq('id', lead.id);
-                console.log(`Nome atualizado para: ${profile.name}`);
-            }
-        } catch (e) {
-            console.error(`Erro ao buscar perfil ${lead.instagram_user_id}:`, e);
+    // 1. Atualizar Perfil (Nome Real)
+    try {
+        const profileRes = await fetch(`https://graph.facebook.com/v19.0/${lead.instagram_user_id}?fields=name,username&access_token=${config.page_access_token}`);
+        const profile = await profileRes.json();
+        if (profile.name) {
+            await supabase.from('leads').update({ 
+                name: profile.name,
+                instagram_username: profile.username 
+            }).eq('id', lead.id);
+            console.log(`Nome atualizado para: ${profile.name}`);
+        } else if (profile.error) {
+            console.error(`Erro API Perfil: ${profile.error.message}`);
         }
+    } catch (e) {
+        console.error(`Erro ao buscar perfil:`, e);
     }
 
-    // 2. Sincronizar histórico de mensagens
+    // 2. Sincronizar Histórico Completo
     try {
-        const messagesRes = await fetch(`https://graph.facebook.com/v19.0/${config.instagram_business_account_id}/conversations?user_id=${lead.instagram_user_id}&fields=messages{message,from,created_time}&access_token=${config.page_access_token}`);
-        const conversations = await messagesRes.json();
+        // Buscar a conversa específica do usuário
+        const convUrl = `https://graph.facebook.com/v19.0/${config.instagram_business_account_id}/conversations?user_id=${lead.instagram_user_id}&fields=messages{message,from,created_time,attachments}&access_token=${config.page_access_token}`;
+        const convRes = await fetch(convUrl);
+        const convData = await convRes.json();
         
-        if (conversations.data && conversations.data[0] && conversations.data[0].messages) {
-            const messages = conversations.data[0].messages.data;
-            console.log(`Encontradas ${messages.length} mensagens.`);
+        if (convData.data && convData.data[0] && convData.data[0].messages) {
+            let messages = convData.data[0].messages.data;
+            console.log(`Encontradas ${messages.length} mensagens no histórico.`);
             
             for (const msg of messages) {
-                const isEcho = msg.from.id === config.instagram_business_account_id;
+                // Se a mensagem veio do ID da Business Account, o sender é o vendedor
+                const isFromMe = msg.from.id === config.instagram_business_account_id;
                 
-                // Verificar se a mensagem já existe
+                // Verificar se a mensagem já existe para evitar duplicidade
                 const { data: existing } = await supabase
                     .from('lead_messages')
                     .select('id')
                     .eq('lead_id', lead.id)
-                    .eq('content', msg.message)
+                    .eq('content', msg.message || '')
                     .eq('created_at', msg.created_time)
                     .maybeSingle();
                 
                 if (!existing) {
-                    await supabase.from('lead_messages').insert({
+                    const { error: insError } = await supabase.from('lead_messages').insert({
                         lead_id: lead.id,
-                        content: msg.message,
-                        sender_type: isEcho ? 'vendedor' : 'cliente',
-                        message_type: 'text',
+                        content: msg.message || (msg.attachments ? '[Mídia/Anexo]' : ''),
+                        sender_type: isFromMe ? 'vendedor' : 'cliente',
+                        message_type: msg.attachments ? 'image' : 'text',
                         channel: 'instagram',
                         created_at: msg.created_time
                     });
+                    
+                    if (insError) console.error("Erro insert msg:", insError.message);
+                    else console.log(`[${isFromMe ? 'ME' : 'LEAD'}] ${msg.message?.substring(0, 20)}...`);
                 }
             }
+        } else if (convData.error) {
+            console.error(`Erro API Conv: ${convData.error.message}`);
         }
     } catch (e) {
-        console.error(`Erro ao sincronizar mensagens para ${lead.instagram_user_id}:`, e);
+        console.error(`Erro ao sincronizar histórico:`, e);
     }
   }
-  console.log("Sincronização concluída.");
+  console.log("\nSincronização completa!");
 }
 
 sync();
