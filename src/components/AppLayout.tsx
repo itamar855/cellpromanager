@@ -49,19 +49,29 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         }
         setStores(allowedStores);
         
-        const currentActive = activeStoreId || localStorage.getItem("cellmanager-active-store-id");
+        const storedActive = localStorage.getItem("cellmanager-active-store-id");
+        const currentActive = activeStoreId || storedActive;
+        
+        if (currentActive === "all" && userRole === "admin") {
+          setActiveStoreName("Todas as lojas");
+          if (!activeStoreId) setActiveStoreId("all");
+          return;
+        }
+
         if (currentActive) {
           const found = allowedStores.find(s => s.id === currentActive);
           if (found) {
             setActiveStoreName(found.name);
             if (!activeStoreId) setActiveStoreId(found.id);
           } else if (allowedStores.length > 0) {
-            setActiveStoreName(allowedStores[0].name);
-            setActiveStoreId(allowedStores[0].id);
+            const defaultStore = allowedStores[0];
+            setActiveStoreName(defaultStore.name);
+            setActiveStoreId(defaultStore.id);
           }
         } else if (allowedStores.length > 0) {
-          setActiveStoreName(allowedStores[0].name);
-          setActiveStoreId(allowedStores[0].id);
+          const defaultStore = userRole === "admin" ? { id: "all", name: "Todas as lojas" } : allowedStores[0];
+          setActiveStoreName(defaultStore.name);
+          setActiveStoreId(defaultStore.id);
         }
       }
     });
