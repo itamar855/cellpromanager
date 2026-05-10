@@ -194,11 +194,8 @@ const Leads = () => {
     const { data: storesData } = await supabase.from("stores").select("*");
     const { data: profilesData } = await supabase.from("profiles").select("user_id, display_name");
 
-    // Add a check to avoid constant re-renders if needed, but for now simple update
-    setLeads(prev => {
-      const isSame = JSON.stringify(prev) === JSON.stringify(leadsData);
-      return isSame ? prev : (leadsData ?? []);
-    });
+    console.log("Leads loaded:", leadsData?.length);
+    setLeads(leadsData ?? []);
     setStores(storesData ?? []);
     setVendedores(profilesData ?? []);
     setLoading(false);
