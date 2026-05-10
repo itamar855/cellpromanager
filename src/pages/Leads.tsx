@@ -258,42 +258,43 @@ const Leads = () => {
   }, [activeStoreId, fetchLastSync, authLoading]);
 
   useEffect(() => {
+  useEffect(() => {
+    let channel: any;
+    
     const setupRealtime = () => {
-      const channel = supabase.channel('crm-realtime')
-        .on('postgres_changes', { 
-          event: '*', 
-          schema: 'public', 
-          table: 'leads' 
-        }, (payload) => {
+      if (channel) supabase.removeChannel(channel);
+      
+      channel = supabase.channel('crm-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, (payload) => {
           fetchData();
-          if (payload.eventType === 'INSERT') {
-            toast.info("Novo lead recebido!");
-          }
+          if (payload.eventType === 'INSERT') toast.info("Novo lead recebido!");
         })
-        .on('postgres_changes', { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'lead_messages' 
-        }, (payload) => {
-          if (selectedLead?.id === payload.new.lead_id) {
-            fetchMessages(selectedLead.id);
-          }
-          if (payload.new.sender !== 'vendedor') {
-            toast.info("Nova mensagem recebida!");
-          }
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lead_messages' }, (payload) => {
+          if (selectedLead?.id === payload.new.lead_id) fetchMessages(selectedLead.id);
+          if (payload.new.sender !== 'vendedor') toast.info("Nova mensagem recebida!");
         })
         .subscribe((status) => {
           if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-            console.log("Realtime connection lost, retrying...");
+            console.log("Realtime connection lost, retrying in 3s...");
             setTimeout(setupRealtime, 3000);
           }
         });
-
-      return channel;
     };
 
-    const channel = setupRealtime();
-    return () => { supabase.removeChannel(channel); };
+    setupRealtime();
+
+    // Fallback health check every 30s
+    const interval = setInterval(() => {
+      if (!channel || channel.state !== 'joined') {
+        console.log("Channel not joined, reconnecting...");
+        setupRealtime();
+      }
+    }, 30000);
+
+    return () => { 
+      if (channel) supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, [selectedLead?.id, fetchData, fetchMessages]);
 
   useEffect(() => {
