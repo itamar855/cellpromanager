@@ -32,7 +32,7 @@ serve(async (req) => {
 
   try {
     const payload = await req.json();
-    console.log("Processing payload:", JSON.stringify(payload));
+    console.log("Processing payload object:", payload.object);
     
     if (payload.object === 'instagram' || payload.object === 'page') {
       for (const entry of payload.entry) {
@@ -40,33 +40,37 @@ serve(async (req) => {
         if (!messagingEvents) continue;
 
         for (const messaging of messagingEvents) {
-          const senderId = messaging.sender?.id || messaging.value?.from?.id;
+          const senderId = messaging.sender?.id || messaging.value?.from?.id || messaging.value?.sender_id;
           const message = messaging.message || messaging.value?.message;
           const messageText = message?.text || (typeof message === 'string' ? message : null);
 
           if (senderId && messageText) {
-            // Buscar lead
-            const { data: lead } = await supabaseClient
+            console.log("Found senderId:", senderId, "message:", messageText);
+            
+            // 1. Tentar encontrar lead
+            const { data: lead, error: leadFetchError } = await supabaseClient
               .from('leads')
-              .select('id, name, avatar_url, store_id')
+              .select('id, name, store_id')
               .eq('instagram_user_id', senderId)
               .maybeSingle();
+
+            if (leadFetchError) console.error("Error fetching lead:", leadFetchError);
 
             let leadId = lead?.id;
             let userName = lead?.name || "IG User " + senderId.substring(0, 5);
 
-            // Config
-            const { data: config } = await supabaseClient
-              .from('instagram_config')
-              .select('page_access_token, store_id')
-              .eq('is_active', true)
-              .limit(1)
-              .single();
-
-            const configStoreId = config?.store_id || null;
-            const fallbackUserId = "2bce7f09-1688-43e5-8b61-4e8d11517d0c";
-
+            // 2. Se não existir, criar
             if (!leadId) {
+              const { data: config } = await supabaseClient
+                .from('instagram_config')
+                .select('store_id')
+                .eq('is_active', true)
+                .limit(1)
+                .single();
+
+              const configStoreId = config?.store_id || null;
+              const fallbackUserId = "2bce7f09-1688-43e5-8b61-4e8d11517d0c";
+
               const { data: newLead, error: createError } = await supabaseClient
                 .from('leads')
                 .insert({
@@ -80,23 +84,42 @@ serve(async (req) => {
                 .select('id')
                 .single();
               
-              if (createError) throw createError;
-              leadId = newLead.id;
+              if (createError) {
+                console.error("Error creating lead:", createError);
+                // Tentar buscar novamente se deu erro de unicidade
+                const { data: retryLead } = await supabaseClient
+                  .from('leads')
+                  .select('id')
+                  .eq('instagram_user_id', senderId)
+                  .maybeSingle();
+                leadId = retryLead?.id;
+              } else {
+                leadId = newLead.id;
+              }
             }
 
-            // Inserir mensagem
-            await supabaseClient.from('lead_messages').insert({
-              lead_id: leadId,
-              content: messageText,
-              sender: 'cliente',
-              message_type: 'text',
-            });
+            // 3. Inserir mensagem se tivermos leadId
+            if (leadId) {
+              const { error: msgError } = await supabaseClient.from('lead_messages').insert({
+                lead_id: leadId,
+                content: messageText,
+                sender: 'cliente',
+                message_type: 'text',
+              });
+              
+              if (msgError) console.error("Error inserting message:", msgError);
 
-            // Atualizar lead
-            await supabaseClient.from('leads').update({ 
-              last_message_at: new Date().toISOString(),
-              has_unread: true 
-            }).eq('id', leadId);
+              // 4. Atualizar timestamp do lead
+              const { error: updateError } = await supabaseClient.from('leads').update({ 
+                last_message_at: new Date().toISOString(),
+                has_unread: true 
+              }).eq('id', leadId);
+              
+              if (updateError) console.error("Error updating lead:", updateError);
+              else console.log("Success processing message for lead", leadId);
+            } else {
+              console.error("Could not determine leadId for sender", senderId);
+            }
           }
         }
       }
