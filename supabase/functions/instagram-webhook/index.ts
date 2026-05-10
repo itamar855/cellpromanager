@@ -20,7 +20,7 @@ serve(async (req) => {
 
   const fetchInstagramUserProfile = async (userId: string, accessToken: string) => {
     try {
-      const response = await fetch(`https://graph.facebook.com/v19.0/${userId}?fields=name,username&access_token=${accessToken}`);
+      const response = await fetch(\`https://graph.facebook.com/v19.0/\${userId}?fields=name,username&access_token=\${accessToken}\`);
       const data = await response.json();
       if (data.error) {
         console.error("Instagram Profile Fetch Error:", data.error);
@@ -63,23 +63,17 @@ serve(async (req) => {
             console.log("Found senderId:", senderId, "message:", messageText);
             
             // 1. Tentar encontrar lead
-             // Tentar encontrar lead pelo instagram_user_id ou pelo nome (se for um lead importado que ainda não tem o ID)
-             let { data: lead, error: leadFetchError } = await supabaseClient
+            let { data: lead, error: leadFetchError } = await supabaseClient
                .from('leads')
-               .select('id, name, store_id, instagram_user_id')
+               .select('id, name, store_id, instagram_user_id, instagram_username')
                .eq('instagram_user_id', senderId)
                .maybeSingle();
-
-             if (!lead && !leadFetchError) {
-               // Fallback: Tentar encontrar por nome se o senderId for novo mas já tivermos um lead com nome similar
-               // (Isso ajuda se o lead foi criado manualmente ou importado via OS/Vendas antes do primeiro contato IG)
-             }
 
             if (leadFetchError) console.error("Error fetching lead:", leadFetchError);
 
             let leadId = lead?.id;
             let userName = lead?.name;
-            let instagramUsername = null;
+            let instagramUsername = lead?.instagram_username;
 
             const { data: config } = await supabaseClient
               .from('instagram_config')
@@ -97,61 +91,44 @@ serve(async (req) => {
 
             if (!userName) userName = "IG User " + senderId.substring(0, 5);
 
-            // 2. Se não existir o lead, criar
-             if (!leadId) {
-               const configStoreId = config?.store_id || null;
-               const fallbackUserId = "2bce7f09-1688-43e5-8b61-4e8d11517d0c";
+            // 2. Se não existir o lead, criar ou atualizar
+            if (!leadId) {
+              const configStoreId = config?.store_id || null;
+              const fallbackUserId = "2bce7f09-1688-43e5-8b61-4e8d11517d0c";
 
-               const { data: newLead, error: createError } = await supabaseClient
-                 .from('leads')
-                 .insert({
-                   name: userName,
-                   instagram_user_id: senderId,
-                   instagram_username: instagramUsername,
-                   source: 'instagram',
-                   status: 'novo',
-                   store_id: configStoreId,
-                   created_by: fallbackUserId
-                 })
-                 .select('id')
-                 .maybeSingle();
-               
-               if (createError) {
-                 console.error("Error creating lead:", createError);
-                 const { data: retryLead } = await supabaseClient
-                   .from('leads')
-                   .select('id')
-                   .eq('instagram_user_id', senderId)
-                   .maybeSingle();
-                 leadId = retryLead?.id;
-               } else {
-                 leadId = newLead?.id;
-               }
-             } else {
-               // Atualizar dados do lead existente se necessário
-               const updates: any = {};
-               if (userName && userName !== lead.name && !lead.name?.startsWith("IG User")) {
-                  // Não sobrescrever nomes reais, apenas se for genérico
-               } else if (userName && userName !== lead.name) {
-                  updates.name = userName;
-               }
-               
-               if (instagramUsername && instagramUsername !== lead.instagram_username) {
-                  updates.instagram_username = instagramUsername;
-               }
-
-               if (Object.keys(updates).length > 0) {
-                 await supabaseClient.from('leads').update(updates).eq('id', leadId);
-               }
-             }
-              // Atualizar nome se descobrimos agora
-              await supabaseClient
+              const { data: newLead, error: createError } = await supabaseClient
                 .from('leads')
-                .update({ 
+                .insert({
+                  name: userName,
+                  instagram_user_id: senderId,
+                  instagram_username: instagramUsername,
+                  source: 'instagram',
+                  status: 'novo',
+                  store_id: configStoreId,
+                  created_by: fallbackUserId
+                })
+                .select('id')
+                .maybeSingle();
+              
+              if (createError) {
+                console.error("Error creating lead:", createError);
+                const { data: retryLead } = await supabaseClient
+                  .from('leads')
+                  .select('id')
+                  .eq('instagram_user_id', senderId)
+                  .maybeSingle();
+                leadId = retryLead?.id;
+              } else {
+                leadId = newLead?.id;
+              }
+            } else {
+              // Atualizar lead existente se o nome era genérico
+              if (userName && (lead.name?.startsWith("IG User") || !lead.name)) {
+                await supabaseClient.from('leads').update({
                   name: userName,
                   instagram_username: instagramUsername || undefined
-                })
-                .eq('id', leadId);
+                }).eq('id', leadId);
+              }
             }
 
             // 3. Inserir mensagem se tivermos leadId
