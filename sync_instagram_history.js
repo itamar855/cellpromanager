@@ -5,85 +5,69 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function sync() {
-  const { data: config } = await supabase
-    .from('instagram_config')
-    .select('page_access_token, instagram_business_account_id')
-    .eq('is_active', true)
-    .single();
+  // 1. Pegar logs de eco (mensagens enviadas pelo vendedor)
+  const { data: logs } = await supabase
+    .from('instagram_webhooks_logs')
+    .select('id, payload')
+    .order('created_at', { ascending: true });
 
-  if (!config || !config.page_access_token) {
-    console.error("Configuração do Instagram não encontrada ou inativa.");
-    return;
-  }
+  if (!logs) return;
 
-  const { data: leads } = await supabase
-    .from('leads')
-    .select('id, instagram_user_id, name')
-    .eq('source', 'instagram')
-    .not('instagram_user_id', 'is', null);
+  console.log(`Analisando ${logs.length} logs para identificar mensagens enviadas...`);
 
-  if (!leads) return;
+  for (const log of logs) {
+    const entry = log.payload?.entry?.[0];
+    const messaging = entry?.messaging?.[0];
+    if (!messaging) continue;
 
-  console.log(`Sincronizando ${leads.length} leads...`);
+    const isEcho = messaging.message?.is_echo === true;
+    if (!isEcho) continue;
 
-  for (const lead of leads) {
-    console.log(`Processando lead: ${lead.name} (${lead.instagram_user_id})`);
-    
-    // 1. Tentar pegar o nome real se for genérico
-    if (lead.name.startsWith("IG User")) {
-        try {
-            const profileRes = await fetch(`https://graph.facebook.com/v19.0/${lead.instagram_user_id}?fields=name,username&access_token=${config.page_access_token}`);
-            const profile = await profileRes.json();
-            if (profile.name) {
-                await supabase.from('leads').update({ 
-                    name: profile.name,
-                    instagram_username: profile.username 
-                }).eq('id', lead.id);
-                console.log(`Nome atualizado para: ${profile.name}`);
-            }
-        } catch (e) {
-            console.error(`Erro ao buscar perfil ${lead.instagram_user_id}:`, e);
+    const recipientId = messaging.recipient?.id;
+    const senderId = messaging.sender?.id; // Este é o ID da loja no caso de echo
+    const text = messaging.message?.text;
+    const timestamp = messaging.timestamp;
+    const createdAt = timestamp ? new Date(timestamp).toISOString() : new Date().toISOString();
+
+    if (!recipientId || !text) continue;
+
+    // Buscar o lead pelo ID do destinatário
+    const { data: lead } = await supabase
+        .from('leads')
+        .select('id, name')
+        .eq('instagram_user_id', recipientId)
+        .maybeSingle();
+
+    if (lead) {
+        // Verificar se a mensagem já existe
+        const { data: existing } = await supabase
+            .from('lead_messages')
+            .select('id')
+            .eq('lead_id', lead.id)
+            .eq('content', text)
+            .eq('sender_type', 'vendedor')
+            .maybeSingle();
+
+        if (!existing) {
+            const { error: insError } = await supabase.from('lead_messages').insert({
+                lead_id: lead.id,
+                content: text,
+                sender_type: 'vendedor',
+                message_type: 'text',
+                channel: 'instagram',
+                created_at: createdAt
+            });
+            if (insError) console.error(`Erro ao inserir eco para ${lead.name}:`, insError.message);
+            else console.log(`[ECO] Inserida msg para ${lead.name}: ${text.substring(0, 20)}...`);
         }
     }
-
-    // 2. Sincronizar histórico de mensagens
-    try {
-        const messagesRes = await fetch(`https://graph.facebook.com/v19.0/${config.instagram_business_account_id}/conversations?user_id=${lead.instagram_user_id}&fields=messages{message,from,created_time}&access_token=${config.page_access_token}`);
-        const conversations = await messagesRes.json();
-        
-        if (conversations.data && conversations.data[0] && conversations.data[0].messages) {
-            const messages = conversations.data[0].messages.data;
-            console.log(`Encontradas ${messages.length} mensagens.`);
-            
-            for (const msg of messages) {
-                const isEcho = msg.from.id === config.instagram_business_account_id;
-                
-                // Verificar se a mensagem já existe
-                const { data: existing } = await supabase
-                    .from('lead_messages')
-                    .select('id')
-                    .eq('lead_id', lead.id)
-                    .eq('content', msg.message)
-                    .eq('created_at', msg.created_time)
-                    .maybeSingle();
-                
-                if (!existing) {
-                    await supabase.from('lead_messages').insert({
-                        lead_id: lead.id,
-                        content: msg.message,
-                        sender_type: isEcho ? 'vendedor' : 'cliente',
-                        message_type: 'text',
-                        channel: 'instagram',
-                        created_at: msg.created_time
-                    });
-                }
-            }
-        }
-    } catch (e) {
-        console.error(`Erro ao sincronizar mensagens para ${lead.instagram_user_id}:`, e);
-    }
   }
-  console.log("Sincronização concluída.");
+
+  // 2. Atualizar Nomes dos Leads se possível via Logs (tentar encontrar nomes nos payloads se houver)
+  // Como os logs do Instagram Webhook geralmente não trazem o nome no payload da mensagem, 
+  // e o script anterior falhou com o token, vamos focar em garantir que as mensagens apareçam.
+
+  console.log("Sincronização de histórico enviada completa!");
 }
 
 sync();
