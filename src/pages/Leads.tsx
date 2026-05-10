@@ -47,15 +47,6 @@ const Leads = () => {
     console.log("CRM State:", { user: user?.id, userRole, authLoading, activeStoreId });
   }, [user, userRole, authLoading, activeStoreId]);
   
-  if (userRole !== "admin" && !userPermissions?.leads) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[70vh] text-muted-foreground">
-        <Shield className="h-12 w-12 mb-4 opacity-20" />
-        <h2 className="text-xl font-semibold">Acesso Restrito</h2>
-        <p>Você não tem permissão para acessar o CRM.</p>
-      </div>
-    );
-  }
 
   const isAdmin = userRole === "admin" || userRole === "gerente";
   const [leads, setLeads] = useState<any[]>([]);
