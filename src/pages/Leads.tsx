@@ -43,9 +43,6 @@ const allStatuses: LeadStatus[] = ['novo', 'atendimento', 'negociacao', 'conclui
 const Leads = () => {
   const { user, userRole, userPermissions, activeStoreId, loading: authLoading } = useAuth();
   
-  useEffect(() => {
-    console.log("CRM State:", { user: user?.id, userRole, authLoading, activeStoreId });
-  }, [user, userRole, authLoading, activeStoreId]);
   
 
   const isAdmin = userRole === "admin" || userRole === "gerente";
