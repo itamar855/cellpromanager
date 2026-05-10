@@ -103,8 +103,9 @@ serve(async (req) => {
               const { error: msgError } = await supabaseClient.from('lead_messages').insert({
                 lead_id: leadId,
                 content: messageText,
-                sender: 'cliente',
+                sender_type: 'cliente',
                 message_type: 'text',
+                channel: 'instagram'
               });
               
               if (msgError) console.error("Error inserting message:", msgError);
