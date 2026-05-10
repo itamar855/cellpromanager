@@ -35,7 +35,11 @@ serve(async (req) => {
 
   try {
     const payload = await req.json();
-    await supabaseClient.from('instagram_webhooks_logs').insert({ payload });
+    const { data: logEntry, error: logError } = await supabaseClient
+      .from('instagram_webhooks_logs')
+      .insert({ payload })
+      .select('id')
+      .single();
 
     if (payload.object === 'instagram') {
       for (const entry of payload.entry) {
