@@ -41,17 +41,9 @@ const statusConfig: Record<LeadStatus, { label: string; color: string }> = {
 const allStatuses: LeadStatus[] = ['novo', 'atendimento', 'negociacao', 'concluido', 'perdido'];
 
 const Leads = () => {
-  const { user, userRole, userPermissions, activeStoreId } = useAuth();
+  const { user, userRole, userPermissions, activeStoreId, loading: authLoading } = useAuth();
   
-  if (userRole !== "admin" && !userPermissions?.leads) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[70vh] text-muted-foreground">
-        <Shield className="h-12 w-12 mb-4 opacity-20" />
-        <h2 className="text-xl font-semibold">Acesso Restrito</h2>
-        <p>Você não tem permissão para acessar o CRM.</p>
-      </div>
-    );
-  }
+  
 
   const isAdmin = userRole === "admin" || userRole === "gerente";
   const [leads, setLeads] = useState<any[]>([]);
@@ -162,28 +154,39 @@ const Leads = () => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     let query = supabase.from("leads").select(`
       *,
       assigned_user:profiles!leads_assigned_to_fkey(display_name),
       store:stores(name)
     `).order("last_message_at", { ascending: false, nullsFirst: false });
 
-    if (activeStoreId && activeStoreId !== "all") {
-      query = query.eq("store_id", activeStoreId);
+    const currentStoreId = activeStoreId || localStorage.getItem("cellmanager-active-store-id");
+    
+    if (currentStoreId && currentStoreId !== "all") {
+      query = query.eq("store_id", currentStoreId);
+    } else if (currentStoreId === "all") {
+      // Se for "all", não filtra por loja e traz tudo
+    } else if (isAdmin) {
+      // Se for admin e não tiver loja, mostramos tudo
+    } else {
+      // Para outros usuários, se não tiver loja, não mostramos nada
     }
 
-    const { data: leadsData } = await query;
+    const { data: leadsData, error: leadsError } = await query;
+    if (leadsError) {
+      console.error("Error fetching leads:", leadsError);
+      toast.error("Erro ao carregar leads: " + leadsError.message);
+    }
     const { data: storesData } = await supabase.from("stores").select("*");
     const { data: profilesData } = await supabase.from("profiles").select("user_id, display_name");
 
-    // Add a check to avoid constant re-renders if needed, but for now simple update
-    setLeads(prev => {
-      const isSame = JSON.stringify(prev) === JSON.stringify(leadsData);
-      return isSame ? prev : (leadsData ?? []);
-    });
+    console.log("Leads loaded:", leadsData?.length);
+    setLeads(leadsData ?? []);
     setStores(storesData ?? []);
     setVendedores(profilesData ?? []);
+    setLoading(false);
   }, [activeStoreId, userRole, user?.id]);
 
   const fetchMessages = useCallback(async (leadId: string) => {
@@ -195,9 +198,11 @@ const Leads = () => {
   }, []);
 
   useEffect(() => { 
-    fetchData(); 
-    fetchLastSync();
-  }, [activeStoreId, fetchLastSync]);
+    if (!authLoading) {
+      fetchData(true); 
+      fetchLastSync();
+    }
+  }, [activeStoreId, fetchLastSync, authLoading]);
 
   useEffect(() => {
     const channel = supabase.channel('crm-realtime')
@@ -435,7 +440,10 @@ const Leads = () => {
       <div className="flex flex-col gap-4 border-b pb-4 mb-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
-            <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight text-white">CRM de Leads</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight text-white">CRM de Leads</h1>
+              {loading && <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />}
+            </div>
             {lastIGSync && (
               <div className="flex items-center gap-2 text-[10px] text-muted-foreground bg-muted/20 w-fit px-2 py-0.5 rounded-full border border-border/20">
                 <div className={`h-1.5 w-1.5 rounded-full ${lastIGSync.status === 'Sucesso' ? 'bg-green-500' : 'bg-red-500'}`} />
@@ -564,7 +572,7 @@ const Leads = () => {
         </div>
       </div>
 
-    {leads.length === 0 && (
+    {leads.length === 0 && !loading && (
         <Card className="bg-primary/5 border-dashed border-primary/30">
           <CardContent className="p-6 text-center space-y-3">
             <div className="bg-primary/10 w-12 h-12 rounded-full flex items-center justify-center mx-auto">
@@ -584,6 +592,12 @@ const Leads = () => {
       )}
 
       {/* Kanban Board */}
+      {loading ? (
+        <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-muted-foreground animate-pulse">Carregando seus leads...</p>
+        </div>
+      ) : (
       <div className="flex gap-4 overflow-x-auto pb-4 items-start flex-1 min-h-[500px] scrollbar-thin">
         {allStatuses.map(status => (
           <div 
@@ -601,7 +615,7 @@ const Leads = () => {
             </div>
 
             <div className="space-y-3 overflow-y-auto pr-1">
-              {filteredLeads.filter(l => l.status === status).length === 0 && (
+              {filteredLeads.filter(l => l.status === status).length === 0 && !loading && (
                 <div className="h-20 border-2 border-dashed border-border/30 rounded-xl flex items-center justify-center text-muted-foreground/20 text-[10px]">
                   {searchTerm ? "Nenhum resultado" : "Arraste leads aqui"}
                 </div>
@@ -699,6 +713,7 @@ const Leads = () => {
           </div>
         ))}
       </div>
+      )}
 
       {/* Response Integrated Modal */}
       <Dialog open={responseModalOpen} onOpenChange={setResponseModalOpen}>
