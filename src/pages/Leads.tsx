@@ -41,7 +41,11 @@ const statusConfig: Record<LeadStatus, { label: string; color: string }> = {
 const allStatuses: LeadStatus[] = ['novo', 'atendimento', 'negociacao', 'concluido', 'perdido'];
 
 const Leads = () => {
-  const { user, userRole, userPermissions, activeStoreId } = useAuth();
+  const { user, userRole, userPermissions, activeStoreId, loading: authLoading } = useAuth();
+  
+  useEffect(() => {
+    console.log("CRM State:", { user: user?.id, userRole, authLoading, activeStoreId });
+  }, [user, userRole, authLoading, activeStoreId]);
   
   if (userRole !== "admin" && !userPermissions?.leads) {
     return (
