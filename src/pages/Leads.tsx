@@ -354,11 +354,18 @@ const Leads = () => {
   };
 
   const filteredLeads = leads.filter(lead => {
-    const matchesSearch = (lead.name || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          (lead.phone && lead.phone.includes(searchTerm));
+    const name = lead.name || "";
+    const phone = lead.phone || "";
+    const igId = lead.instagram_user_id || "";
+    
+    const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          phone.includes(searchTerm) ||
+                          igId.includes(searchTerm);
+                          
     const matchesStore = filterStore === "all" || lead.store_id === filterStore;
     const matchesSource = filterSource === "all" || lead.source === filterSource;
     const matchesVendedor = filterVendedor === "all" || lead.assigned_to === filterVendedor;
+    
     return matchesSearch && matchesStore && matchesSource && matchesVendedor;
   });
 
