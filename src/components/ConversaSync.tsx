@@ -44,6 +44,18 @@ const ConversaSync = ({ selectedLeadId, onSyncComplete, onNewMessage }: Conversa
   useEffect(() => {
     if (!selectedLeadId) return;
 
+    // WebSocket / Realtime subscription
+    const channel = supabase.channel(`lead-messages-${selectedLeadId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'lead_messages',
+        filter: `lead_id=eq.${selectedLeadId}`
+      }, () => {
+        if (onNewMessage) onNewMessage(selectedLeadId);
+      })
+      .subscribe();
+
     // Sincronização inicial ao selecionar lead
     syncHistory();
 
@@ -51,9 +63,10 @@ const ConversaSync = ({ selectedLeadId, onSyncComplete, onNewMessage }: Conversa
     const interval = setInterval(syncHistory, 30000);
 
     return () => {
+      supabase.removeChannel(channel);
       clearInterval(interval);
     };
-  }, [selectedLeadId, syncHistory]);
+  }, [selectedLeadId, syncHistory, onNewMessage]);
 
   if (!selectedLeadId && !syncing) return null;
 
