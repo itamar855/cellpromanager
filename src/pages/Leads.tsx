@@ -43,7 +43,7 @@ const statusConfig: Record<LeadStatus, { label: string; color: string }> = {
 const allStatuses: LeadStatus[] = ['novo', 'atendimento', 'negociacao', 'concluido', 'perdido'];
 
 const Leads = () => {
-  const { user, userRole, userPermissions, activeStoreId, loading: authLoading } = useAuth();
+  const { user, userRole, userPermissions, activeStoreId, setActiveStoreId, loading: authLoading } = useAuth();
   
   
 
@@ -642,9 +642,20 @@ const Leads = () => {
               </SelectContent>
             </Select>
             {userRole === "admin" && (
-              <Select value={filterStore} onValueChange={setFilterStore}>
-                <SelectTrigger className="w-[140px] h-10 bg-muted/20 border-border/40"><SelectValue placeholder="Loja" /></SelectTrigger>
-                <SelectContent><SelectItem value="all">Todas Lojas</SelectItem>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+              <Select 
+                value={activeStoreId || "all"} 
+                onValueChange={(v) => {
+                  setActiveStoreId(v);
+                  setFilterStore(v);
+                }}
+              >
+                <SelectTrigger className="w-[140px] h-10 bg-muted/20 border-border/40">
+                  <SelectValue placeholder="Loja" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas Lojas</SelectItem>
+                  {stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                </SelectContent>
               </Select>
             )}
             <Select value={filterSource} onValueChange={setFilterSource}>
