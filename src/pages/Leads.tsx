@@ -837,9 +837,9 @@ const Leads = () => {
                 </div>
               ) : (
                 chatMessages.map(msg => (
-                  <div key={msg.id} className={`flex ${msg.sender === 'vendedor' ? 'justify-end' : 'justify-start'}`}>
+                  <div key={msg.id} className={`flex ${msg.sender_type === 'vendedor' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm relative group ${
-                      msg.sender === 'vendedor' 
+                      msg.sender_type === 'vendedor' 
                       ? 'bg-primary/20 text-foreground rounded-tr-none border border-primary/20' 
                       : 'bg-muted border text-slate-700 rounded-tl-none'
                     }`}>
@@ -857,9 +857,9 @@ const Leads = () => {
                         <p className="whitespace-pre-wrap">{msg.content}</p>
                       )}
                       
-                      <div className={`text-[8px] mt-1 opacity-60 flex items-center gap-1 ${msg.sender === 'vendedor' ? 'justify-end' : ''}`}>
+                      <div className={`text-[8px] mt-1 opacity-60 flex items-center gap-1 ${msg.sender_type === 'vendedor' ? 'justify-end' : ''}`}>
                         {new Date(msg.created_at).toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' })}
-                        {msg.sender === 'vendedor' && <CheckCheck className="h-2.5 w-2.5 text-blue-500" />}
+                        {msg.sender_type === 'vendedor' && <CheckCheck className="h-2.5 w-2.5 text-blue-500" />}
                       </div>
                     </div>
                   </div>
