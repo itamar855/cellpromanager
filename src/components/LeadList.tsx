@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,22 @@ export function LeadList({
     allStatuses.reduce((acc, status) => ({ ...acc, [status]: 1 }), {})
   );
   const leadsPerPage = 20;
+
+  useEffect(() => {
+    setCurrentPages(prev => {
+      const updated = { ...prev };
+      let changed = false;
+      allStatuses.forEach(status => {
+        const statusLeads = leads.filter((l) => l.status === status);
+        const totalPages = Math.ceil(statusLeads.length / leadsPerPage) || 1;
+        if (prev[status] > totalPages) {
+          updated[status] = totalPages;
+          changed = true;
+        }
+      });
+      return changed ? updated : prev;
+    });
+  }, [leads, allStatuses]);
 
   const handleDragStart = (e: React.DragEvent, leadId: string) => {
     e.dataTransfer.setData("leadId", leadId);
