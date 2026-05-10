@@ -170,6 +170,8 @@ const Leads = () => {
     `).order("last_message_at", { ascending: false, nullsFirst: false });
 
     const currentStoreId = activeStoreId || localStorage.getItem("cellmanager-active-store-id");
+    console.log("Fetching leads for store:", currentStoreId);
+    
     if (currentStoreId && currentStoreId !== "all") {
       query = query.eq("store_id", currentStoreId);
     }
