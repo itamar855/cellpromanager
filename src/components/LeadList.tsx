@@ -47,6 +47,11 @@ export function LeadList({
   onResponseClick,
   isAdmin
 }: LeadListProps) {
+  const [currentPages, setCurrentPages] = useState<Record<string, number>>(
+    allStatuses.reduce((acc, status) => ({ ...acc, [status]: 1 }), {})
+  );
+  const leadsPerPage = 20;
+
   const handleDragStart = (e: React.DragEvent, leadId: string) => {
     e.dataTransfer.setData("leadId", leadId);
   };
