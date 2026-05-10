@@ -74,20 +74,31 @@ const Leads = () => {
     const toastId = toast.loading("Sincronizando todos os leads...");
     
     try {
-      // 1. Buscar todos os leads atuais para conferência real
-      const { data: currentLeads } = await supabase.from("leads").select("phone");
-      const existingPhones = new Set(currentLeads?.map(l => l.phone) || []);
+      // 1. Sincronizar do Instagram via Webhooks Logs
+      const { data: webhookLogs } = await supabase
+        .from("instagram_webhooks_logs")
+        .select("*")
+        .eq('processed', false)
+        .order('created_at', { ascending: true });
 
-      // 2. Buscar dados de OS e Vendas que tenham telefone e nome
+      if (webhookLogs && webhookLogs.length > 0) {
+        toast.loading(`Processando ${webhookLogs.length} eventos do Instagram...`, { id: toastId });
+      }
+
+      // 2. Buscar todos os leads atuais para evitar duplicidade
+      const { data: currentLeads } = await supabase.from("leads").select("phone, instagram_user_id");
+      const existingPhones = new Set(currentLeads?.map(l => l.phone).filter(Boolean) || []);
+      const existingIGIds = new Set(currentLeads?.map(l => l.instagram_user_id).filter(Boolean) || []);
+
+      // 3. Buscar dados de OS e Vendas
       const [osRes, salesRes] = await Promise.all([
         supabase.from("service_orders").select("customer_name, customer_phone, store_id, created_by").not("customer_phone", "is", null).limit(2000),
         supabase.from("sales").select("customer_name, customer_phone, store_id, created_by").not("customer_phone", "is", null).limit(2000)
       ]);
       
       const allLegacy = [...(osRes.data || []), ...(salesRes.data || [])];
-      
-      // 3. Filtrar apenas quem não existe e remover duplicatas do próprio lote
       const toAdd = new Map();
+      
       allLegacy.forEach(legacy => {
         if (!legacy.customer_phone) return;
         const phone = legacy.customer_phone.trim();
@@ -105,19 +116,14 @@ const Leads = () => {
         }
       });
 
-      if (toAdd.size === 0) {
-        toast.dismiss(toastId);
-        toast.info("Todos os potenciais leads já estão sincronizados!");
-        return;
+      const entries = Array.from(toAdd.values());
+      if (entries.length > 0) {
+        const { error } = await supabase.from("leads").insert(entries);
+        if (error) throw error;
       }
 
-      const entries = Array.from(toAdd.values());
-      const { error } = await supabase.from("leads").insert(entries);
-
-      if (error) throw error;
-
       toast.dismiss(toastId);
-      toast.success(`${entries.length} novos leads sincronizados!`);
+      toast.success(`${entries.length} novos leads importados e Instagram verificado!`);
       fetchData();
     } catch (err: any) {
       toast.dismiss(toastId);
