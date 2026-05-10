@@ -14,7 +14,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { 
+import {
   Trash2, MoreVertical, MessageSquare, ChevronRight, Download,
   MessageCircle, Phone, Plus, Users, Mail, Search, Shield, Store,
   Image as ImageIcon, Mic, Send, Paperclip, UserPlus, Filter,
@@ -26,7 +26,7 @@ import { LeadList } from "@/components/LeadList";
 import ConversaSync from "@/components/ConversaSync";
 
 const Instagram = ({ className }: { className?: string }) => (
-  <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>
+  <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" x2="17.51" y1="6.5" y2="6.5" /></svg>
 );
 import { logAction } from "@/utils/auditLogger";
 
@@ -44,8 +44,8 @@ const allStatuses: LeadStatus[] = ['novo', 'atendimento', 'negociacao', 'conclui
 
 const Leads = () => {
   const { user, userRole, userPermissions, activeStoreId, setActiveStoreId, loading: authLoading } = useAuth();
-  
-  
+
+
 
   const isAdmin = userRole === "admin" || userRole === "gerente";
   const [leads, setLeads] = useState<any[]>([]);
@@ -96,7 +96,7 @@ const Leads = () => {
         if (msg.includes("token") || msg.includes("auth") || msg.includes("credential")) type = "Credenciais";
         else if (msg.includes("rate") || msg.includes("limit") || msg.includes("too many")) type = "Rate Limit";
         else if (msg.includes("field") || msg.includes("map") || msg.includes("missing")) type = "Mapeamento";
-        
+
         acc[type] = (acc[type] || 0) + 1;
         return acc;
       }, {});
@@ -107,7 +107,7 @@ const Leads = () => {
   const handleSyncLeads = async () => {
     setSyncing(true);
     const toastId = toast.loading("Sincronizando todos os leads...");
-    
+
     try {
       // 1. Sincronizar do Instagram via Webhooks Logs
       const { data: webhookLogs } = await supabase
@@ -118,14 +118,14 @@ const Leads = () => {
 
       if (webhookLogs && webhookLogs.length > 0) {
         toast.loading(`Processando ${webhookLogs.length} eventos do Instagram...`, { id: toastId });
-        
+
         // Processar logs pendentes chamando o webhook para cada um
         for (const log of webhookLogs) {
           try {
             await supabase.functions.invoke('instagram-webhook', {
               body: log.payload as Record<string, any>
             });
-            
+
             // Marcar como processado
             await supabase.from('instagram_webhooks_logs').update({ processed: true }).eq('id', log.id);
           } catch (processError) {
@@ -144,14 +144,14 @@ const Leads = () => {
         supabase.from("service_orders").select("customer_name, customer_phone, store_id, created_by").not("customer_phone", "is", null).limit(2000),
         supabase.from("sales").select("customer_name, customer_phone, store_id, created_by").not("customer_phone", "is", null).limit(2000)
       ]);
-      
+
       const allLegacy = [...(osRes.data || []), ...(salesRes.data || [])];
       const toAdd = new Map();
-      
+
       allLegacy.forEach(legacy => {
         if (!legacy.customer_phone) return;
         const phone = legacy.customer_phone.trim();
-        
+
         if (!existingPhones.has(phone) && !toAdd.has(phone)) {
           toAdd.set(phone, {
             name: legacy.customer_name || "Lead Importado",
@@ -187,7 +187,7 @@ const Leads = () => {
   const [filterSource, setFilterSource] = useState("all");
   const [filterVendedor, setFilterVendedor] = useState("all");
   const [editModalOpen, setEditModalOpen] = useState(false);
-  
+
   // Media states
   const [recording, setRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -203,7 +203,7 @@ const Leads = () => {
     `).order("last_message_at", { ascending: false, nullsFirst: false });
 
     const currentStoreId = activeStoreId || localStorage.getItem("cellmanager-active-store-id");
-    
+
     if (currentStoreId && currentStoreId !== "all") {
       query = query.eq("store_id", currentStoreId);
     }
@@ -238,7 +238,7 @@ const Leads = () => {
       .select("*")
       .eq("lead_id", leadId)
       .order("created_at", { ascending: true });
-    
+
     if (error) {
       console.error("Error fetching messages:", error);
       toast.error("Erro ao carregar mensagens");
@@ -251,19 +251,19 @@ const Leads = () => {
     await supabase.from("leads").update({ has_unread: false }).eq("id", leadId);
   }, []);
 
-  useEffect(() => { 
+  useEffect(() => {
     if (!authLoading) {
-      fetchData(true); 
+      fetchData(true);
       fetchLastSync();
     }
   }, [activeStoreId, fetchLastSync, authLoading]);
 
   useEffect(() => {
     let channel: any;
-    
+
     const setupRealtime = () => {
       if (channel) supabase.removeChannel(channel);
-      
+
       channel = supabase.channel('crm-realtime')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, (payload) => {
           fetchData();
@@ -291,7 +291,7 @@ const Leads = () => {
       }
     }, 30000);
 
-    return () => { 
+    return () => {
       if (channel) supabase.removeChannel(channel);
       clearInterval(interval);
     };
@@ -302,7 +302,7 @@ const Leads = () => {
     if (scrollContainer) {
       const isAtBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 100;
       const isOpening = chatModalOpen && (!chatMessages || chatMessages.length <= 1);
-      
+
       if (isAtBottom || isOpening) {
         scrollContainer.scrollTop = scrollContainer.scrollHeight;
       }
@@ -394,15 +394,15 @@ const Leads = () => {
     const name = lead.name || "";
     const phone = lead.phone || "";
     const igId = lead.instagram_user_id || "";
-    
-    const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          phone.includes(searchTerm) ||
-                          igId.includes(searchTerm);
-                          
+
+    const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      phone.includes(searchTerm) ||
+      igId.includes(searchTerm);
+
     const matchesStore = filterStore === "all" || lead.store_id === filterStore;
     const matchesSource = filterSource === "all" || lead.source === filterSource;
     const matchesVendedor = filterVendedor === "all" || lead.assigned_to === filterVendedor;
-    
+
     return matchesSearch && matchesStore && matchesSource && matchesVendedor;
   });
 
@@ -435,13 +435,13 @@ const Leads = () => {
 
   const sendResponse = async () => {
     if (!selectedLead || !responseText.trim()) return;
-    
+
     setLoading(true);
     try {
       // Check if it's an Instagram Lead
       if (selectedLead.source === 'instagram' && selectedLead.instagram_user_id) {
         const { data: igConfig } = await supabase.from("instagram_config").select("*").eq("is_active", true).maybeSingle();
-        
+
         if (igConfig) {
           const response = await fetch(`https://graph.facebook.com/v19.0/${igConfig.instagram_business_account_id}/messages`, {
             method: 'POST',
@@ -454,14 +454,14 @@ const Leads = () => {
 
           const result = await response.json();
           if (!response.ok) throw new Error(`Erro Instagram: ${result.error?.message || 'Erro desconhecido'}`);
-          
+
           await supabase.from('lead_messages').insert({
             lead_id: selectedLead.id,
             content: responseText,
             sender_type: 'vendedor',
             message_type: 'text',
           });
-          
+
           toast.success("Mensagem enviada via Instagram!");
         } else {
           throw new Error("Instagram não configurado.");
@@ -513,7 +513,7 @@ const Leads = () => {
           toast.success("Enviado para a fila da extensão.");
         }
       }
-      
+
       if (selectedLead.status === 'novo') await updateStatus(selectedLead.id, 'atendimento');
       setResponseModalOpen(false);
       setChatModalOpen(false);
@@ -543,19 +543,19 @@ const Leads = () => {
           </div>
           <div className="flex gap-2">
             <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 className="gap-2 h-9 border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
                 onClick={handleSyncLeads}
                 disabled={syncing}
               >
-                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} /> 
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
                 {syncing ? "Sincronizando..." : "Sincronizar Leads"}
               </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <Button
+                variant="ghost"
+                size="sm"
                 className="gap-2 h-9 border-border text-muted-foreground hidden md:flex"
                 onClick={() => window.open(`https://github.com/itamar855/cellpromanager/archive/refs/heads/main.zip`, '_blank')}
               >
@@ -569,44 +569,44 @@ const Leads = () => {
               <DialogContent>
                 <DialogHeader><DialogTitle>Cadastrar Lead</DialogTitle></DialogHeader>
                 <form onSubmit={handleCreateLead} className="space-y-3">
-                  <div className="space-y-1.5"><Label className="text-xs">Nome</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required className="h-10" /></div>
+                  <div className="space-y-1.5"><Label className="text-xs">Nome</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required className="h-10" /></div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5"><Label className="text-xs">Telefone</Label><Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="(87) 99999-9999" className="h-10" /></div>
-                    <div className="space-y-1.5"><Label className="text-xs">E-mail</Label><Input value={form.email} onChange={e => setForm({...form, email: e.target.value})} type="email" className="h-10" /></div>
+                    <div className="space-y-1.5"><Label className="text-xs">Telefone</Label><Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="(87) 99999-9999" className="h-10" /></div>
+                    <div className="space-y-1.5"><Label className="text-xs">E-mail</Label><Input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} type="email" className="h-10" /></div>
                   </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Origem</Label>
-                        <Select value={form.source} onValueChange={v => setForm({...form, source: v})}>
-                          <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                    <SelectItem value="instagram">Instagram</SelectItem>
-                    <SelectItem value="trafego_pago">Tráfego Pago</SelectItem>
-                    <SelectItem value="indicacao">Indicação</SelectItem>
-                    <SelectItem value="os_vendas">Importado (OS/Vendas)</SelectItem>
-                    <SelectItem value="outro">Outro</SelectItem>
-                  </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Responsável</Label>
-                        <Select value={form.assigned_to} onValueChange={v => setForm({...form, assigned_to: v})}>
-                          <SelectTrigger className="h-10"><SelectValue placeholder="Atribuir a..." /></SelectTrigger>
-                          <SelectContent>
-                            {vendedores.map(v => <SelectItem key={v.user_id} value={v.user_id}>{v.display_name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
+                  <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Loja</Label>
-                      <Select value={form.store_id || activeStoreId || ""} onValueChange={v => setForm({...form, store_id: v})} disabled={!!activeStoreId}>
-                        <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                      <Label className="text-xs">Origem</Label>
+                      <Select value={form.source} onValueChange={v => setForm({ ...form, source: v })}>
+                        <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                          <SelectItem value="instagram">Instagram</SelectItem>
+                          <SelectItem value="trafego_pago">Tráfego Pago</SelectItem>
+                          <SelectItem value="indicacao">Indicação</SelectItem>
+                          <SelectItem value="os_vendas">Importado (OS/Vendas)</SelectItem>
+                          <SelectItem value="outro">Outro</SelectItem>
+                        </SelectContent>
                       </Select>
                     </div>
-                  <div className="space-y-1.5"><Label className="text-xs">Observações</Label><Textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} className="min-h-[80px]" /></div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Responsável</Label>
+                      <Select value={form.assigned_to} onValueChange={v => setForm({ ...form, assigned_to: v })}>
+                        <SelectTrigger className="h-10"><SelectValue placeholder="Atribuir a..." /></SelectTrigger>
+                        <SelectContent>
+                          {vendedores.map(v => <SelectItem key={v.user_id} value={v.user_id}>{v.display_name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Loja</Label>
+                    <Select value={form.store_id || activeStoreId || ""} onValueChange={v => setForm({ ...form, store_id: v })} disabled={!!activeStoreId}>
+                      <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5"><Label className="text-xs">Observações</Label><Textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="min-h-[80px]" /></div>
                   <Button type="submit" className="w-full h-11" disabled={loading}>{loading ? "Salvando..." : "Cadastrar Lead"}</Button>
                 </form>
               </DialogContent>
@@ -626,10 +626,10 @@ const Leads = () => {
         <div className="flex flex-col md:flex-row gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Pesquisar por nome ou telefone..." 
-              value={searchTerm} 
-              onChange={e => setSearchTerm(e.target.value)} 
+            <Input
+              placeholder="Pesquisar por nome ou telefone..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
               className="pl-9 h-10 bg-muted/20 border-border/40 focus:bg-muted/40 transition-all"
             />
           </div>
@@ -642,8 +642,8 @@ const Leads = () => {
               </SelectContent>
             </Select>
             {userRole === "admin" && (
-              <Select 
-                value={activeStoreId || "all"} 
+              <Select
+                value={activeStoreId || "all"}
                 onValueChange={(v) => {
                   setActiveStoreId(v);
                   setFilterStore(v);
@@ -673,7 +673,7 @@ const Leads = () => {
         </div>
       </div>
 
-    {leads.length === 0 && !loading && (
+      {leads.length === 0 && !loading && (
         <Card className="bg-primary/5 border-dashed border-primary/30">
           <CardContent className="p-6 text-center space-y-3">
             <div className="bg-primary/10 w-12 h-12 rounded-full flex items-center justify-center mx-auto">
@@ -692,7 +692,7 @@ const Leads = () => {
         </Card>
       )}
 
-      <LeadList 
+      <LeadList
         leads={filteredLeads}
         loading={loading}
         searchTerm={searchTerm}
@@ -710,8 +710,8 @@ const Leads = () => {
         isAdmin={isAdmin}
       />
 
-      <ConversaSync 
-        selectedLeadId={selectedLead?.id} 
+      <ConversaSync
+        selectedLeadId={selectedLead?.id}
         onLeadSync={(leadInfo) => {
           if (selectedLead && (selectedLead.name !== leadInfo.name)) {
             setSelectedLead(prev => prev ? { ...prev, ...leadInfo } : null);
@@ -742,11 +742,11 @@ const Leads = () => {
                     {selectedLead.phone ? (
                       <span className="text-xs">{selectedLead.phone}</span>
                     ) : (
-                      <Input 
-                        placeholder="Digite o WhatsApp (com DDD)" 
-                        className="h-8 text-xs" 
+                      <Input
+                        placeholder="Digite o WhatsApp (com DDD)"
+                        className="h-8 text-xs"
                         value={form.phone}
-                        onChange={e => setForm({...form, phone: e.target.value})}
+                        onChange={e => setForm({ ...form, phone: e.target.value })}
                       />
                     )}
                   </div>
@@ -755,9 +755,9 @@ const Leads = () => {
               </div>
               <div className="space-y-2">
                 <Label className="text-xs">Sua Resposta</Label>
-                <Textarea 
-                  value={responseText} 
-                  onChange={e => setResponseText(e.target.value)} 
+                <Textarea
+                  value={responseText}
+                  onChange={e => setResponseText(e.target.value)}
                   placeholder="Escreva sua mensagem aqui..."
                   className="min-h-[120px] text-sm focus:ring-primary shadow-inner"
                 />
@@ -781,15 +781,15 @@ const Leads = () => {
         <DialogContent>
           <DialogHeader><DialogTitle>Editar Lead: {selectedLead?.name || "Lead sem nome"}</DialogTitle></DialogHeader>
           <form onSubmit={saveEditLead} className="space-y-3">
-            <div className="space-y-1.5"><Label className="text-xs">Nome</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required className="h-10" /></div>
+            <div className="space-y-1.5"><Label className="text-xs">Nome</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required className="h-10" /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label className="text-xs">Telefone</Label><Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} className="h-10" /></div>
-              <div className="space-y-1.5"><Label className="text-xs">E-mail</Label><Input value={form.email} onChange={e => setForm({...form, email: e.target.value})} type="email" className="h-10" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">Telefone</Label><Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="h-10" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">E-mail</Label><Input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} type="email" className="h-10" /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">Origem</Label>
-                <Select value={form.source} onValueChange={v => setForm({...form, source: v})}>
+                <Select value={form.source} onValueChange={v => setForm({ ...form, source: v })}>
                   <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="whatsapp">WhatsApp</SelectItem>
@@ -803,7 +803,7 @@ const Leads = () => {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Responsável</Label>
-                <Select value={form.assigned_to} onValueChange={v => setForm({...form, assigned_to: v})}>
+                <Select value={form.assigned_to} onValueChange={v => setForm({ ...form, assigned_to: v })}>
                   <SelectTrigger className="h-10"><SelectValue placeholder="Atribuir a..." /></SelectTrigger>
                   <SelectContent>
                     {vendedores.map(v => <SelectItem key={v.user_id} value={v.user_id}>{v.display_name}</SelectItem>)}
@@ -813,12 +813,12 @@ const Leads = () => {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Loja</Label>
-              <Select value={form.store_id || activeStoreId || ""} onValueChange={v => setForm({...form, store_id: v})} disabled={!!activeStoreId}>
+              <Select value={form.store_id || activeStoreId || ""} onValueChange={v => setForm({ ...form, store_id: v })} disabled={!!activeStoreId}>
                 <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5"><Label className="text-xs">Observações</Label><Textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} className="min-h-[80px]" /></div>
+            <div className="space-y-1.5"><Label className="text-xs">Observações</Label><Textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="min-h-[80px]" /></div>
             <Button type="submit" className="w-full h-11" disabled={loading}>{loading ? "Salvando..." : "Salvar Alterações"}</Button>
             <Button type="button" variant="outline" className="w-full h-11" onClick={() => {
               setEditModalOpen(false);
@@ -842,7 +842,7 @@ const Leads = () => {
               </Badge>
             </DialogTitle>
           </DialogHeader>
-          
+
           <ScrollArea className="flex-1 p-4 bg-muted/10">
             <div className="space-y-3 pb-4">
               {messagesLoading ? (
@@ -852,16 +852,15 @@ const Leads = () => {
                 </div>
               ) : chatMessages.length === 0 ? (
                 <div className="text-center py-10 text-muted-foreground text-sm">
-                  Nenhuma mensagem capturada ainda. <br/> Use o botão "Enviar p/ CRM" na extensão para sincronizar ou o Instagram Webhook.
+                  Nenhuma mensagem capturada ainda. <br /> Use o botão "Enviar p/ CRM" na extensão para sincronizar ou o Instagram Webhook.
                 </div>
               ) : (
                 chatMessages.map(msg => (
                   <div key={msg.id} className={`flex ${msg.sender_type === 'vendedor' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm relative group ${
-                      msg.sender_type === 'vendedor' 
-                      ? 'bg-primary/20 text-foreground rounded-tr-none border border-primary/20' 
-                      : 'bg-muted border text-slate-700 rounded-tl-none'
-                    }`}>
+                    <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm relative group ${msg.sender_type === 'vendedor'
+                        ? 'bg-primary/20 text-foreground rounded-tr-none border border-primary/20'
+                        : 'bg-muted border text-slate-700 rounded-tl-none'
+                      }`}>
                       {msg.message_type === 'image' ? (
                         <div className="space-y-1">
                           <img src={msg.media_url} className="rounded-lg max-h-60 object-cover cursor-pointer hover:opacity-90" onClick={() => window.open(msg.media_url, '_blank')} />
@@ -875,7 +874,7 @@ const Leads = () => {
                       ) : (
                         <p className="whitespace-pre-wrap">{msg.content}</p>
                       )}
-                      
+
                       <div className={`text-[8px] mt-1 opacity-60 flex items-center gap-1 ${msg.sender_type === 'vendedor' ? 'justify-end' : ''}`}>
                         {new Date(msg.created_at).toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' })}
                         {msg.sender_type === 'vendedor' && <CheckCheck className="h-2.5 w-2.5 text-blue-500" />}
@@ -891,36 +890,36 @@ const Leads = () => {
             <div className="flex flex-col gap-2">
               {imageFile && (
                 <div className="flex items-center gap-2 bg-primary/10 p-2 rounded-lg text-xs">
-                  <ImageIcon className="h-4 w-4" /> 
+                  <ImageIcon className="h-4 w-4" />
                   <span className="truncate">{imageFile.name}</span>
                   <Button variant="ghost" size="icon" className="h-5 w-5 ml-auto" onClick={() => setImageFile(null)}><X className="h-3 w-3" /></Button>
                 </div>
               )}
               {audioBlob && (
                 <div className="flex items-center gap-2 bg-primary/10 p-2 rounded-lg text-xs">
-                  <Mic className="h-4 w-4" /> 
+                  <Mic className="h-4 w-4" />
                   <span>Áudio gravado pronto p/ envio</span>
                   <Button variant="ghost" size="icon" className="h-5 w-5 ml-auto" onClick={() => setAudioBlob(null)}><X className="h-3 w-3" /></Button>
                 </div>
               )}
-              
+
               <div className="flex items-center gap-2">
                 <input type="file" id="chat-img" className="hidden" accept="image/*" onChange={e => setImageFile(e.target.files?.[0] || null)} />
                 <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground" onClick={() => document.getElementById('chat-img')?.click()}>
                   <Paperclip className="h-5 w-5" />
                 </Button>
-                
-                <Input 
-                  placeholder="Escrava uma mensagem..." 
-                  value={responseText} 
-                  onChange={e => setResponseText(e.target.value)} 
+
+                <Input
+                  placeholder="Escrava uma mensagem..."
+                  value={responseText}
+                  onChange={e => setResponseText(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendResponse()}
                   className="flex-1"
                 />
-                
-                <Button 
-                  variant={recording ? "destructive" : "ghost"} 
-                  size="icon" 
+
+                <Button
+                  variant={recording ? "destructive" : "ghost"}
+                  size="icon"
                   className={`h-9 w-9 ${recording ? 'animate-pulse' : 'text-muted-foreground'}`}
                   onClick={() => {
                     if (recording) {
@@ -944,10 +943,10 @@ const Leads = () => {
                 >
                   <Mic className="h-5 w-5" />
                 </Button>
-                
-                <Button 
-                  size="icon" 
-                  className="h-9 w-9" 
+
+                <Button
+                  size="icon"
+                  className="h-9 w-9"
                   disabled={loading || (!responseText.trim() && !imageFile && !audioBlob)}
                   onClick={sendResponse}
                 >

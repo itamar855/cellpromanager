@@ -69,8 +69,8 @@ serve(async (req) => {
   // ── GET: verificação de webhook pela Meta ──────────────────────────────────
   if (method === "GET") {
     const url = new URL(req.url);
-    const mode      = url.searchParams.get("hub.mode");
-    const token     = url.searchParams.get("hub.verify_token");
+    const mode = url.searchParams.get("hub.mode");
+    const token = url.searchParams.get("hub.verify_token");
     const challenge = url.searchParams.get("hub.challenge");
 
     // O verify_token deve bater exatamente com o configurado no painel da Meta
@@ -124,11 +124,11 @@ serve(async (req) => {
       const messagingEvents = entry.messaging ?? entry.changes ?? [];
 
       for (const messaging of messagingEvents) {
-        const senderId    = messaging.sender?.id ?? messaging.value?.from?.id ?? messaging.value?.sender_id;
+        const senderId = messaging.sender?.id ?? messaging.value?.from?.id ?? messaging.value?.sender_id;
         const recipientId = messaging.recipient?.id;
-        const message     = messaging.message ?? messaging.value?.message;
+        const message = messaging.message ?? messaging.value?.message;
         const messageText = message?.text ?? (typeof message === "string" ? message : null);
-        const isEcho      = message?.is_echo === true;
+        const isEcho = message?.is_echo === true;
 
         // Ignorar eventos sem mensagem de texto nem anexo
         if (!senderId || (!messageText && !message?.attachments)) {
@@ -155,14 +155,14 @@ serve(async (req) => {
 
         if (leadFetchError) console.error("Erro ao buscar lead:", leadFetchError.message);
 
-        let leadId             = existingLead?.id ?? null;
-        let userName           = existingLead?.name ?? null;
-        let instagramUsername  = existingLead?.instagram_username ?? null;
+        let leadId = existingLead?.id ?? null;
+        let userName = existingLead?.name ?? null;
+        let instagramUsername = existingLead?.instagram_username ?? null;
 
         // 2. Tentar enriquecer o nome via Graph API (apenas mensagens recebidas)
         if (!isEcho && config?.page_access_token && (!userName || userName.startsWith("IG User"))) {
           const profile = await fetchInstagramUserProfile(targetLeadId, config.page_access_token);
-          if (profile?.name)     userName          = profile.name;
+          if (profile?.name) userName = profile.name;
           if (profile?.username) instagramUsername = profile.username;
         }
 
@@ -176,14 +176,14 @@ serve(async (req) => {
           const { data: newLead, error: createError } = await supabaseClient
             .from("leads")
             .insert({
-              name:                 userName,
-              instagram_user_id:    targetLeadId,
-              instagram_username:   instagramUsername,
-              source:               "instagram",
-              status:               "novo",
-              store_id:             config?.store_id ?? null,
+              name: userName,
+              instagram_user_id: targetLeadId,
+              instagram_username: instagramUsername,
+              source: "instagram",
+              status: "novo",
+              store_id: config?.store_id ?? null,
               // ── FIX BUG 3: sem UUID hardcoded ─────────────────────────────
-              created_by:           createdBy,
+              created_by: createdBy,
             })
             .select("id")
             .maybeSingle();
@@ -218,12 +218,12 @@ serve(async (req) => {
 
         // 4. Inserir mensagem
         const { error: msgError } = await supabaseClient.from("lead_messages").insert({
-          lead_id:      leadId,
-          content:      messageText ?? (message?.attachments ? "[Mídia]" : ""),
+          lead_id: leadId,
+          content: messageText ?? (message?.attachments ? "[Mídia]" : ""),
           // ── FIX (original já estava certo aqui, mantido) ─────────────────
-          sender_type:  isEcho ? "vendedor" : "cliente",
+          sender_type: isEcho ? "vendedor" : "cliente",
           message_type: message?.attachments ? "image" : "text",
-          channel:      "instagram",
+          channel: "instagram",
         });
 
         if (msgError) console.error("Erro ao inserir mensagem:", msgError.message);
@@ -233,7 +233,7 @@ serve(async (req) => {
           .from("leads")
           .update({
             last_message_at: new Date().toISOString(),
-            has_unread:      !isEcho,
+            has_unread: !isEcho,
           })
           .eq("id", leadId);
 

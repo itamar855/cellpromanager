@@ -45,7 +45,7 @@ const Configuracoes = () => {
     setStores(storesRes.data ?? []);
     if (waRes.data) setWhatsappConfig(waRes.data);
     if (igRes.data) setInstagramConfig(igRes.data);
-    
+
     if (storesRes.data && storesRes.data.length > 0 && !form.store_id) {
       setForm(f => ({ ...f, store_id: storesRes.data[0].id }));
     }
@@ -120,7 +120,7 @@ const Configuracoes = () => {
       is_active: whatsappConfig.is_active,
       store_id: activeStoreId || form.store_id || (stores.length > 0 ? stores[0].id : null)
     };
-    const { error } = whatsappConfig.id 
+    const { error } = whatsappConfig.id
       ? await supabase.from("whatsapp_config").update(payload).eq("id", whatsappConfig.id)
       : await supabase.from("whatsapp_config").insert(payload);
     if (error) toast.error("Erro ao salvar configuração: " + error.message);
@@ -138,7 +138,7 @@ const Configuracoes = () => {
       is_active: instagramConfig.is_active,
       store_id: activeStoreId || (stores.length > 0 ? stores[0].id : null)
     };
-    const { error } = instagramConfig.id 
+    const { error } = instagramConfig.id
       ? await supabase.from("instagram_config").update(payload).eq("id", instagramConfig.id)
       : await supabase.from("instagram_config").insert(payload);
     if (error) toast.error("Erro Instagram: " + error.message);
@@ -215,9 +215,9 @@ const Configuracoes = () => {
                 <Label className="text-xs font-semibold flex items-center gap-1">
                   <Globe className="h-3 w-3" /> URL da API
                 </Label>
-                <Input 
-                  value={whatsappConfig.api_url} 
-                  onChange={e => setWhatsappConfig({...whatsappConfig, api_url: e.target.value})} 
+                <Input
+                  value={whatsappConfig.api_url}
+                  onChange={e => setWhatsappConfig({ ...whatsappConfig, api_url: e.target.value })}
                   placeholder="https://sua-api.com" className="h-10 text-sm"
                 />
               </div>
@@ -225,10 +225,10 @@ const Configuracoes = () => {
                 <Label className="text-xs font-semibold flex items-center gap-1">
                   <ShieldCheck className="h-3 w-3" /> API Key (Global ou Instance)
                 </Label>
-                <Input 
+                <Input
                   type="password"
-                  value={whatsappConfig.api_key} 
-                  onChange={e => setWhatsappConfig({...whatsappConfig, api_key: e.target.value})} 
+                  value={whatsappConfig.api_key}
+                  onChange={e => setWhatsappConfig({ ...whatsappConfig, api_key: e.target.value })}
                   placeholder="Seu Token" className="h-10 text-sm"
                 />
               </div>
@@ -236,16 +236,16 @@ const Configuracoes = () => {
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">Nome da Instância</Label>
-                <Input 
-                  value={whatsappConfig.instance_name} 
-                  onChange={e => setWhatsappConfig({...whatsappConfig, instance_name: e.target.value})} 
+                <Input
+                  value={whatsappConfig.instance_name}
+                  onChange={e => setWhatsappConfig({ ...whatsappConfig, instance_name: e.target.value })}
                   placeholder="ex: LeadManager" className="h-10 text-sm"
                 />
               </div>
               <div className="flex items-center gap-3 pt-6">
-                <Switch 
-                  checked={whatsappConfig.is_active} 
-                  onCheckedChange={v => setWhatsappConfig({...whatsappConfig, is_active: v})}
+                <Switch
+                  checked={whatsappConfig.is_active}
+                  onCheckedChange={v => setWhatsappConfig({ ...whatsappConfig, is_active: v })}
                 />
                 <Label className="text-sm font-medium">Integração Ativa</Label>
               </div>
@@ -295,34 +295,32 @@ const Configuracoes = () => {
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">Page ID (Facebook)</Label>
-                <Input value={instagramConfig.page_id} onChange={e => setInstagramConfig({...instagramConfig, page_id: e.target.value})} placeholder="ID da Página vinculada" className="h-10 text-sm" />
+                <Input value={instagramConfig.page_id} onChange={e => setInstagramConfig({ ...instagramConfig, page_id: e.target.value })} placeholder="ID da Página vinculada" className="h-10 text-sm" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">Instagram Business ID</Label>
-                <Input value={instagramConfig.instagram_business_account_id} onChange={e => setInstagramConfig({...instagramConfig, instagram_business_account_id: e.target.value})} placeholder="ID da Conta Business" className="h-10 text-sm" />
+                <Input value={instagramConfig.instagram_business_account_id} onChange={e => setInstagramConfig({ ...instagramConfig, instagram_business_account_id: e.target.value })} placeholder="ID da Conta Business" className="h-10 text-sm" />
               </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Page Access Token (Permanent)</Label>
-              <Input type="password" value={instagramConfig.page_access_token} onChange={e => setInstagramConfig({...instagramConfig, page_access_token: e.target.value})} placeholder="Seu Token de Acesso da Graph API" className="h-10 text-sm" />
-            </div>
-            
-            <div className="rounded-lg bg-pink-500/5 border border-pink-500/20 p-3 space-y-2">
-              <p className="text-[11px] font-bold text-pink-700 uppercase flex items-center gap-1"><Info className="h-3 w-3" /> Webhook para Meta for Developers</p>
-              <p className="text-xs text-pink-800/80 leading-relaxed">No painel do seu app no Meta, configure o Webhook para o objeto <b>instagram</b> com a URL:</p>
-              <div className="flex items-center gap-2 bg-white/50 p-2 rounded border border-pink-200">
-                <code className="text-[10px] flex-1 break-all text-pink-900">{`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/instagram-webhook`}</code>
-                <Button type="button" variant="outline" className="h-7 px-2 text-[10px] border-pink-200 text-pink-700 font-bold" onClick={() => {
-                  navigator.clipboard.writeText(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/instagram-webhook`);
-                  toast.success("Copiado!");
-                }}>Copiar</Button>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Page Access Token (Permanent)</Label>
+                <Input type="password" value={instagramConfig.page_access_token} onChange={e => setInstagramConfig({ ...instagramConfig, page_access_token: e.target.value })} placeholder="Seu Token de Acesso da Graph API" className="h-10 text-sm" />
               </div>
-              <p className="text-[10px] text-pink-700/60 mt-1">Verify Token: <b>instagram_crm_verify</b> | Eventos: <b>messages</b></p>
-            </div>
+              <div className="rounded-lg bg-pink-500/5 border border-pink-500/20 p-3 space-y-2">
+                <p className="text-[11px] font-bold text-pink-700 uppercase flex items-center gap-1"><Info className="h-3 w-3" /> Webhook para Meta for Developers</p>
+                <p className="text-xs text-pink-800/80 leading-relaxed">No painel do seu app no Meta, configure o Webhook para o objeto <b>instagram</b> com a URL:</p>
+                <div className="flex items-center gap-2 bg-white/50 p-2 rounded border border-pink-200">
+                  <code className="text-[10px] flex-1 break-all text-pink-900">{`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/instagram-webhook`}</code>
+                  <Button type="button" variant="outline" className="h-7 px-2 text-[10px] border-pink-200 text-pink-700 font-bold" onClick={() => {
+                    navigator.clipboard.writeText(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/instagram-webhook`);
+                    toast.success("Copiado!");
+                  }}>Copiar</Button>
+                </div>
+                <p className="text-[10px] text-pink-700/60 mt-1">Verify Token: <b>instagram_crm_verify</b> | Eventos: <b>messages</b></p>
+              </div>
 
-            <Button type="submit" className="w-full h-11 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 shadow-lg text-white font-bold" disabled={loading}>
-              {loading ? "Salvando..." : instagramConfig.id ? "Atualizar Integração Instagram" : "Salvar Configurações Instagram"}
-            </Button>
+              <Button type="submit" className="w-full h-11 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 shadow-lg text-white font-bold" disabled={loading}>
+                {loading ? "Salvando..." : instagramConfig.id ? "Atualizar Integração Instagram" : "Salvar Configurações Instagram"}
+              </Button>
           </form>
         </CardContent>
       </Card>
@@ -371,9 +369,9 @@ const Configuracoes = () => {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-xs text-muted-foreground leading-relaxed">
-            1. No N8N, crie um nó <strong>Webhook (Webhook Cloud)</strong> com método <strong>POST</strong>.<br/>
-            2. Copie a <strong>Production URL</strong> gerada e cole no campo acima.<br/>
-            3. Use o botão <strong>"Testar"</strong> para enviar um JSON de exemplo ao N8N.<br/>
+            1. No N8N, crie um nó <strong>Webhook (Webhook Cloud)</strong> com método <strong>POST</strong>.<br />
+            2. Copie a <strong>Production URL</strong> gerada e cole no campo acima.<br />
+            3. Use o botão <strong>"Testar"</strong> para enviar um JSON de exemplo ao N8N.<br />
             4. No N8N, adicione um nó de <strong>WhatsApp (Baileys ou API Oficial)</strong> para enviar a mensagem usando os dados recebidos.
           </p>
           <div className="flex gap-2">
