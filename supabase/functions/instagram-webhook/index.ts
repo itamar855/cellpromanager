@@ -18,9 +18,10 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   );
 
-  const fetchInstagramUserProfile = async (userId: string, accessToken: string) => {
+  const fetchInstagramUserProfile = async (userId, accessToken) => {
     try {
-      const response = await fetch(\`https://graph.facebook.com/v19.0/\${userId}?fields=name,username&access_token=\${accessToken}\`);
+      const url = "https://graph.facebook.com/v19.0/" + userId + "?fields=name,username&access_token=" + accessToken;
+      const response = await fetch(url);
       const data = await response.json();
       if (data.error) {
         console.error("Instagram Profile Fetch Error:", data.error);
