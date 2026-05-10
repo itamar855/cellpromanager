@@ -151,11 +151,6 @@ const Leads = () => {
       store:stores(name)
     `).order("last_message_at", { ascending: false, nullsFirst: false });
 
-    // Multi-agent filtering: only see assigned leads if not admin/gerente
-    if (userRole !== "admin" && userRole !== "gerente") {
-      query = query.or(`assigned_to.eq.${user?.id},assigned_to.is.null`);
-    }
-
     if (activeStoreId && activeStoreId !== "all") {
       query = query.eq("store_id", activeStoreId);
     }
