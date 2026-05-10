@@ -736,7 +736,9 @@ const Leads = () => {
                           <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
-                      <span className="text-[9px] text-muted-foreground">{new Date(lead.created_at).toLocaleDateString("pt-BR")}</span>
+                      <span className="text-[9px] text-muted-foreground" title={new Date(lead.last_message_at || lead.created_at).toLocaleString('pt-BR')}>
+                        {new Date(lead.last_message_at || lead.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </span>
                     </div>
                   </CardContent>
                 </Card>
