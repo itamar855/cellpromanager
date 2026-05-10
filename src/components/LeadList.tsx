@@ -133,12 +133,12 @@ export function LeadList({
                     <CardContent className="p-3 space-y-2">
                       <div className="flex justify-between items-start">
                         <div className="flex items-center gap-2">
-                          <div className="flex flex-col">
-                            <p className="font-bold text-sm leading-tight group-hover:text-primary transition-colors text-foreground">
-                              {lead.name || lead.instagram_username || "Lead sem nome"}
+                          <div className="flex flex-col overflow-hidden max-w-[160px]">
+                            <p className="font-bold text-sm leading-tight group-hover:text-primary transition-colors text-foreground truncate">
+                              {lead.name || lead.instagram_username || lead.phone || lead.instagram_user_id || "Lead sem identificação"}
                             </p>
                             {lead.instagram_username && lead.name && (
-                              <p className="text-[10px] text-muted-foreground">@{lead.instagram_username}</p>
+                              <p className="text-[10px] text-muted-foreground truncate">@{lead.instagram_username}</p>
                             )}
                           </div>
                           {lead.has_unread && (
