@@ -219,14 +219,14 @@ const Leads = () => {
     const { data: storesData } = await supabase.from("stores").select("*");
     const { data: profilesData } = await supabase.from("profiles").select("user_id, display_name");
 
-    // Filtragem manual adicional para garantir que leads sem last_message_at 
-    // também apareçam no topo se forem recentes, ou apenas garantir que leadsData exista
     if (leadsData) {
+      // Buscar última mensagem para cada lead separadamente se necessário ou confiar no last_message_at
       leadsData = leadsData.sort((a, b) => {
         const dateA = a.last_message_at || a.created_at;
         const dateB = b.last_message_at || b.created_at;
         return new Date(dateB).getTime() - new Date(dateA).getTime();
       });
+      console.log(`Leads: Loaded ${leadsData.length} leads`);
     }
 
     setLeads(leadsData ?? []);
