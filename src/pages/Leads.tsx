@@ -254,12 +254,41 @@ const Leads = () => {
   }, [activeStoreId, fetchLastSync, authLoading]);
 
   useEffect(() => {
-    const channel = supabase.channel('crm-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchData())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lead_messages' }, (payload) => {
-        if (selectedLead?.id === payload.new.lead_id) fetchMessages(selectedLead.id);
-      })
-      .subscribe();
+    const setupRealtime = () => {
+      const channel = supabase.channel('crm-realtime')
+        .on('postgres_changes', { 
+          event: '*', 
+          schema: 'public', 
+          table: 'leads' 
+        }, (payload) => {
+          fetchData();
+          if (payload.eventType === 'INSERT') {
+            toast.info("Novo lead recebido!");
+          }
+        })
+        .on('postgres_changes', { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'lead_messages' 
+        }, (payload) => {
+          if (selectedLead?.id === payload.new.lead_id) {
+            fetchMessages(selectedLead.id);
+          }
+          if (payload.new.sender !== 'vendedor') {
+            toast.info("Nova mensagem recebida!");
+          }
+        })
+        .subscribe((status) => {
+          if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+            console.log("Realtime connection lost, retrying...");
+            setTimeout(setupRealtime, 3000);
+          }
+        });
+
+      return channel;
+    };
+
+    const channel = setupRealtime();
     return () => { supabase.removeChannel(channel); };
   }, [selectedLead?.id, fetchData, fetchMessages]);
 
