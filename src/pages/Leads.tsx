@@ -22,7 +22,8 @@ import {
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
-// Placeholder for Instagram if not in lucide-react
+import { LeadList } from "@/components/LeadList";
+
 const Instagram = ({ className }: { className?: string }) => (
   <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>
 );
@@ -257,13 +258,42 @@ const Leads = () => {
   }, [activeStoreId, fetchLastSync, authLoading]);
 
   useEffect(() => {
-    const channel = supabase.channel('crm-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchData())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lead_messages' }, (payload) => {
-        if (selectedLead?.id === payload.new.lead_id) fetchMessages(selectedLead.id);
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    let channel: any;
+    
+    const setupRealtime = () => {
+      if (channel) supabase.removeChannel(channel);
+      
+      channel = supabase.channel('crm-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, (payload) => {
+          fetchData();
+          if (payload.eventType === 'INSERT') toast.info("Novo lead recebido!");
+        })
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lead_messages' }, (payload) => {
+          if (selectedLead?.id === payload.new.lead_id) fetchMessages(selectedLead.id);
+          if (payload.new.sender !== 'vendedor') toast.info("Nova mensagem recebida!");
+        })
+        .subscribe((status) => {
+          if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+            console.log("Realtime connection lost, retrying in 3s...");
+            setTimeout(setupRealtime, 3000);
+          }
+        });
+    };
+
+    setupRealtime();
+
+    // Fallback health check every 30s
+    const interval = setInterval(() => {
+      if (!channel || channel.state !== 'joined') {
+        console.log("Channel not joined, reconnecting...");
+        setupRealtime();
+      }
+    }, 30000);
+
+    return () => { 
+      if (channel) supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, [selectedLead?.id, fetchData, fetchMessages]);
 
   useEffect(() => {
@@ -650,131 +680,23 @@ const Leads = () => {
         </Card>
       )}
 
-      {/* Kanban Board */}
-      {loading ? (
-        <div className="flex-1 flex flex-col items-center justify-center space-y-4">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-muted-foreground animate-pulse">Carregando seus leads...</p>
-        </div>
-      ) : (
-      <div className="flex gap-4 overflow-x-auto pb-4 items-start flex-1 min-h-[500px] scrollbar-thin">
-        {allStatuses.map(status => (
-          <div 
-            key={status} 
-            className="flex-shrink-0 w-[280px] flex flex-col gap-3 rounded-xl bg-muted/30 p-3 border border-border/40 min-h-[400px]"
-            onDragOver={handleDragOver}
-            onDrop={e => handleDrop(e, status)}
-          >
-            <div className="flex items-center justify-between px-1">
-              <h3 className="font-semibold text-sm flex items-center gap-2">
-                <Badge className={`h-2 w-2 rounded-full p-0 ${statusConfig[status].color.split(' ')[0]}`} />
-                {statusConfig[status].label}
-              </h3>
-              <Badge variant="secondary" className="text-[10px] bg-muted/50">{filteredLeads.filter(l => l.status === status).length}</Badge>
-            </div>
-
-            <div className="space-y-3 overflow-y-auto pr-1">
-              {filteredLeads.filter(l => l.status === status).length === 0 && !loading && (
-                <div className="h-20 border-2 border-dashed border-border/30 rounded-xl flex items-center justify-center text-muted-foreground/20 text-[10px]">
-                  {searchTerm ? "Nenhum resultado" : "Arraste leads aqui"}
-                </div>
-              )}
-              {filteredLeads.filter(l => l.status === status).map(lead => (
-                <Card 
-                  key={lead.id} 
-                  draggable 
-                  onDragStart={e => handleDragStart(e, lead.id)}
-                  className="cursor-pointer border-border/40 hover:border-primary/50 transition-all shadow-sm hover:shadow-md active:scale-[0.98] group"
-                >
-                  <CardContent className="p-3 space-y-2">
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-2">
-                        <p className="font-bold text-sm leading-tight group-hover:text-primary transition-colors">{lead.name || "Lead sem nome"}</p>
-                        {(lead as any).has_unread && (
-                          <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
-                        )}
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        {lead.source === 'whatsapp' ? (
-                          <MessageCircle className="h-3 w-3 text-green-500" />
-                        ) : lead.source === 'instagram' ? (
-                          <Instagram className="h-3 w-3 text-pink-500" />
-                        ) : (
-                          <Badge variant="outline" className="text-[7px] h-3 px-1 border-primary/20 bg-primary/5 text-primary">CRM</Badge>
-                        )}
-                      </div>
-                    </div>
-                    {lead.phone && <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Phone className="h-2.5 w-2.5" /> {lead.phone}</div>}
-                    <div className="flex flex-col gap-1 mt-1">
-                      <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground">
-                        <Users className="h-2.5 w-2.5" /> 
-                        {lead.assigned_user?.display_name || "Sem Responsável"}
-                      </div>
-                      {lead.store?.name && (
-                        <div className="flex items-center gap-1.5 text-[9px] text-primary/70">
-                          <Store className="h-2.5 w-2.5" /> 
-                          {lead.store.name}
-                        </div>
-                      )}
-                    </div>
-                    {lead.notes && <p className="text-[10px] text-muted-foreground line-clamp-2 italic">"{lead.notes}"</p>}
-                    
-                    <div className="flex items-center justify-between pt-2 border-t border-border/40">
-                      <div className="flex gap-1">
-                        <Button 
-                          size="icon" 
-                          variant="ghost"
-                          className="h-7 w-7 rounded-full hover:bg-primary/10 hover:text-primary transition-colors"
-                          onClick={() => {
-                            setSelectedLead(lead);
-                            setChatModalOpen(true);
-                            fetchMessages(lead.id);
-                          }}
-                        >
-                          <MessageSquare className="h-3 w-3" />
-                        </Button>
-                        {isAdmin && (
-                          <Button 
-                            size="icon" 
-                            variant="ghost"
-                            className="h-7 w-7 rounded-full hover:bg-primary/10 hover:text-primary transition-colors"
-                            onClick={() => handleEditLead(lead)}
-                          >
-                            <ChevronRight className="h-3 w-3" />
-                          </Button>
-                        )}
-                        <Button 
-                          size="icon" 
-                          variant="ghost"
-                          className="h-7 w-7 rounded-full hover:bg-primary/10 hover:text-primary transition-colors"
-                          onClick={() => handleResponse(lead)}
-                        >
-                          <MessageCircle className="h-3 w-3 text-green-500" />
-                        </Button>
-                        <Button 
-                          size="icon" 
-                          variant="ghost"
-                          className="h-7 w-7 rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors text-muted-foreground"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteLead(lead.id, lead.name);
-                          }}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                      <span className="text-[9px] text-muted-foreground" title={new Date(lead.last_message_at || lead.created_at).toLocaleString('pt-BR')}>
-                        {new Date(lead.last_message_at || lead.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-      )}
+      <LeadList 
+        leads={filteredLeads}
+        loading={loading}
+        searchTerm={searchTerm}
+        allStatuses={allStatuses}
+        statusConfig={statusConfig}
+        onStatusChange={updateStatus}
+        onLeadClick={(lead) => {
+          setSelectedLead(lead);
+          setChatModalOpen(true);
+          fetchMessages(lead.id);
+        }}
+        onEditLead={handleEditLead}
+        onDeleteLead={handleDeleteLead}
+        onResponseClick={handleResponse}
+        isAdmin={isAdmin}
+      />
 
       {/* Response Integrated Modal */}
       <Dialog open={responseModalOpen} onOpenChange={setResponseModalOpen}>
