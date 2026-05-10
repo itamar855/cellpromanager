@@ -184,7 +184,11 @@ const Leads = () => {
       // Caso padrão se não houver loja selecionada
     }
 
-    const { data: leadsData } = await query;
+    const { data: leadsData, error: leadsError } = await query;
+    if (leadsError) {
+      console.error("Error fetching leads:", leadsError);
+      toast.error("Erro ao carregar leads: " + leadsError.message);
+    }
     const { data: storesData } = await supabase.from("stores").select("*");
     const { data: profilesData } = await supabase.from("profiles").select("user_id, display_name");
 
