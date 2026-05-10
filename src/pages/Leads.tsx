@@ -595,6 +595,12 @@ const Leads = () => {
       )}
 
       {/* Kanban Board */}
+      {loading ? (
+        <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-muted-foreground animate-pulse">Carregando seus leads...</p>
+        </div>
+      ) : (
       <div className="flex gap-4 overflow-x-auto pb-4 items-start flex-1 min-h-[500px] scrollbar-thin">
         {allStatuses.map(status => (
           <div 
