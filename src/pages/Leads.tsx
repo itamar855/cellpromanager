@@ -258,7 +258,6 @@ const Leads = () => {
   }, [activeStoreId, fetchLastSync, authLoading]);
 
   useEffect(() => {
-  useEffect(() => {
     let channel: any;
     
     const setupRealtime = () => {
