@@ -59,6 +59,7 @@ const Leads = () => {
   const [vendedores, setVendedores] = useState<any[]>([]);
   const [chatModalOpen, setChatModalOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [lastIGSync, setLastIGSync] = useState<{ date: Date; status: string; error_message?: string } | null>(null);
