@@ -701,10 +701,18 @@ const Leads = () => {
 
       <ConversaSync 
         selectedLeadId={selectedLead?.id} 
-        onSyncComplete={() => {
-          if (selectedLead?.id) fetchMessages(selectedLead.id);
+        onLeadSync={(leadInfo) => {
+          if (selectedLead && (selectedLead.name !== leadInfo.name)) {
+            setSelectedLead(prev => prev ? { ...prev, ...leadInfo } : null);
+          }
         }}
-        onNewMessage={() => {
+        onSyncComplete={(msgs) => {
+          setChatMessages(msgs);
+        }}
+        onNewMessage={(msg) => {
+          // fetchMessages already handles the full list, but we can append locally
+          // since syncHistory already updated setChatMessages if it was a full sync
+          // or we can just call fetchMessages to be safe
           if (selectedLead?.id) fetchMessages(selectedLead.id);
         }}
       />
