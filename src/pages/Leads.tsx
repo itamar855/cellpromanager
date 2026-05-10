@@ -676,131 +676,23 @@ const Leads = () => {
         </Card>
       )}
 
-      {/* Kanban Board */}
-      {loading ? (
-        <div className="flex-1 flex flex-col items-center justify-center space-y-4">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-muted-foreground animate-pulse">Carregando seus leads...</p>
-        </div>
-      ) : (
-      <div className="flex gap-4 overflow-x-auto pb-4 items-start flex-1 min-h-[500px] scrollbar-thin">
-        {allStatuses.map(status => (
-          <div 
-            key={status} 
-            className="flex-shrink-0 w-[280px] flex flex-col gap-3 rounded-xl bg-muted/30 p-3 border border-border/40 min-h-[400px]"
-            onDragOver={handleDragOver}
-            onDrop={e => handleDrop(e, status)}
-          >
-            <div className="flex items-center justify-between px-1">
-              <h3 className="font-semibold text-sm flex items-center gap-2">
-                <Badge className={`h-2 w-2 rounded-full p-0 ${statusConfig[status].color.split(' ')[0]}`} />
-                {statusConfig[status].label}
-              </h3>
-              <Badge variant="secondary" className="text-[10px] bg-muted/50">{filteredLeads.filter(l => l.status === status).length}</Badge>
-            </div>
-
-            <div className="space-y-3 overflow-y-auto pr-1">
-              {filteredLeads.filter(l => l.status === status).length === 0 && !loading && (
-                <div className="h-20 border-2 border-dashed border-border/30 rounded-xl flex items-center justify-center text-muted-foreground/20 text-[10px]">
-                  {searchTerm ? "Nenhum resultado" : "Arraste leads aqui"}
-                </div>
-              )}
-              {filteredLeads.filter(l => l.status === status).map(lead => (
-                <Card 
-                  key={lead.id} 
-                  draggable 
-                  onDragStart={e => handleDragStart(e, lead.id)}
-                  className="cursor-pointer border-border/40 hover:border-primary/50 transition-all shadow-sm hover:shadow-md active:scale-[0.98] group"
-                >
-                  <CardContent className="p-3 space-y-2">
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-2">
-                        <p className="font-bold text-sm leading-tight group-hover:text-primary transition-colors">{lead.name || "Lead sem nome"}</p>
-                        {(lead as any).has_unread && (
-                          <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
-                        )}
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        {lead.source === 'whatsapp' ? (
-                          <MessageCircle className="h-3 w-3 text-green-500" />
-                        ) : lead.source === 'instagram' ? (
-                          <Instagram className="h-3 w-3 text-pink-500" />
-                        ) : (
-                          <Badge variant="outline" className="text-[7px] h-3 px-1 border-primary/20 bg-primary/5 text-primary">CRM</Badge>
-                        )}
-                      </div>
-                    </div>
-                    {lead.phone && <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Phone className="h-2.5 w-2.5" /> {lead.phone}</div>}
-                    <div className="flex flex-col gap-1 mt-1">
-                      <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground">
-                        <Users className="h-2.5 w-2.5" /> 
-                        {lead.assigned_user?.display_name || "Sem Responsável"}
-                      </div>
-                      {lead.store?.name && (
-                        <div className="flex items-center gap-1.5 text-[9px] text-primary/70">
-                          <Store className="h-2.5 w-2.5" /> 
-                          {lead.store.name}
-                        </div>
-                      )}
-                    </div>
-                    {lead.notes && <p className="text-[10px] text-muted-foreground line-clamp-2 italic">"{lead.notes}"</p>}
-                    
-                    <div className="flex items-center justify-between pt-2 border-t border-border/40">
-                      <div className="flex gap-1">
-                        <Button 
-                          size="icon" 
-                          variant="ghost"
-                          className="h-7 w-7 rounded-full hover:bg-primary/10 hover:text-primary transition-colors"
-                          onClick={() => {
-                            setSelectedLead(lead);
-                            setChatModalOpen(true);
-                            fetchMessages(lead.id);
-                          }}
-                        >
-                          <MessageSquare className="h-3 w-3" />
-                        </Button>
-                        {isAdmin && (
-                          <Button 
-                            size="icon" 
-                            variant="ghost"
-                            className="h-7 w-7 rounded-full hover:bg-primary/10 hover:text-primary transition-colors"
-                            onClick={() => handleEditLead(lead)}
-                          >
-                            <ChevronRight className="h-3 w-3" />
-                          </Button>
-                        )}
-                        <Button 
-                          size="icon" 
-                          variant="ghost"
-                          className="h-7 w-7 rounded-full hover:bg-primary/10 hover:text-primary transition-colors"
-                          onClick={() => handleResponse(lead)}
-                        >
-                          <MessageCircle className="h-3 w-3 text-green-500" />
-                        </Button>
-                        <Button 
-                          size="icon" 
-                          variant="ghost"
-                          className="h-7 w-7 rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors text-muted-foreground"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteLead(lead.id, lead.name);
-                          }}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                      <span className="text-[9px] text-muted-foreground" title={new Date(lead.last_message_at || lead.created_at).toLocaleString('pt-BR')}>
-                        {new Date(lead.last_message_at || lead.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-      )}
+      <LeadList 
+        leads={filteredLeads}
+        loading={loading}
+        searchTerm={searchTerm}
+        allStatuses={allStatuses}
+        statusConfig={statusConfig}
+        onStatusChange={updateStatus}
+        onLeadClick={(lead) => {
+          setSelectedLead(lead);
+          setChatModalOpen(true);
+          fetchMessages(lead.id);
+        }}
+        onEditLead={handleEditLead}
+        onDeleteLead={handleDeleteLead}
+        onResponseClick={handleResponse}
+        isAdmin={isAdmin}
+      />
 
       {/* Response Integrated Modal */}
       <Dialog open={responseModalOpen} onOpenChange={setResponseModalOpen}>
