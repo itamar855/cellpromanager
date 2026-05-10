@@ -204,20 +204,9 @@ const Leads = () => {
     
     if (currentStoreId && currentStoreId !== "all") {
       query = query.eq("store_id", currentStoreId);
-    } else if (currentStoreId === "all") {
-      // Se for "all", não filtra por loja e traz tudo
-    } else if (isAdmin) {
-      // Se for admin e não tiver loja, mostramos tudo
-    } else {
-      // Para outros usuários, se não tiver loja, não mostramos nada
     }
 
-    let { data: leadsData, error: leadsError } = await query.select(`
-      *,
-      assigned_user:profiles!leads_assigned_to_fkey(display_name),
-      store:stores(name),
-      last_msg:lead_messages(content)
-    `);
+    let { data: leadsData, error: leadsError } = await query;
     if (leadsError) {
       console.error("Error fetching leads:", leadsError);
       toast.error("Erro ao carregar leads: " + leadsError.message);
@@ -225,14 +214,13 @@ const Leads = () => {
     const { data: storesData } = await supabase.from("stores").select("*");
     const { data: profilesData } = await supabase.from("profiles").select("user_id, display_name");
 
-    // Filtragem manual adicional para garantir que leads sem last_message_at 
-    // também apareçam no topo se forem recentes, ou apenas garantir que leadsData exista
     if (leadsData) {
       leadsData = leadsData.sort((a, b) => {
         const dateA = a.last_message_at || a.created_at;
         const dateB = b.last_message_at || b.created_at;
         return new Date(dateB).getTime() - new Date(dateA).getTime();
       });
+      console.log(`Leads: Loaded ${leadsData.length} leads successfully`);
     }
 
     setLeads(leadsData ?? []);
@@ -242,8 +230,20 @@ const Leads = () => {
   }, [activeStoreId, userRole, user?.id]);
 
   const fetchMessages = useCallback(async (leadId: string) => {
-    const { data } = await supabase.from("lead_messages").select("*").eq("lead_id", leadId).order("created_at", { ascending: true });
-    setChatMessages(data ?? []);
+    setMessagesLoading(true);
+    const { data, error } = await supabase
+      .from("lead_messages")
+      .select("*")
+      .eq("lead_id", leadId)
+      .order("created_at", { ascending: true });
+    
+    if (error) {
+      console.error("Error fetching messages:", error);
+      toast.error("Erro ao carregar mensagens");
+    } else {
+      setChatMessages(data ?? []);
+    }
+    setMessagesLoading(false);
 
     // Mark as read when opening chat
     await supabase.from("leads").update({ has_unread: false }).eq("id", leadId);
@@ -360,11 +360,18 @@ const Leads = () => {
   };
 
   const filteredLeads = leads.filter(lead => {
-    const matchesSearch = (lead.name || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          (lead.phone && lead.phone.includes(searchTerm));
+    const name = lead.name || "";
+    const phone = lead.phone || "";
+    const igId = lead.instagram_user_id || "";
+    
+    const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          phone.includes(searchTerm) ||
+                          igId.includes(searchTerm);
+                          
     const matchesStore = filterStore === "all" || lead.store_id === filterStore;
     const matchesSource = filterSource === "all" || lead.source === filterSource;
     const matchesVendedor = filterVendedor === "all" || lead.assigned_to === filterVendedor;
+    
     return matchesSearch && matchesStore && matchesSource && matchesVendedor;
   });
 
@@ -886,9 +893,14 @@ const Leads = () => {
           
           <ScrollArea className="flex-1 p-4 bg-muted/10">
             <div className="space-y-3 pb-4">
-              {chatMessages.length === 0 ? (
+              {messagesLoading ? (
+                <div className="flex flex-col items-center justify-center py-20 space-y-3">
+                  <Clock className="h-6 w-6 animate-spin text-primary" />
+                  <p className="text-sm text-muted-foreground">Carregando histórico...</p>
+                </div>
+              ) : chatMessages.length === 0 ? (
                 <div className="text-center py-10 text-muted-foreground text-sm">
-                  Nenhuma mensagem capturada ainda. <br/> Use o botão "Enviar p/ CRM" na extensão para sincronizar.
+                  Nenhuma mensagem capturada ainda. <br/> Use o botão "Enviar p/ CRM" na extensão para sincronizar ou o Instagram Webhook.
                 </div>
               ) : (
                 chatMessages.map(msg => (
