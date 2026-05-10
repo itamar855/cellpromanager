@@ -1,18 +1,28 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
+import { RefreshCw, CheckCircle2, AlertCircle, Send, MessageSquare, User, Clock, CheckCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ConversaSyncProps {
   selectedLeadId?: string;
-  onSyncComplete?: () => void;
-  onNewMessage?: (leadId: string) => void;
+  onSyncComplete?: (messages: any[]) => void;
+  onNewMessage?: (message: any) => void;
+  showChatUI?: boolean;
 }
 
-const ConversaSync = ({ selectedLeadId, onSyncComplete, onNewMessage }: ConversaSyncProps) => {
+const ConversaSync = ({ selectedLeadId, onSyncComplete, onNewMessage, showChatUI = false }: ConversaSyncProps) => {
   const [syncing, setSyncing] = useState(false);
   const [lastSyncStatus, setLastSyncStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [messages, setMessages] = useState<any[]>([]);
+  const [leadName, setLeadName] = useState<string>("");
+  const [newMessage, setNewMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const syncHistory = useCallback(async () => {
     if (!selectedLeadId) return;
@@ -21,25 +31,60 @@ const ConversaSync = ({ selectedLeadId, onSyncComplete, onNewMessage }: Conversa
     setLastSyncStatus('idle');
     
     try {
-      // Fetch latest messages to ensure we have the full history
-      const { error } = await supabase.from('lead_messages')
-        .select('id')
-        .eq('lead_id', selectedLeadId)
-        .limit(1);
-
-      if (error) throw error;
+      // 1. Sync Lead Name
+      const { data: lead, error: leadError } = await supabase
+        .from('leads')
+        .select('name, instagram_username, phone')
+        .eq('id', selectedLeadId)
+        .single();
       
-      if (onSyncComplete) onSyncComplete();
+      if (lead) {
+        setLeadName(lead.name || lead.instagram_username || lead.phone || "Lead");
+      }
+
+      // 2. Fetch full history
+      const { data: history, error: historyError } = await supabase
+        .from('lead_messages')
+        .select('*')
+        .eq('lead_id', selectedLeadId)
+        .order('created_at', { ascending: true });
+
+      if (historyError) throw historyError;
+      
+      setMessages(history || []);
+      if (onSyncComplete) onSyncComplete(history || []);
       setLastSyncStatus('success');
     } catch (err) {
       console.error("Erro ao sincronizar histórico:", err);
       setLastSyncStatus('error');
     } finally {
       setSyncing(false);
-      // Clear status after 3 seconds
       setTimeout(() => setLastSyncStatus('idle'), 3000);
     }
   }, [selectedLeadId, onSyncComplete]);
+
+  const sendMessage = async () => {
+    if (!selectedLeadId || !newMessage.trim() || sending) return;
+    
+    setSending(true);
+    try {
+      const { data, error } = await supabase.from('lead_messages').insert({
+        lead_id: selectedLeadId,
+        content: newMessage,
+        sender_type: 'vendedor',
+        channel: 'crm'
+      }).select().single();
+
+      if (error) throw error;
+      
+      setNewMessage("");
+      // Local update will happen via Realtime, but we can also manually add it
+    } catch (err: any) {
+      toast.error("Erro ao enviar: " + err.message);
+    } finally {
+      setSending(false);
+    }
+  };
 
   useEffect(() => {
     if (!selectedLeadId) return;
@@ -51,8 +96,9 @@ const ConversaSync = ({ selectedLeadId, onSyncComplete, onNewMessage }: Conversa
         schema: 'public',
         table: 'lead_messages',
         filter: `lead_id=eq.${selectedLeadId}`
-      }, () => {
-        if (onNewMessage) onNewMessage(selectedLeadId);
+      }, (payload) => {
+        setMessages(prev => [...prev, payload.new]);
+        if (onNewMessage) onNewMessage(payload.new);
       })
       .subscribe();
 
