@@ -11,11 +11,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 interface ConversaSyncProps {
   selectedLeadId?: string;
   onSyncComplete?: (messages: any[]) => void;
+  onLeadSync?: (lead: any) => void;
   onNewMessage?: (message: any) => void;
   showChatUI?: boolean;
 }
 
-const ConversaSync = ({ selectedLeadId, onSyncComplete, onNewMessage, showChatUI = false }: ConversaSyncProps) => {
+const ConversaSync = ({ selectedLeadId, onSyncComplete, onLeadSync, onNewMessage, showChatUI = false }: ConversaSyncProps) => {
   const [syncing, setSyncing] = useState(false);
   const [lastSyncStatus, setLastSyncStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [messages, setMessages] = useState<any[]>([]);
@@ -40,6 +41,7 @@ const ConversaSync = ({ selectedLeadId, onSyncComplete, onNewMessage, showChatUI
       
       if (lead) {
         setLeadName(lead.name || lead.instagram_username || lead.phone || "Lead");
+        if (onLeadSync) onLeadSync(lead);
       }
 
       // 2. Fetch full history
