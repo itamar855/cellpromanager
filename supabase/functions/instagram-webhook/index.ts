@@ -92,7 +92,11 @@ serve(async (req) => {
               .select('page_access_token, store_id')
               .eq('is_active', true)
               .limit(1)
-              .single();
+              .maybeSingle();
+            if (!config) {
+  console.error("Nenhuma config Instagram ativa encontrada");
+  // continua sem tentar buscar perfil
+}
 
             // Tentar pegar nome real se não tivermos no lead (apenas para mensagens recebidas)
             if (!isEcho && (!userName || userName.startsWith("IG User")) && config?.page_access_token) {
