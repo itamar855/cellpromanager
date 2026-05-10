@@ -437,7 +437,10 @@ const Leads = () => {
       <div className="flex flex-col gap-4 border-b pb-4 mb-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
-            <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight text-white">CRM de Leads</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight text-white">CRM de Leads</h1>
+              {loading && <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />}
+            </div>
             {lastIGSync && (
               <div className="flex items-center gap-2 text-[10px] text-muted-foreground bg-muted/20 w-fit px-2 py-0.5 rounded-full border border-border/20">
                 <div className={`h-1.5 w-1.5 rounded-full ${lastIGSync.status === 'Sucesso' ? 'bg-green-500' : 'bg-red-500'}`} />
