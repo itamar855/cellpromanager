@@ -201,22 +201,16 @@ const Leads = () => {
     `).order("last_message_at", { ascending: false, nullsFirst: false });
 
     const currentStoreId = activeStoreId || localStorage.getItem("cellmanager-active-store-id");
+    console.log("Leads: Fetching data with storeId:", currentStoreId, "UserRole:", userRole);
     
     if (currentStoreId && currentStoreId !== "all") {
       query = query.eq("store_id", currentStoreId);
-    } else if (currentStoreId === "all") {
-      // Se for "all", não filtra por loja e traz tudo
-    } else if (isAdmin) {
-      // Se for admin e não tiver loja, mostramos tudo
-    } else {
-      // Para outros usuários, se não tiver loja, não mostramos nada
     }
 
     let { data: leadsData, error: leadsError } = await query.select(`
       *,
       assigned_user:profiles!leads_assigned_to_fkey(display_name),
-      store:stores(name),
-      last_msg:lead_messages(content)
+      store:stores(name)
     `);
     if (leadsError) {
       console.error("Error fetching leads:", leadsError);
