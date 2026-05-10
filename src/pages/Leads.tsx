@@ -121,7 +121,7 @@ const Leads = () => {
         for (const log of webhookLogs) {
           try {
             await supabase.functions.invoke('instagram-webhook', {
-              body: log.payload
+              body: log.payload as Record<string, any>
             });
             
             // Marcar como processado
