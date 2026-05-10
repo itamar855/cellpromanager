@@ -199,7 +199,7 @@ const Leads = () => {
   }, []);
 
   useEffect(() => { 
-    fetchData(); 
+    fetchData(true); 
     fetchLastSync();
   }, [activeStoreId, fetchLastSync]);
 
