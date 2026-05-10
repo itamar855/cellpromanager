@@ -61,7 +61,8 @@ const Leads = () => {
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [syncing, setSyncing] = useState(false);
-  const [lastIGSync, setLastIGSync] = useState<{ date: Date; status: string } | null>(null);
+  const [lastIGSync, setLastIGSync] = useState<{ date: Date; status: string; error_message?: string } | null>(null);
+  const [syncErrors, setSyncErrors] = useState<any[]>([]);
 
   const fetchLastSync = useCallback(async () => {
     const { data } = await supabase
@@ -73,8 +74,30 @@ const Leads = () => {
     if (data && data.length > 0) {
       setLastIGSync({
         date: new Date(data[0].created_at),
-        status: data[0].error_message ? "Erro" : "Sucesso"
+        status: data[0].error_message ? "Erro" : "Sucesso",
+        error_message: data[0].error_message
       });
+    }
+
+    // Buscar resumo de erros recentes (últimas 24h)
+    const { data: errors } = await supabase
+      .from("instagram_webhooks_logs")
+      .select("error_message")
+      .not("error_message", "is", null)
+      .gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+
+    if (errors) {
+      const summary = errors.reduce((acc: any, curr: any) => {
+        let type = "Outro";
+        const msg = curr.error_message.toLowerCase();
+        if (msg.includes("token") || msg.includes("auth") || msg.includes("credential")) type = "Credenciais";
+        else if (msg.includes("rate") || msg.includes("limit") || msg.includes("too many")) type = "Rate Limit";
+        else if (msg.includes("field") || msg.includes("map") || msg.includes("missing")) type = "Mapeamento";
+        
+        acc[type] = (acc[type] || 0) + 1;
+        return acc;
+      }, {});
+      setSyncErrors(Object.entries(summary).map(([type, count]) => ({ type, count })));
     }
   }, []);
 
