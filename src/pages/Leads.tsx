@@ -69,6 +69,23 @@ const Leads = () => {
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [lastIGSync, setLastIGSync] = useState<{ date: Date; status: string } | null>(null);
+
+  const fetchLastSync = useCallback(async () => {
+    const { data } = await supabase
+      .from("instagram_webhooks_logs")
+      .select("created_at, error_message")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (data && data.length > 0) {
+      setLastIGSync({
+        date: new Date(data[0].created_at),
+        status: data[0].error_message ? "Erro" : "Sucesso"
+      });
+    }
+  }, []);
+
   const handleSyncLeads = async () => {
     setSyncing(true);
     const toastId = toast.loading("Sincronizando todos os leads...");
@@ -125,6 +142,7 @@ const Leads = () => {
       toast.dismiss(toastId);
       toast.success(`${entries.length} novos leads importados e Instagram verificado!`);
       fetchData();
+      fetchLastSync();
     } catch (err: any) {
       toast.dismiss(toastId);
       toast.error("Erro na sincronização: " + err.message);
@@ -176,7 +194,10 @@ const Leads = () => {
     await supabase.from("leads").update({ has_unread: false }).eq("id", leadId);
   }, []);
 
-  useEffect(() => { fetchData(); }, [activeStoreId]);
+  useEffect(() => { 
+    fetchData(); 
+    fetchLastSync();
+  }, [activeStoreId, fetchLastSync]);
 
   useEffect(() => {
     const channel = supabase.channel('crm-realtime')
@@ -412,8 +433,16 @@ const Leads = () => {
   return (
     <div className="space-y-4 h-full flex flex-col">
       <div className="flex flex-col gap-4 border-b pb-4 mb-4">
-        <div className="flex items-center justify-between">
-          <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight text-white">CRM de Leads</h1>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight text-white">CRM de Leads</h1>
+            {lastIGSync && (
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground bg-muted/20 w-fit px-2 py-0.5 rounded-full border border-border/20">
+                <div className={`h-1.5 w-1.5 rounded-full ${lastIGSync.status === 'Sucesso' ? 'bg-green-500' : 'bg-red-500'}`} />
+                Sync Instagram: {lastIGSync.date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+              </div>
+            )}
+          </div>
           <div className="flex gap-2">
             <div className="flex gap-2">
               <Button 
