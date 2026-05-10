@@ -236,8 +236,20 @@ const Leads = () => {
   }, [activeStoreId, userRole, user?.id]);
 
   const fetchMessages = useCallback(async (leadId: string) => {
-    const { data } = await supabase.from("lead_messages").select("*").eq("lead_id", leadId).order("created_at", { ascending: true });
-    setChatMessages(data ?? []);
+    setMessagesLoading(true);
+    const { data, error } = await supabase
+      .from("lead_messages")
+      .select("*")
+      .eq("lead_id", leadId)
+      .order("created_at", { ascending: true });
+    
+    if (error) {
+      console.error("Error fetching messages:", error);
+      toast.error("Erro ao carregar mensagens");
+    } else {
+      setChatMessages(data ?? []);
+    }
+    setMessagesLoading(false);
 
     // Mark as read when opening chat
     await supabase.from("leads").update({ has_unread: false }).eq("id", leadId);
