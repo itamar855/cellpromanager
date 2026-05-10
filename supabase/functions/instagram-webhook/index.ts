@@ -18,6 +18,21 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   );
 
+  const fetchInstagramUserProfile = async (userId: string, accessToken: string) => {
+    try {
+      const response = await fetch(`https://graph.facebook.com/v19.0/${userId}?fields=name,username&access_token=${accessToken}`);
+      const data = await response.json();
+      if (data.error) {
+        console.error("Instagram Profile Fetch Error:", data.error);
+        return null;
+      }
+      return data;
+    } catch (e) {
+      console.error("Network error fetching IG profile:", e);
+      return null;
+    }
+  };
+
   if (method === 'GET') {
     const url = new URL(req.url);
     const mode = url.searchParams.get('hub.mode');
@@ -57,17 +72,27 @@ serve(async (req) => {
             if (leadFetchError) console.error("Error fetching lead:", leadFetchError);
 
             let leadId = lead?.id;
-            let userName = lead?.name || "IG User " + senderId.substring(0, 5);
+            let userName = lead?.name;
+            let instagramUsername = null;
 
-            // 2. Se não existir, criar
+            const { data: config } = await supabaseClient
+              .from('instagram_config')
+              .select('page_access_token, store_id')
+              .eq('is_active', true)
+              .limit(1)
+              .single();
+
+            // Tentar pegar nome real se não tivermos no lead
+            if ((!userName || userName.startsWith("IG User")) && config?.page_access_token) {
+              const profile = await fetchInstagramUserProfile(senderId, config.page_access_token);
+              if (profile?.name) userName = profile.name;
+              if (profile?.username) instagramUsername = profile.username;
+            }
+
+            if (!userName) userName = "IG User " + senderId.substring(0, 5);
+
+            // 2. Se não existir o lead, criar
             if (!leadId) {
-              const { data: config } = await supabaseClient
-                .from('instagram_config')
-                .select('store_id')
-                .eq('is_active', true)
-                .limit(1)
-                .single();
-
               const configStoreId = config?.store_id || null;
               const fallbackUserId = "2bce7f09-1688-43e5-8b61-4e8d11517d0c";
 
@@ -76,6 +101,7 @@ serve(async (req) => {
                 .insert({
                   name: userName,
                   instagram_user_id: senderId,
+                  instagram_username: instagramUsername,
                   source: 'instagram',
                   status: 'novo',
                   store_id: configStoreId,
@@ -96,6 +122,15 @@ serve(async (req) => {
               } else {
                 leadId = newLead.id;
               }
+            } else if (userName && userName !== lead.name) {
+              // Atualizar nome se descobrimos agora
+              await supabaseClient
+                .from('leads')
+                .update({ 
+                  name: userName,
+                  instagram_username: instagramUsername || undefined
+                })
+                .eq('id', leadId);
             }
 
             // 3. Inserir mensagem se tivermos leadId
