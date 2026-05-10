@@ -41,7 +41,8 @@ serve(async (req) => {
       .select('id')
       .single();
 
-    if (payload.object === 'instagram') {
+    console.log("Processing webhook payload object:", payload.object);
+    if (payload.object === 'instagram' || payload.object === 'page') {
       for (const entry of payload.entry) {
         if (!entry.messaging) continue;
         
