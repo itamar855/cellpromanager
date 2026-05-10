@@ -151,7 +151,7 @@ const Leads = () => {
     }
 
     if (activeStoreId && activeStoreId !== "all") {
-      query = query.or(`store_id.eq.${activeStoreId},store_id.is.null`);
+      query = query.eq("store_id", activeStoreId);
     }
 
     const { data: leadsData } = await query;
@@ -283,7 +283,7 @@ const Leads = () => {
   const filteredLeads = leads.filter(lead => {
     const matchesSearch = (lead.name || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
                           (lead.phone && lead.phone.includes(searchTerm));
-    const matchesStore = filterStore === "all" || lead.store_id === filterStore || !lead.store_id;
+    const matchesStore = filterStore === "all" || lead.store_id === filterStore;
     const matchesSource = filterSource === "all" || lead.source === filterSource;
     const matchesVendedor = filterVendedor === "all" || lead.assigned_to === filterVendedor;
     return matchesSearch && matchesStore && matchesSource && matchesVendedor;
