@@ -321,6 +321,8 @@ const Configuracoes = () => {
               <Button type="submit" className="w-full h-11 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 shadow-lg text-white font-bold" disabled={loading}>
                 {loading ? "Salvando..." : instagramConfig.id ? "Atualizar Integração Instagram" : "Salvar Configurações Instagram"}
               </Button>
+
+            </div>
           </form>
         </CardContent>
       </Card>
