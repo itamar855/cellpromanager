@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { RefreshCw, CheckCircle2, AlertCircle, Send, MessageSquare, User, Clock, CheckCheck } from "lucide-react";
+import { RefreshCw, CheckCircle2, AlertCircle, Send, MessageSquare, User, Clock, CheckCheck, Image as ImageIcon, Mic } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -154,7 +154,24 @@ const ConversaSync = ({ selectedLeadId, onSyncComplete, onNewMessage, showChatUI
                         : 'bg-muted text-foreground rounded-tl-none border'
                     }`}
                   >
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                    {msg.message_type === 'image' ? (
+                      <div className="space-y-1">
+                        <img 
+                          src={msg.media_url} 
+                          className="rounded-lg max-h-60 object-cover cursor-pointer hover:opacity-90 w-full" 
+                          onClick={() => window.open(msg.media_url, '_blank')} 
+                          alt="Imagem do chat"
+                        />
+                        {msg.content && <p className="whitespace-pre-wrap">{msg.content}</p>}
+                      </div>
+                    ) : msg.message_type === 'audio' ? (
+                      <div className="flex items-center gap-2 bg-black/5 p-2 rounded-lg min-w-[200px]">
+                        <Mic className="h-4 w-4" />
+                        <audio controls src={msg.media_url} className="h-8 max-w-full" />
+                      </div>
+                    ) : (
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                    )}
                     <div className="flex items-center justify-end gap-1 mt-1 opacity-70 text-[10px]">
                       {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       {msg.sender_type === 'vendedor' && <CheckCheck className="h-3 w-3" />}
