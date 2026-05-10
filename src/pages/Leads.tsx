@@ -180,8 +180,10 @@ const Leads = () => {
       query = query.eq("store_id", currentStoreId);
     } else if (currentStoreId === "all") {
       // Se for "all", não filtra por loja e traz tudo
+    } else if (isAdmin) {
+      // Se for admin e não tiver loja, mostramos tudo
     } else {
-      // Caso padrão se não houver loja selecionada
+      // Para outros usuários, se não tiver loja, não mostramos nada
     }
 
     const { data: leadsData, error: leadsError } = await query;
