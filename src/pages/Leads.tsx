@@ -612,7 +612,7 @@ const Leads = () => {
             </div>
 
             <div className="space-y-3 overflow-y-auto pr-1">
-              {filteredLeads.filter(l => l.status === status).length === 0 && (
+              {filteredLeads.filter(l => l.status === status).length === 0 && !loading && (
                 <div className="h-20 border-2 border-dashed border-border/30 rounded-xl flex items-center justify-center text-muted-foreground/20 text-[10px]">
                   {searchTerm ? "Nenhum resultado" : "Arraste leads aqui"}
                 </div>
