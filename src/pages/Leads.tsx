@@ -173,9 +173,6 @@ const Leads = () => {
     
     if (currentStoreId && currentStoreId !== "all") {
       query = query.eq("store_id", currentStoreId);
-    } else if (!isAdmin) {
-      // Se não for admin e não tiver loja selecionada, não mostramos nada por segurança
-      // Ou poderíamos mostrar apenas o que ele tem permissão, mas o AuthContext já cuida disso
     }
 
     const { data: leadsData } = await query;
