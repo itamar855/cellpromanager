@@ -162,7 +162,8 @@ const Leads = () => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     let query = supabase.from("leads").select(`
       *,
       assigned_user:profiles!leads_assigned_to_fkey(display_name),
