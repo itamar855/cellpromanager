@@ -201,7 +201,6 @@ const Leads = () => {
     `).order("last_message_at", { ascending: false, nullsFirst: false });
 
     const currentStoreId = activeStoreId || localStorage.getItem("cellmanager-active-store-id");
-    console.log("Leads: Fetching data with storeId:", currentStoreId, "UserRole:", userRole);
     
     if (currentStoreId && currentStoreId !== "all") {
       query = query.eq("store_id", currentStoreId);
