@@ -458,7 +458,7 @@ const Leads = () => {
           await supabase.from('lead_messages').insert({
             lead_id: selectedLead.id,
             content: responseText,
-            sender: 'vendedor',
+            sender_type: 'vendedor',
             message_type: 'text',
           });
           
