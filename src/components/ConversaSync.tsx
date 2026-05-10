@@ -114,7 +114,79 @@ const ConversaSync = ({ selectedLeadId, onSyncComplete, onNewMessage, showChatUI
     };
   }, [selectedLeadId, syncHistory, onNewMessage]);
 
-  if (!selectedLeadId && !syncing) return null;
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  if (!selectedLeadId) return null;
+
+  if (showChatUI) {
+    return (
+      <Card className="flex flex-col h-full border-0 shadow-none bg-transparent">
+        <CardHeader className="p-4 border-b">
+          <CardTitle className="text-sm flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <User className="h-4 w-4 text-primary" />
+              <span>{leadName}</span>
+            </div>
+            {syncing && <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex-1 p-0 overflow-hidden">
+          <ScrollArea ref={scrollRef} className="h-[400px] p-4">
+            <div className="space-y-4">
+              {messages.length === 0 && !syncing && (
+                <div className="text-center py-8 text-muted-foreground text-xs italic">
+                  Sem histórico de mensagens.
+                </div>
+              )}
+              {messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`flex ${msg.sender_type === 'vendedor' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+                      msg.sender_type === 'vendedor'
+                        ? 'bg-primary text-primary-foreground rounded-tr-none'
+                        : 'bg-muted text-foreground rounded-tl-none border'
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                    <div className="flex items-center justify-end gap-1 mt-1 opacity-70 text-[10px]">
+                      {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {msg.sender_type === 'vendedor' && <CheckCheck className="h-3 w-3" />}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        </CardContent>
+        <CardFooter className="p-4 border-t">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              sendMessage();
+            }}
+            className="flex w-full gap-2"
+          >
+            <Input
+              placeholder="Digite sua mensagem..."
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              className="flex-1"
+            />
+            <Button type="submit" size="icon" disabled={sending || !newMessage.trim()}>
+              {sending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
+          </form>
+        </CardFooter>
+      </Card>
+    );
+  }
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2 pointer-events-none">
