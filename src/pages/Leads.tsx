@@ -170,10 +170,12 @@ const Leads = () => {
     `).order("last_message_at", { ascending: false, nullsFirst: false });
 
     const currentStoreId = activeStoreId || localStorage.getItem("cellmanager-active-store-id");
-    console.log("Fetching leads for store:", currentStoreId);
     
     if (currentStoreId && currentStoreId !== "all") {
       query = query.eq("store_id", currentStoreId);
+    } else if (!isAdmin) {
+      // Se não for admin e não tiver loja selecionada, não mostramos nada por segurança
+      // Ou poderíamos mostrar apenas o que ele tem permissão, mas o AuthContext já cuida disso
     }
 
     const { data: leadsData } = await query;
