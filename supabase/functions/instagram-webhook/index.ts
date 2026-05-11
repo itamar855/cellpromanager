@@ -174,7 +174,7 @@ serve(async (req) => {
          });
        }
  
-       if (type === 'sync-profile') {
+       if (payload.type === 'sync-profile') {
          const profile = await fetchInstagramUserProfile(userId, cleanToken);
          return new Response(JSON.stringify({ profile }), { 
            headers: { ...corsHeaders, "Content-Type": "application/json" } 
@@ -188,10 +188,10 @@ serve(async (req) => {
              message: { text: message }
            })
          });
-
-        const result = await res.json();
-        return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
+ 
+         const result = await res.json();
+         return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+       }
     }
 
     console.log("Payload recebido. Objeto:", payload.object);
