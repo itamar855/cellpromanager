@@ -126,7 +126,7 @@ serve(async (req) => {
 
     // Novo: suporte para operações via painel (evita CORS no navegador)
     if (payload.type === 'sync-profile' || payload.type === 'send-message') {
-      const { userId, storeId, message } = payload;
+       const { userId, storeId, message, type } = payload;
       let query = supabaseClient
         .from("instagram_config")
         .select("*")
