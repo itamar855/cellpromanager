@@ -2,15 +2,26 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+const KILO_PROMPT = `Você é o Kilo, o assistente virtual de vendas inteligente da CellManager.
+Sua missão é atender clientes interessados em iPhones e assistência técnica.
+Regras de comportamento:
+1. Seja amigável, profissional e use emojis moderadamente.
+2. Seu objetivo principal é QUALIFICAR o lead fazendo perguntas uma por uma:
+   - Qual modelo de iPhone ele busca?
+   - Ele tem um aparelho para dar na troca? (Se sim, qual modelo e saúde da bateria?)
+   - Qual a forma de pagamento preferida (Pix, Cartão, Boleto)?
+3. Se o cliente perguntar preço, dê uma estimativa baseada no mercado (ex: "iPhone 13 novo em torno de R$ 3.800") mas diga que o vendedor vai confirmar o valor exato.
+4. Quando tiver as informações básicas, diga que um vendedor humano vai assumir para finalizar a negociação.
+5. Nunca prometa descontos absurdos.
+6. Responda de forma curta e objetiva, como em um chat real.`;
 
 // ─── Helper: buscar perfil público do Instagram via Graph API ───────────────
 const fetchInstagramUserProfile = async (userId: string, accessToken: string) => {
   try {
-    // For Instagram Scoped IDs, fields are limited: name, profile_pic are standard.
-    // 'username' is sometimes restricted but we'll try 'name' first.
     const url = `https://graph.facebook.com/v19.0/${userId}?fields=name,profile_pic&access_token=${accessToken}`;
     const response = await fetch(url);
     const data = await response.json();
@@ -43,7 +54,6 @@ const writeLog = async (
 };
 
 // ─── Helper: buscar o created_by do primeiro admin disponível ───────────────
-// Evita UUID hardcoded. Se não encontrar ninguém, deixa null (requer coluna nullable).
 const resolveCreatedBy = async (
   supabaseClient: ReturnType<typeof createClient>
 ): Promise<string | null> => {
@@ -287,6 +297,77 @@ serve(async (req) => {
 
         if (updateError) console.error("Erro ao atualizar lead:", updateError.message);
         else console.log("Mensagem processada com sucesso para lead", leadId);
+
+        // ─── NOVO: Atendimento Automático IA (Modo Kilo) ───────────────────
+        if (config.ai_active && !isEcho) {
+          const { data: lead } = await supabaseClient
+            .from("leads")
+            .select("*")
+            .eq("id", leadId)
+            .maybeSingle();
+
+          if (lead && lead.ai_chat_active !== false) {
+            console.log("Iniciando resposta automática da IA (Kilo) para lead", leadId);
+            
+            // Buscar histórico recente para contexto
+            const { data: history } = await supabaseClient
+              .from("lead_messages")
+              .select("content, sender_type")
+              .eq("lead_id", leadId)
+              .order("created_at", { ascending: false })
+              .limit(10);
+
+            const conversationContext = history?.reverse().map(m => `${m.sender_type === 'vendedor' ? 'Kilo' : 'Cliente'}: ${m.content}`).join("\n");
+
+            const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: "google/gemini-2.0-flash-exp",
+                messages: [
+                  { role: "system", content: KILO_PROMPT },
+                  { role: "user", content: `Histórico recente:\n${conversationContext}\n\nNova mensagem do cliente: ${messageText}\n\nResponda como Kilo:` }
+                ],
+              }),
+            });
+
+            if (aiResponse.ok) {
+              const aiData = await aiResponse.json();
+              const kiloText = aiData.choices?.[0]?.message?.content;
+
+              if (kiloText) {
+                // Enviar para o Instagram
+                const fbRes = await fetch(`https://graph.facebook.com/v19.0/${config.instagram_business_account_id}/messages`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.page_access_token}` },
+                  body: JSON.stringify({ recipient: { id: senderId }, message: { text: kiloText } }),
+                });
+
+                if (fbRes.ok) {
+                  // Gravar mensagem da IA no banco
+                  await supabaseClient.from("lead_messages").insert({
+                    lead_id: leadId,
+                    content: kiloText,
+                    sender_type: "vendedor",
+                    message_type: "text",
+                    channel: "instagram"
+                  });
+                  console.log("Resposta do Kilo enviada e gravada.");
+                } else {
+                  const fbErr = await fbRes.json();
+                  console.error("Erro ao enviar resposta do Kilo para FB:", fbErr);
+                }
+              }
+            } else {
+              const aiErr = await aiResponse.text();
+              console.error("Erro no gateway de IA para resposta automática:", aiErr);
+            }
+          }
+        }
+        // ──────────────────────────────────────────────────────────────────
       }
     }
 

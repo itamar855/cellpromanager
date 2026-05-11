@@ -24,7 +24,7 @@ const Configuracoes = () => {
     api_url: "", api_key: "", instance_name: "", is_active: true
   });
   const [instagramConfig, setInstagramConfig] = useState<any>({
-    page_id: "", page_access_token: "", instagram_business_account_id: "", is_active: true
+    page_id: "", instagram_business_account_id: "", page_access_token: "", is_active: true, ai_active: false
   });
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ store_id: "", event_type: "os_status_changed", url: "" });
@@ -309,6 +309,18 @@ const Configuracoes = () => {
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">Page Access Token (Permanent)</Label>
                 <Input type="password" value={instagramConfig.page_access_token} onChange={e => setInstagramConfig({ ...instagramConfig, page_access_token: e.target.value })} placeholder="Seu Token de Acesso da Graph API" className="h-10 text-sm" />
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-primary/5 border-primary/20">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-bold flex items-center gap-2">
+                    <Brain className="h-4 w-4 text-primary" /> Atendimento IA (Kilo Agent)
+                  </Label>
+                  <p className="text-[10px] text-muted-foreground">A IA responderá automaticamente às novas mensagens para qualificar o lead.</p>
+                </div>
+                <Switch 
+                  checked={instagramConfig.ai_active} 
+                  onCheckedChange={val => setInstagramConfig({ ...instagramConfig, ai_active: val })}
+                />
               </div>
               <div className="rounded-lg bg-pink-500/5 border border-pink-500/20 p-3 space-y-2">
                 <p className="text-[11px] font-bold text-pink-700 uppercase flex items-center gap-1"><Info className="h-3 w-3" /> Webhook para Meta for Developers</p>
