@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Webhook, Trash2, Plus, Send, ExternalLink, Info, MessageSquare, ShieldCheck, Globe, Camera } from "lucide-react";
+import { Webhook, Trash2, Plus, Send, ExternalLink, Info, MessageSquare, ShieldCheck, Globe, Camera, Brain } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 const eventLabels: Record<string, string> = {

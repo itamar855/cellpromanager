@@ -8,7 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   Send, Paperclip, ImageIcon, Mic, X, CheckCheck, 
   Clock, Shield, RefreshCw, MessageCircle, Search,
-  Phone, ChevronRight, User, MoreVertical
+  Phone, ChevronRight, User, MoreVertical, Brain
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -128,10 +128,12 @@ export default function ChatCenter({ leads, onRefreshProfile, onAIQualify, user,
 
   const handleToggleAIChat = async () => {
     if (!selectedLead) return;
-    const newValue = !selectedLead.ai_chat_active;
-    const { error } = await supabase.from("leads").update({ ai_chat_active: newValue }).eq("id", selectedLead.id);
+    const newValue = !(selectedLead as any).ai_chat_active;
+    const { error } = await supabase.from("leads").update({ ai_chat_active: newValue } as any).eq("id", selectedLead.id);
     if (!error) {
-      setSelectedLead({ ...selectedLead, ai_chat_active: newValue });
+      // Usando Object.assign para evitar erro de propriedade desconhecida no literal
+      const updated = Object.assign({}, selectedLead, { ai_chat_active: newValue });
+      setSelectedLead(updated);
       toast.success(newValue ? "IA Ativada para este chat" : "IA Desativada (Assunção Humana)");
     }
   };
@@ -291,10 +293,10 @@ export default function ChatCenter({ leads, onRefreshProfile, onAIQualify, user,
               <Button 
                 variant="outline" 
                 size="sm" 
-                className={`h-8 text-[10px] gap-2 ${selectedLead.ai_chat_active === false ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'}`} 
+                className={`h-8 text-[10px] gap-2 ${(selectedLead as any).ai_chat_active === false ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'}`} 
                 onClick={handleToggleAIChat}
               >
-                <Brain className="h-3 w-3" /> {selectedLead.ai_chat_active === false ? "IA: OFF" : "IA: ON"}
+                <Brain className="h-3 w-3" /> {(selectedLead as any).ai_chat_active === false ? "IA: OFF" : "IA: ON"}
               </Button>
               <Button variant="outline" size="sm" className="h-8 text-[10px] gap-2" onClick={handleRefreshProfile}>
                 <RefreshCw className="h-3 w-3" /> Atualizar
