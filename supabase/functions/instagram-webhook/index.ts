@@ -94,6 +94,29 @@ serve(async (req) => {
 
   try {
     payload = await req.json();
+
+    // Novo: suporte para sincronização manual de perfil via painel (evita CORS no navegador)
+    if (payload.type === 'sync-profile') {
+      const { userId, storeId } = payload;
+      const { data: config } = await supabaseClient
+        .from("instagram_config")
+        .select("*")
+        .eq("store_id", storeId)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (!config?.page_access_token) {
+        return new Response(JSON.stringify({ error: "Configuração do Instagram não encontrada ou inativa." }), { 
+          status: 404, headers: corsHeaders 
+        });
+      }
+      
+      const profile = await fetchInstagramUserProfile(userId, config.page_access_token);
+      return new Response(JSON.stringify({ profile }), { 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
+    }
+
     console.log("Payload recebido. Objeto:", payload.object);
 
     if (payload.object !== "instagram" && payload.object !== "page") {
