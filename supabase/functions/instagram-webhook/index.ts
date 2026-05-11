@@ -398,8 +398,8 @@ serve(async (req) => {
                      headers: { "Content-Type": "application/json", Authorization: `Bearer ${cleanToken}` },
                      body: JSON.stringify({ recipient: { id: senderId }, message: { text: kiloText } }),
                    });
-
-                if (fbRes.ok) {
+ 
+                   if (fbRes.ok) {
                   // Gravar mensagem da IA no banco
                   await supabaseClient.from("lead_messages").insert({
                     lead_id: leadId,
