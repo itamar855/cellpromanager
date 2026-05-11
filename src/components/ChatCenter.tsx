@@ -132,19 +132,17 @@ export default function ChatCenter({ leads, onRefreshProfile, onAIQualify, user,
 
     try {
       if (selectedLead.source === 'instagram' && selectedLead.instagram_user_id) {
-        const { data: config } = await supabase.from("instagram_config").select("*").eq("is_active", true).maybeSingle();
-        if (!config) throw new Error("Instagram não configurado.");
-
-        const res = await fetch(`https://graph.facebook.com/v19.0/${config.instagram_business_account_id}/messages`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.page_access_token}` },
-          body: JSON.stringify({
-            recipient: { id: selectedLead.instagram_user_id },
-            message: { text: inputText }
-          })
+        const { data, error } = await supabase.functions.invoke('instagram-webhook', {
+          body: { 
+            type: 'send-message', 
+            userId: selectedLead.instagram_user_id,
+            storeId: selectedLead.store_id,
+            message: inputText
+          }
         });
 
-        if (!res.ok) throw new Error("Erro ao enviar para o Instagram API.");
+        if (error) throw error;
+        if (data.error) throw new Error(data.error);
 
         await supabase.from('lead_messages').insert({
           lead_id: selectedLead.id,

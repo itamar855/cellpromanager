@@ -117,6 +117,33 @@ serve(async (req) => {
        });
     }
 
+    // Novo: suporte para envio de mensagens via painel (evita CORS)
+    if (payload.type === 'send-message') {
+      const { userId, storeId, message } = payload;
+      const { data: config } = await supabaseClient
+        .from("instagram_config")
+        .select("*")
+        .eq("store_id", storeId)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (!config?.page_access_token) {
+        return new Response(JSON.stringify({ error: "Configuração não encontrada" }), { status: 404, headers: corsHeaders });
+      }
+
+      const res = await fetch(`https://graph.facebook.com/v19.0/${config.instagram_business_account_id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.page_access_token}` },
+        body: JSON.stringify({
+          recipient: { id: userId },
+          message: { text: message }
+        })
+      });
+
+      const result = await res.json();
+      return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     console.log("Payload recebido. Objeto:", payload.object);
 
     if (payload.object !== "instagram" && payload.object !== "page") {
