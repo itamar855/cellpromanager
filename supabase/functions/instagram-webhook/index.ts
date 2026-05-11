@@ -137,7 +137,7 @@ serve(async (req) => {
 
     console.log("Payload recebido. Objeto:", payload.object);
 
-    if (payload.object !== "instagram" && payload.object !== "page") {
+    if (payload.object !== "instagram" && payload.object !== "page" && !payload.type) {
       // Payload de outro objeto (ex: feed, story) — ignorar silenciosamente
       await writeLog(supabaseClient, payload, null);
       return new Response(JSON.stringify({ status: "ignored" }), {
