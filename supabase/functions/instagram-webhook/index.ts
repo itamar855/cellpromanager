@@ -95,15 +95,19 @@ serve(async (req) => {
   try {
     payload = await req.json();
 
-    // Novo: suporte para sincronização manual de perfil via painel (evita CORS no navegador)
-    if (payload.type === 'sync-profile') {
-      const { userId, storeId } = payload;
-      const { data: config } = await supabaseClient
+    // Novo: suporte para operações via painel (evita CORS no navegador)
+    if (payload.type === 'sync-profile' || payload.type === 'send-message') {
+      const { userId, storeId, message } = payload;
+      let query = supabaseClient
         .from("instagram_config")
         .select("*")
-        .eq("store_id", storeId)
-        .eq("is_active", true)
-        .maybeSingle();
+        .eq("is_active", true);
+      
+      if (storeId) {
+        query = query.eq("store_id", storeId);
+      }
+      
+      const { data: config } = await query.limit(1).maybeSingle();
 
       if (!config?.page_access_token) {
         return new Response(JSON.stringify({ error: "Configuração do Instagram não encontrada ou inativa." }), { 
@@ -111,37 +115,24 @@ serve(async (req) => {
         });
       }
       
-       const profile = await fetchInstagramUserProfile(userId, config.page_access_token);
-       return new Response(JSON.stringify({ profile }), { 
-         headers: { ...corsHeaders, "Content-Type": "application/json" } 
-       });
-    }
+      if (payload.type === 'sync-profile') {
+        const profile = await fetchInstagramUserProfile(userId, config.page_access_token);
+        return new Response(JSON.stringify({ profile }), { 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        });
+      } else {
+        const res = await fetch(`https://graph.facebook.com/v19.0/${config.instagram_business_account_id}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.page_access_token}` },
+          body: JSON.stringify({
+            recipient: { id: userId },
+            message: { text: message }
+          })
+        });
 
-    // Novo: suporte para envio de mensagens via painel (evita CORS)
-    if (payload.type === 'send-message') {
-      const { userId, storeId, message } = payload;
-      const { data: config } = await supabaseClient
-        .from("instagram_config")
-        .select("*")
-        .eq("store_id", storeId)
-        .eq("is_active", true)
-        .maybeSingle();
-
-      if (!config?.page_access_token) {
-        return new Response(JSON.stringify({ error: "Configuração não encontrada" }), { status: 404, headers: corsHeaders });
+        const result = await res.json();
+        return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-
-      const res = await fetch(`https://graph.facebook.com/v19.0/${config.instagram_business_account_id}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.page_access_token}` },
-        body: JSON.stringify({
-          recipient: { id: userId },
-          message: { text: message }
-        })
-      });
-
-      const result = await res.json();
-      return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     console.log("Payload recebido. Objeto:", payload.object);
