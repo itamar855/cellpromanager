@@ -19,11 +19,30 @@ Regras de comportamento:
 5. Nunca prometa descontos absurdos.
 6. Responda de forma curta e objetiva, como em um chat real.`;
 
-// ─── Helper: buscar perfil público do Instagram via Graph API ───────────────
-const fetchInstagramUserProfile = async (userId: string, accessToken: string) => {
-  try {
-    const url = `https://graph.facebook.com/v19.0/${userId}?fields=name,profile_pic&access_token=${accessToken}`;
-    const response = await fetch(url);
+ // ─── Helper: Validação e limpeza de token ──────────────────────────────────
+ const validateAndCleanToken = (token: string | null | undefined): string | null => {
+   if (!token) return null;
+   // Remove espaços em branco, quebras de linha e caracteres invisíveis comuns
+   const cleanToken = token.trim().replace(/[\n\r\t]/g, "").replace(/\s+/g, "");
+   
+   // Um token válido do Facebook/Instagram geralmente é uma string longa alfanumérica
+   // Se o token parece estar corrompido ou vazio após a limpeza, retornamos null
+   if (cleanToken.length < 20) return null;
+   
+   return cleanToken;
+ };
+ 
+ // ─── Helper: buscar perfil público do Instagram via Graph API ───────────────
+ const fetchInstagramUserProfile = async (userId: string, accessToken: string) => {
+   const cleanToken = validateAndCleanToken(accessToken);
+   if (!cleanToken) {
+     console.error("fetchInstagramUserProfile: Access token inválido ou corrompido.");
+     return { error: "Access token inválido ou corrompido." };
+   }
+ 
+   try {
+     const url = `https://graph.facebook.com/v19.0/${userId}?fields=name,profile_pic&access_token=${cleanToken}`;
+     const response = await fetch(url);
     const data = await response.json();
     
      if (data.error) {
