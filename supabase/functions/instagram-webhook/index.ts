@@ -400,21 +400,22 @@ serve(async (req) => {
                    });
  
                    if (fbRes.ok) {
-                  // Gravar mensagem da IA no banco
-                  await supabaseClient.from("lead_messages").insert({
-                    lead_id: leadId,
-                    content: kiloText,
-                    sender_type: "vendedor",
-                    message_type: "text",
-                    channel: "instagram"
-                  });
-                  console.log("Resposta do Kilo enviada e gravada.");
-                } else {
-                  const fbErr = await fbRes.json();
-                  console.error("Erro ao enviar resposta do Kilo para FB:", fbErr);
-                }
-              }
-            } else {
+                     // Gravar mensagem da IA no banco
+                     await supabaseClient.from("lead_messages").insert({
+                       lead_id: leadId,
+                       content: kiloText,
+                       sender_type: "vendedor",
+                       message_type: "text",
+                       channel: "instagram"
+                     });
+                     console.log("Resposta do Kilo enviada e gravada.");
+                   } else {
+                     const fbErr = await fbRes.json();
+                     console.error("Erro ao enviar resposta do Kilo para FB:", fbErr);
+                   }
+                 }
+               }
+             } else {
               const aiErr = await aiResponse.text();
               console.error("Erro no gateway de IA para resposta automática:", aiErr);
             }
