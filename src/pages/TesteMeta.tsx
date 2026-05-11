@@ -24,7 +24,7 @@ const TesteMeta = () => {
     try {
       const { data: config, error: configError } = await supabase
         .from('instagram_config')
-        .select('page_access_token')
+        .select('page_access_token, store_id')
         .eq('is_active', true)
         .limit(1)
         .single();
@@ -35,16 +35,26 @@ const TesteMeta = () => {
         return;
       }
 
-      const graphUrl = "https://graph.facebook.com/v19.0/" + userId + "?fields=name,profile_pic&access_token=" + config.page_access_token;
-      
-      const response = await fetch(graphUrl);
-      const data = await response.json();
+      const { data, error: functionError } = await supabase.functions.invoke('instagram-webhook', {
+        body: { 
+          type: 'sync-profile', 
+          userId: userId,
+          // Buscamos qualquer store_id ativo se não houver um específico
+          storeId: config?.store_id || null 
+        }
+      });
 
-      if (data.error) {
-        setResult({ error: data.error.message });
-        toast.error("Erro na API da Meta: " + data.error.message);
+      if (functionError) throw functionError;
+      
+      const profile = data.profile;
+
+      if (profile?.error) {
+        setResult({ error: profile.error });
+        toast.error("Erro na API da Meta: " + profile.error);
+      } else if (!profile) {
+        toast.error("Nenhum dado retornado da API.");
       } else {
-        setResult(data);
+        setResult(profile);
         toast.success("Dados capturados com sucesso!");
       }
     } catch (err: any) {
