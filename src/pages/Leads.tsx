@@ -198,29 +198,35 @@ const Leads = () => {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [qualifying, setQualifying] = useState(false);
 
-  const handleRefreshProfile = async (lead: any) => {
-    if (lead.source !== 'instagram' || !lead.instagram_user_id) return;
-    const toastId = toast.loading("Buscando dados do Instagram...");
-    try {
-      const { data: config } = await supabase.from("instagram_config").select("*").eq("is_active", true).maybeSingle();
-      if (!config) throw new Error("Integração Instagram não configurada ou inativa.");
-
-      const response = await fetch(`https://graph.facebook.com/v19.0/${lead.instagram_user_id}?fields=name,profile_pic&access_token=${config.page_access_token}`);
-      const data = await response.json();
-
-      if (data.error) throw new Error(data.error.message);
-
-      if (data.name) {
-        await supabase.from("leads").update({ name: data.name }).eq("id", lead.id);
-        toast.success(`Perfil atualizado: ${data.name}`, { id: toastId });
-        fetchData();
-      } else {
-        toast.error("Nome não disponível publicamente.", { id: toastId });
-      }
-    } catch (err: any) {
-      toast.error("Erro ao sincronizar: " + err.message, { id: toastId });
-    }
-  };
+   const handleRefreshProfile = async (lead: any) => {
+     if (lead.source !== 'instagram' || !lead.instagram_user_id) return;
+     const toastId = toast.loading("Sincronizando perfil via Instagram API...");
+     try {
+       const { data, error } = await supabase.functions.invoke('instagram-webhook', {
+         body: { 
+           type: 'sync-profile', 
+           userId: lead.instagram_user_id,
+           storeId: lead.store_id
+         }
+       });
+ 
+       if (error) throw error;
+       
+       const profile = data.profile;
+       if (profile?.error) throw new Error(profile.error);
+ 
+       if (profile?.name) {
+         await supabase.from("leads").update({ name: profile.name }).eq("id", lead.id);
+         toast.success(`Perfil atualizado: ${profile.name}`, { id: toastId });
+         fetchData();
+       } else {
+         toast.error("Não foi possível obter o nome público.", { id: toastId });
+       }
+     } catch (err: any) {
+       console.error("Sync error:", err);
+       toast.error("Erro na sincronização: " + (err.message || "Verifique as chaves da API"), { id: toastId });
+     }
+   };
 
   const handleAIQualify = async (leadId: string) => {
     setQualifying(true);

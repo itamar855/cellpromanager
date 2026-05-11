@@ -79,17 +79,19 @@ export default function ChatCenter({ leads, onRefreshProfile, onAIQualify, user,
         }
       });
 
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
-
-      if (data.profile?.name) {
-        await supabase.from("leads").update({ name: data.profile.name }).eq("id", selectedLead.id);
-        toast.success(`Perfil atualizado: ${data.profile.name}`, { id: toastId });
-        // Update local state
-        setSelectedLead({ ...selectedLead, name: data.profile.name });
-      } else {
-        toast.error("Não foi possível obter o nome público.", { id: toastId });
-      }
+       if (error) throw error;
+       
+       const profile = data.profile;
+       if (profile?.error) throw new Error(profile.error);
+ 
+       if (profile?.name) {
+         await supabase.from("leads").update({ name: profile.name }).eq("id", selectedLead.id);
+         toast.success(`Perfil atualizado: ${profile.name}`, { id: toastId });
+         // Update local state
+         setSelectedLead({ ...selectedLead, name: profile.name });
+       } else {
+         toast.error("Não foi possível obter o nome público.", { id: toastId });
+       }
     } catch (err: any) {
       console.error("Sync error:", err);
       toast.error("Erro na sincronização: " + (err.message || "Verifique as chaves da API"), { id: toastId });

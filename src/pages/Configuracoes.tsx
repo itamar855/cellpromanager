@@ -128,23 +128,28 @@ const Configuracoes = () => {
     setLoading(false);
   };
 
-  const handleSaveInstagramConfig = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    const payload = {
-      page_id: instagramConfig.page_id,
-      page_access_token: instagramConfig.page_access_token,
-      instagram_business_account_id: instagramConfig.instagram_business_account_id,
-      is_active: instagramConfig.is_active,
-      store_id: activeStoreId || (stores.length > 0 ? stores[0].id : null)
-    };
-    const { error } = instagramConfig.id
-      ? await supabase.from("instagram_config").update(payload).eq("id", instagramConfig.id)
-      : await supabase.from("instagram_config").insert(payload);
-    if (error) toast.error("Erro Instagram: " + error.message);
-    else { toast.success("Configuração do Instagram salva!"); fetchData(); }
-    setLoading(false);
-  };
+   const handleSaveInstagramConfig = async (e: React.FormEvent) => {
+     e.preventDefault();
+     
+     if (instagramConfig.page_access_token?.startsWith("IGAA")) {
+       toast.warning("Atenção: Tokens que começam com 'IGAA' geralmente são da API Basic Display, que não suporta mensagens. Utilize um Token de Acesso de Página (que começa com 'EA...').");
+     }
+ 
+     setLoading(true);
+     const payload = {
+       page_id: instagramConfig.page_id,
+       page_access_token: instagramConfig.page_access_token,
+       instagram_business_account_id: instagramConfig.instagram_business_account_id,
+       is_active: instagramConfig.is_active,
+       store_id: activeStoreId || (stores.length > 0 ? stores[0].id : null)
+     };
+     const { error } = instagramConfig.id
+       ? await supabase.from("instagram_config").update(payload).eq("id", instagramConfig.id)
+       : await supabase.from("instagram_config").insert(payload);
+     if (error) toast.error("Erro Instagram: " + error.message);
+     else { toast.success("Configuração do Instagram salva!"); fetchData(); }
+     setLoading(false);
+   };
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-20">

@@ -15,13 +15,13 @@ const fetchInstagramUserProfile = async (userId: string, accessToken: string) =>
     const response = await fetch(url);
     const data = await response.json();
     
-    if (data.error) {
-      console.error(`Instagram Profile Fetch Error for ${userId}:`, JSON.stringify(data.error));
-      return null;
-    }
-    
-    console.log(`Successfully fetched profile for ${userId}: ${data.name}`);
-    return data as { name?: string; id?: string; profile_pic?: string };
+     if (data.error) {
+       console.error(`Instagram Profile Fetch Error for ${userId}:`, JSON.stringify(data.error));
+       return { error: data.error.message || "Erro API Instagram" };
+     }
+     
+     console.log(`Successfully fetched profile for ${userId}: ${data.name}`);
+     return data as { name?: string; id?: string; profile_pic?: string; error?: string };
   } catch (e) {
     console.error("Network error fetching IG profile:", e);
     return null;
@@ -111,10 +111,10 @@ serve(async (req) => {
         });
       }
       
-      const profile = await fetchInstagramUserProfile(userId, config.page_access_token);
-      return new Response(JSON.stringify({ profile }), { 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
+       const profile = await fetchInstagramUserProfile(userId, config.page_access_token);
+       return new Response(JSON.stringify({ profile }), { 
+         headers: { ...corsHeaders, "Content-Type": "application/json" } 
+       });
     }
 
     console.log("Payload recebido. Objeto:", payload.object);
@@ -188,11 +188,13 @@ serve(async (req) => {
         let instagramUsername = existingLead?.instagram_username ?? null;
 
         // 2. Tentar enriquecer o nome via Graph API (apenas mensagens recebidas)
-        if (!isEcho && config?.page_access_token && (!userName || userName.startsWith("IG User"))) {
-          const profile = await fetchInstagramUserProfile(targetLeadId, config.page_access_token);
-          if (profile?.name) userName = profile.name;
-          if (profile?.username) instagramUsername = profile.username;
-        }
+         if (!isEcho && config?.page_access_token && (!userName || userName.startsWith("IG User"))) {
+           const profile: any = await fetchInstagramUserProfile(targetLeadId, config.page_access_token);
+           if (profile && !profile.error) {
+             if (profile.name) userName = profile.name;
+             if (profile.username) instagramUsername = profile.username;
+           }
+         }
 
         // Nome de fallback quando a API não retornou nada
         if (!userName) {
