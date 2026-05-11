@@ -387,13 +387,17 @@ serve(async (req) => {
               const aiData = await aiResponse.json();
               const kiloText = aiData.choices?.[0]?.message?.content;
 
-              if (kiloText) {
-                // Enviar para o Instagram
-                const fbRes = await fetch(`https://graph.facebook.com/v19.0/${config.instagram_business_account_id}/messages`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.page_access_token}` },
-                  body: JSON.stringify({ recipient: { id: senderId }, message: { text: kiloText } }),
-                });
+               if (kiloText) {
+                 const cleanToken = validateAndCleanToken(config.page_access_token);
+                 if (!cleanToken) {
+                   console.error("Kilo: Erro ao enviar resposta, token inválido.");
+                 } else {
+                   // Enviar para o Instagram
+                   const fbRes = await fetch(`https://graph.facebook.com/v19.0/${config.instagram_business_account_id}/messages`, {
+                     method: "POST",
+                     headers: { "Content-Type": "application/json", Authorization: `Bearer ${cleanToken}` },
+                     body: JSON.stringify({ recipient: { id: senderId }, message: { text: kiloText } }),
+                   });
 
                 if (fbRes.ok) {
                   // Gravar mensagem da IA no banco
