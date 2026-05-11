@@ -125,7 +125,29 @@ serve(async (req) => {
         });
       }
       
-      if (payload.type === 'sync-profile') {
+      if (type === 'debug-token') {
+        console.log("Iniciando Diagnóstico de Token...");
+        // 1. Verificar Páginas
+        const pagesRes = await fetch(`https://graph.facebook.com/v19.0/me/accounts?access_token=${config.page_access_token}`);
+        const pagesData = await pagesRes.json();
+
+        // 2. Verificar Conta IG vinculada à página atual
+        const igRes = await fetch(`https://graph.facebook.com/v19.0/${config.page_id}?fields=instagram_business_account&access_token=${config.page_access_token}`);
+        const igData = await igRes.json();
+
+        return new Response(JSON.stringify({
+          pages: pagesData,
+          linked_ig: igData,
+          current_config: {
+            page_id: config.page_id,
+            ig_id: config.instagram_business_account_id
+          }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (type === 'sync-profile') {
         const profile = await fetchInstagramUserProfile(userId, config.page_access_token);
         return new Response(JSON.stringify({ profile }), { 
           headers: { ...corsHeaders, "Content-Type": "application/json" } 
