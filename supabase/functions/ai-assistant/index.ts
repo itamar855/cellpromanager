@@ -43,6 +43,15 @@ serve(async (req) => {
       userPrompt = context?.customRequest 
         ? `Adapte os termos para o seguinte cenário: ${context.customRequest}\n\nTermos atuais: ${context.currentTerms || "padrão"}`
         : `Gere termos de responsabilidade completos para uma ordem de serviço de assistência técnica de celulares. Contexto: ${JSON.stringify(context, null, 2)}`;
+    } else if (type === "qualify") {
+      systemPrompt = `Você é um especialista em vendas e qualificação de leads para lojas de celulares e assistência técnica no Brasil. Analise o histórico de conversa e o perfil do lead para determinar o potencial de compra. Em português, use markdown. Forneça:
+- Score de Qualificação (0-100)
+- Perfil do Lead (Ex: Entusiasta, Necessidade Urgente, Pesquisa de Preço)
+- Principais Interesses (Ex: iPhone 15, Troca de Tela, Acessórios)
+- Objeções Identificadas
+- Próximo Passo Sugerido para o vendedor
+- Nome sugerido (se detectado na conversa)`;
+      userPrompt = `Analise o seguinte contexto do lead e histórico de mensagens:\n${JSON.stringify(context, null, 2)}`;
     } else {
       return new Response(JSON.stringify({ error: "Tipo inválido. Use: financial, stock, legal" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },

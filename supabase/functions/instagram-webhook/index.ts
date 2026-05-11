@@ -9,14 +9,19 @@ const corsHeaders = {
 // ─── Helper: buscar perfil público do Instagram via Graph API ───────────────
 const fetchInstagramUserProfile = async (userId: string, accessToken: string) => {
   try {
-    const url = `https://graph.facebook.com/v19.0/${userId}?fields=name,username&access_token=${accessToken}`;
+    // For Instagram Scoped IDs, fields are limited: name, profile_pic are standard.
+    // 'username' is sometimes restricted but we'll try 'name' first.
+    const url = `https://graph.facebook.com/v19.0/${userId}?fields=name,profile_pic&access_token=${accessToken}`;
     const response = await fetch(url);
     const data = await response.json();
+    
     if (data.error) {
-      console.error("Instagram Profile Fetch Error:", JSON.stringify(data.error));
+      console.error(`Instagram Profile Fetch Error for ${userId}:`, JSON.stringify(data.error));
       return null;
     }
-    return data as { name?: string; username?: string; id?: string };
+    
+    console.log(`Successfully fetched profile for ${userId}: ${data.name}`);
+    return data as { name?: string; id?: string; profile_pic?: string };
   } catch (e) {
     console.error("Network error fetching IG profile:", e);
     return null;
