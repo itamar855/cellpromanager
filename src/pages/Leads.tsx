@@ -24,6 +24,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { LeadList } from "@/components/LeadList";
 import ConversaSync from "@/components/ConversaSync";
+import ChatCenter from "@/components/ChatCenter";
 
 import { logAction } from "@/utils/auditLogger";
 
@@ -54,6 +55,7 @@ const Leads = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [responseModalOpen, setResponseModalOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<any>(null);
+  const [viewMode, setViewMode] = useState<'kanban' | 'chat'>('kanban');
   const [responseText, setResponseText] = useState("");
   const [form, setForm] = useState({
     name: "", phone: "", email: "", source: "whatsapp", status: "novo" as LeadStatus, notes: "", store_id: "", assigned_to: ""
@@ -596,6 +598,25 @@ const Leads = () => {
             )}
           </div>
           <div className="flex gap-2">
+            <div className="flex bg-muted/30 p-1 rounded-lg border border-border/40">
+              <Button 
+                variant={viewMode === 'kanban' ? 'secondary' : 'ghost'} 
+                size="sm" 
+                className="h-8 text-[10px] px-3 gap-2"
+                onClick={() => setViewMode('kanban')}
+              >
+                <Users className="h-3.5 w-3.5" /> Funil Kanban
+              </Button>
+              <Button 
+                variant={viewMode === 'chat' ? 'secondary' : 'ghost'} 
+                size="sm" 
+                className="h-8 text-[10px] px-3 gap-2"
+                onClick={() => setViewMode('chat')}
+              >
+                <MessageSquare className="h-3.5 w-3.5" /> Central Chat
+                {leads.some(l => l.has_unread) && <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />}
+              </Button>
+            </div>
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -746,23 +767,33 @@ const Leads = () => {
         </Card>
       )}
 
-      <LeadList
-        leads={filteredLeads}
-        loading={loading}
-        searchTerm={searchTerm}
-        allStatuses={allStatuses}
-        statusConfig={statusConfig}
-        onStatusChange={updateStatus}
-        onLeadClick={(lead) => {
-          setSelectedLead(lead);
-          setChatModalOpen(true);
-          fetchMessages(lead.id);
-        }}
-        onEditLead={handleEditLead}
-        onDeleteLead={handleDeleteLead}
-        onResponseClick={handleResponse}
-        isAdmin={isAdmin}
-      />
+      {viewMode === 'kanban' ? (
+        <LeadList
+          leads={filteredLeads}
+          loading={loading}
+          searchTerm={searchTerm}
+          allStatuses={allStatuses}
+          statusConfig={statusConfig}
+          onStatusChange={updateStatus}
+          onLeadClick={(lead) => {
+            setSelectedLead(lead);
+            setChatModalOpen(true);
+            fetchMessages(lead.id);
+          }}
+          onEditLead={handleEditLead}
+          onDeleteLead={handleDeleteLead}
+          onResponseClick={handleResponse}
+          isAdmin={isAdmin}
+        />
+      ) : (
+        <ChatCenter 
+          leads={leads}
+          user={user}
+          activeStoreId={activeStoreId}
+          onRefreshProfile={handleRefreshProfile}
+          onAIQualify={handleAIQualify}
+        />
+      )}
 
       <ConversaSync
         selectedLeadId={selectedLead?.id}
