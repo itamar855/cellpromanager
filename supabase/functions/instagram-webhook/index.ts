@@ -166,20 +166,28 @@ serve(async (req) => {
         });
       }
 
-      if (type === 'sync-profile') {
-        const profile = await fetchInstagramUserProfile(userId, config.page_access_token);
-        return new Response(JSON.stringify({ profile }), { 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        });
-      } else {
-        const res = await fetch(`https://graph.facebook.com/v19.0/${config.instagram_business_account_id}/messages`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.page_access_token}` },
-          body: JSON.stringify({
-            recipient: { id: userId },
-            message: { text: message }
-          })
-        });
+       const cleanToken = validateAndCleanToken(config.page_access_token);
+       
+       if (!cleanToken) {
+         return new Response(JSON.stringify({ error: "Access token configurado é inválido ou está corrompido." }), { 
+           status: 400, headers: corsHeaders 
+         });
+       }
+ 
+       if (type === 'sync-profile') {
+         const profile = await fetchInstagramUserProfile(userId, cleanToken);
+         return new Response(JSON.stringify({ profile }), { 
+           headers: { ...corsHeaders, "Content-Type": "application/json" } 
+         });
+       } else {
+         const res = await fetch(`https://graph.facebook.com/v19.0/${config.instagram_business_account_id}/messages`, {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cleanToken}` },
+           body: JSON.stringify({
+             recipient: { id: userId },
+             message: { text: message }
+           })
+         });
 
         const result = await res.json();
         return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
