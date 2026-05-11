@@ -19,11 +19,30 @@ Regras de comportamento:
 5. Nunca prometa descontos absurdos.
 6. Responda de forma curta e objetiva, como em um chat real.`;
 
-// ─── Helper: buscar perfil público do Instagram via Graph API ───────────────
-const fetchInstagramUserProfile = async (userId: string, accessToken: string) => {
-  try {
-    const url = `https://graph.facebook.com/v19.0/${userId}?fields=name,profile_pic&access_token=${accessToken}`;
-    const response = await fetch(url);
+ // ─── Helper: Validação e limpeza de token ──────────────────────────────────
+ const validateAndCleanToken = (token: string | null | undefined): string | null => {
+   if (!token) return null;
+   // Remove espaços em branco, quebras de linha e caracteres invisíveis comuns
+   const cleanToken = token.trim().replace(/[\n\r\t]/g, "").replace(/\s+/g, "");
+   
+   // Um token válido do Facebook/Instagram geralmente é uma string longa alfanumérica
+   // Se o token parece estar corrompido ou vazio após a limpeza, retornamos null
+   if (cleanToken.length < 20) return null;
+   
+   return cleanToken;
+ };
+ 
+ // ─── Helper: buscar perfil público do Instagram via Graph API ───────────────
+ const fetchInstagramUserProfile = async (userId: string, accessToken: string) => {
+   const cleanToken = validateAndCleanToken(accessToken);
+   if (!cleanToken) {
+     console.error("fetchInstagramUserProfile: Access token inválido ou corrompido.");
+     return { error: "Access token inválido ou corrompido." };
+   }
+ 
+   try {
+     const url = `https://graph.facebook.com/v19.0/${userId}?fields=name,profile_pic&access_token=${cleanToken}`;
+     const response = await fetch(url);
     const data = await response.json();
     
      if (data.error) {
@@ -147,24 +166,32 @@ serve(async (req) => {
         });
       }
 
-      if (type === 'sync-profile') {
-        const profile = await fetchInstagramUserProfile(userId, config.page_access_token);
-        return new Response(JSON.stringify({ profile }), { 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        });
-      } else {
-        const res = await fetch(`https://graph.facebook.com/v19.0/${config.instagram_business_account_id}/messages`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.page_access_token}` },
-          body: JSON.stringify({
-            recipient: { id: userId },
-            message: { text: message }
-          })
-        });
-
-        const result = await res.json();
-        return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
+       const cleanToken = validateAndCleanToken(config.page_access_token);
+       
+       if (!cleanToken) {
+         return new Response(JSON.stringify({ error: "Access token configurado é inválido ou está corrompido." }), { 
+           status: 400, headers: corsHeaders 
+         });
+       }
+ 
+       if (payload.type === 'sync-profile') {
+         const profile = await fetchInstagramUserProfile(userId, cleanToken);
+         return new Response(JSON.stringify({ profile }), { 
+           headers: { ...corsHeaders, "Content-Type": "application/json" } 
+         });
+       } else {
+         const res = await fetch(`https://graph.facebook.com/v19.0/${config.instagram_business_account_id}/messages`, {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cleanToken}` },
+           body: JSON.stringify({
+             recipient: { id: userId },
+             message: { text: message }
+           })
+         });
+ 
+         const result = await res.json();
+         return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+       }
     }
 
     console.log("Payload recebido. Objeto:", payload.object);
@@ -360,30 +387,35 @@ serve(async (req) => {
               const aiData = await aiResponse.json();
               const kiloText = aiData.choices?.[0]?.message?.content;
 
-              if (kiloText) {
-                // Enviar para o Instagram
-                const fbRes = await fetch(`https://graph.facebook.com/v19.0/${config.instagram_business_account_id}/messages`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.page_access_token}` },
-                  body: JSON.stringify({ recipient: { id: senderId }, message: { text: kiloText } }),
-                });
-
-                if (fbRes.ok) {
-                  // Gravar mensagem da IA no banco
-                  await supabaseClient.from("lead_messages").insert({
-                    lead_id: leadId,
-                    content: kiloText,
-                    sender_type: "vendedor",
-                    message_type: "text",
-                    channel: "instagram"
-                  });
-                  console.log("Resposta do Kilo enviada e gravada.");
-                } else {
-                  const fbErr = await fbRes.json();
-                  console.error("Erro ao enviar resposta do Kilo para FB:", fbErr);
-                }
-              }
-            } else {
+               if (kiloText) {
+                 const cleanToken = validateAndCleanToken(config.page_access_token);
+                 if (!cleanToken) {
+                   console.error("Kilo: Erro ao enviar resposta, token inválido.");
+                 } else {
+                   // Enviar para o Instagram
+                   const fbRes = await fetch(`https://graph.facebook.com/v19.0/${config.instagram_business_account_id}/messages`, {
+                     method: "POST",
+                     headers: { "Content-Type": "application/json", Authorization: `Bearer ${cleanToken}` },
+                     body: JSON.stringify({ recipient: { id: senderId }, message: { text: kiloText } }),
+                   });
+ 
+                   if (fbRes.ok) {
+                     // Gravar mensagem da IA no banco
+                     await supabaseClient.from("lead_messages").insert({
+                       lead_id: leadId,
+                       content: kiloText,
+                       sender_type: "vendedor",
+                       message_type: "text",
+                       channel: "instagram"
+                     });
+                     console.log("Resposta do Kilo enviada e gravada.");
+                   } else {
+                     const fbErr = await fbRes.json();
+                     console.error("Erro ao enviar resposta do Kilo para FB:", fbErr);
+                   }
+                 }
+               }
+             } else {
               const aiErr = await aiResponse.text();
               console.error("Erro no gateway de IA para resposta automática:", aiErr);
             }
