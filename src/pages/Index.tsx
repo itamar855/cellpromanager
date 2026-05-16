@@ -65,7 +65,7 @@ const Dashboard = () => {
     // Mantenha array de promessas
     const fetches = [
       can("estoque") 
-        ? (!isFiltered ? supabase.from("products").select("*").eq("status", "in_stock") : supabase.from("products").select("*").eq("store_id", effectiveStoreId).eq("status", "in_stock"))
+        ? (!isFiltered ? supabase.from("products").select("*") : supabase.from("products").select("*").eq("store_id", effectiveStoreId))
         : Promise.resolve({ data: [] }),
       (can("transacoes") || can("caixa"))
         ? (!isFiltered ? supabase.from("transactions").select("*") : supabase.from("transactions").select("*").eq("store_id", effectiveStoreId))
