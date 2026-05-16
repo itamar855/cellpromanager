@@ -225,6 +225,39 @@ const Estoque = () => {
     setLoading(false);
   };
 
+  const handleReconcile = async () => {
+    setLoading(true);
+    try {
+      // 1. Buscar todos os IDs de produtos que já foram vendidos
+      const { data: sales, error: salesError } = await supabase.from("sales").select("product_id");
+      if (salesError) throw salesError;
+      
+      const soldIds = [...new Set(sales.map(s => s.product_id))];
+      
+      // 2. Atualizar status dos produtos que estão 'in_stock' mas deveriam ser 'sold'
+      const { data: updated, error: updateError } = await supabase
+        .from("products")
+        .update({ status: "sold" })
+        .in("id", soldIds)
+        .eq("status", "in_stock")
+        .select();
+
+      if (updateError) throw updateError;
+      
+      const count = updated?.length || 0;
+      if (count > 0) {
+        toast.success(`${count} aparelhos foram conciliados e marcados como vendidos.`);
+        fetchData();
+      } else {
+        toast.info("O estoque já está conciliado com as vendas.");
+      }
+    } catch (err: any) {
+      toast.error("Erro na conciliação: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const storeMap = new Map(stores.map((s) => [s.id, s.name]));
 
   const filteredProducts = products.filter((p) => {
@@ -237,7 +270,7 @@ const Estoque = () => {
     return (a.name.toLowerCase().includes(q) || (a.brand && a.brand.toLowerCase().includes(q)));
   });
 
-  const inStock = filteredProducts.filter((p) => p.status !== "sold");
+  const inStock = filteredProducts.filter((p) => p.status === "in_stock");
   const totalInvestedProducts = inStock.reduce((sum, p) => sum + Number(p.cost_price), 0);
   const totalInvestedAcc = filteredAccessories.reduce((sum, a) => sum + Number(a.cost_price) * a.quantity, 0);
 
@@ -354,6 +387,9 @@ const Estoque = () => {
         </div>
         {userRole === "admin" && (
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleReconcile} disabled={loading} className="h-9 gap-2 border-primary/20 hover:bg-primary/5 text-primary">
+              <ArrowRightLeft className="h-4 w-4" /> Conciliar Estoque
+            </Button>
             <Store className="h-4 w-4 text-muted-foreground" />
             <Select value={activeStoreId} onValueChange={(v) => {
               setActiveStoreId(v);
