@@ -286,14 +286,14 @@ const Dashboard = () => {
               </Select>
             </div>
           )}
+
+          {!isAdmin && activeStoreId !== "all" && (
+            <div className="flex items-center gap-1.5 rounded-lg bg-primary/10 border border-primary/20 px-3 py-1.5 self-end mb-[2px]">
+              <Store className="h-3.5 w-3.5 text-primary" />
+              <span className="text-xs font-semibold text-primary">{activeStoreName}</span>
+            </div>
+          )}
         </div>
-      </div>
-        {!isAdmin && activeStoreId !== "all" && (
-          <div className="flex items-center gap-1.5 rounded-lg bg-primary/10 border border-primary/20 px-3 py-1.5">
-            <Store className="h-3.5 w-3.5 text-primary" />
-            <span className="text-xs font-semibold text-primary">{activeStoreName}</span>
-          </div>
-        )}
       </div>
 
       {can("estoque") && (lowStockStores.length > 0 || lowStockAcc.length > 0) && (
