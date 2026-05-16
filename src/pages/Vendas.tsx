@@ -708,7 +708,9 @@ const Vendas = () => {
                     <SelectTrigger className="h-10"><SelectValue placeholder="Selecione o aparelho" /></SelectTrigger>
                     <SelectContent>
                       {availableProducts.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.name} — {p.brand} ({(storeMap.get(p.store_id) as any)?.name || "?"})</SelectItem>
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name} {p.brand && `· ${p.brand}`} {p.imei && `· IMEI: ${p.imei}`} ({(storeMap.get(p.store_id) as any)?.name || "?"})
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

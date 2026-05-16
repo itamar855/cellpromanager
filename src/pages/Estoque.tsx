@@ -60,7 +60,7 @@ const Estoque = () => {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [editProductOpen, setEditProductOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<Tables<"products"> | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", brand: "iPhone", model: "", imei: "", serial_number: "", cost_price: "", sale_price: "", store_id: "", condition: "used", color: "", capacity: "", battery_percentage: "", justification: "" });
+  const [editForm, setEditForm] = useState({ name: "", brand: "iPhone", model: "", imei: "", serial_number: "", cost_price: "", sale_price: "", store_id: "", condition: "used", color: "", capacity: "", battery_percentage: "", justification: "", status: "in_stock" });
   const [historyProduct, setHistoryProduct] = useState<Tables<"products"> | null>(null);
   const [productHistory, setProductHistory] = useState<any[]>([]);
   const [justification, setJustification] = useState("");
@@ -264,6 +264,7 @@ const Estoque = () => {
       capacity: p.capacity || "",
       battery_percentage: (p as any).battery_percentage ? String((p as any).battery_percentage) : "",
       justification: "",
+      status: p.status,
     });
     setEditProductOpen(true);
   };
@@ -288,6 +289,7 @@ const Estoque = () => {
       color: editForm.color || null,
       capacity: editForm.capacity ? (editForm.capacity.toUpperCase().endsWith("GB") ? editForm.capacity.toUpperCase() : `${editForm.capacity.toUpperCase()}GB`) : null,
       battery_percentage: editForm.battery_percentage ? parseInt(editForm.battery_percentage) : null,
+      status: editForm.status,
     };
     const { error } = await supabase.from("products").update(updatePayload as any).eq("id", editProduct.id);
 
@@ -827,6 +829,20 @@ const Estoque = () => {
               <div className="space-y-1.5"><Label className="text-xs">Venda (R$)</Label><Input type="number" step="0.01" value={editForm.sale_price} onChange={e => setEditForm(f => ({ ...f, sale_price: e.target.value }))} className="h-10" /></div>
             </div>
             <div className="space-y-1.5"><Label className="text-xs">Loja</Label><Select value={editForm.store_id} onValueChange={v => setEditForm(f => ({ ...f, store_id: v }))}><SelectTrigger className="h-10"><SelectValue /></SelectTrigger><SelectContent>{stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Status do Aparelho</Label>
+              <Select value={editForm.status} onValueChange={v => setEditForm(f => ({ ...f, status: v }))}>
+                <SelectTrigger className="h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="in_stock">Em estoque</SelectItem>
+                  <SelectItem value="sold">Vendido</SelectItem>
+                  <SelectItem value="reserved">Reservado</SelectItem>
+                  <SelectItem value="repair">Em reparo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-primary">Motivo da Alteração</Label>
               <Input value={editForm.justification} onChange={e => setEditForm(f => ({ ...f, justification: e.target.value }))} placeholder="Ex: Erro no cadastro, atualização de preço..." required className="h-10 border-primary/30" />
