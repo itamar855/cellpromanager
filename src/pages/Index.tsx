@@ -19,6 +19,20 @@ const COLORS = ["hsl(152, 60%, 45%)", "hsl(38, 92%, 50%)", "hsl(0, 62%, 50%)", "
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
+const getPeriodDates = (period: string, customStart: string, customEnd: string) => {
+  const now = new Date();
+  if (period === "custom") {
+    return {
+      start: customStart ? new Date(customStart).toISOString() : new Date(now.getFullYear(), now.getMonth(), 1).toISOString(),
+      end: customEnd ? new Date(customEnd + "T23:59:59").toISOString() : now.toISOString(),
+    };
+  }
+  if (period === "week") { const d = new Date(now); d.setDate(d.getDate() - 7); return { start: d.toISOString(), end: now.toISOString() }; }
+  if (period === "month") return { start: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(), end: now.toISOString() };
+  if (period === "quarter") { const q = Math.floor(now.getMonth() / 3) * 3; return { start: new Date(now.getFullYear(), q, 1).toISOString(), end: now.toISOString() }; }
+  return { start: new Date(now.getFullYear(), 0, 1).toISOString(), end: now.toISOString() };
+};
+
 const Dashboard = () => {
   const { user, userRole, userPermissions, activeStoreId, setActiveStoreId, userStoreIds } = useAuth();
 
@@ -30,12 +44,16 @@ const Dashboard = () => {
     () => localStorage.getItem("cellmanager-active-store-name") || "Todas as lojas"
   );
 
+  const [period, setPeriod] = useState("month");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
+
   // Re-fetch quando os contextos essenciais carregam ou a loja ativa muda
   useEffect(() => { 
     if (userPermissions !== null && userStoreIds !== undefined) {
       fetchData(); 
     }
-  }, [activeStoreId, userPermissions, userStoreIds, userRole]);
+  }, [activeStoreId, userPermissions, userStoreIds, userRole, period, customStart, customEnd]);
 
   const [stats, setStats] = useState({
     totalStock: 0, totalInvested: 0, totalInvestedAcc: 0,
@@ -62,26 +80,36 @@ const Dashboard = () => {
     // isFiltered garante que force o filtro caso a loja efetiva seja definida
     const isFiltered = effectiveStoreId && effectiveStoreId !== "all";
 
+    const { start, end } = getPeriodDates(period, customStart, customEnd);
+
     // Mantenha array de promessas
     const fetches = [
       can("estoque") 
         ? (!isFiltered ? supabase.from("products").select("*") : supabase.from("products").select("*").eq("store_id", effectiveStoreId))
         : Promise.resolve({ data: [] }),
       (can("transacoes") || can("caixa"))
-        ? (!isFiltered ? supabase.from("transactions").select("*") : supabase.from("transactions").select("*").eq("store_id", effectiveStoreId))
+        ? (!isFiltered 
+            ? supabase.from("transactions").select("*").gte("created_at", start).lte("created_at", end) 
+            : supabase.from("transactions").select("*").eq("store_id", effectiveStoreId).gte("created_at", start).lte("created_at", end))
         : Promise.resolve({ data: [] }),
       supabase.from("stores").select("*"),
       can("vendas")
-        ? (!isFiltered ? supabase.from("sales").select("*") : supabase.from("sales").select("*").eq("store_id", effectiveStoreId))
+        ? (!isFiltered 
+            ? supabase.from("sales").select("*").gte("created_at", start).lte("created_at", end) 
+            : supabase.from("sales").select("*").eq("store_id", effectiveStoreId).gte("created_at", start).lte("created_at", end))
         : Promise.resolve({ data: [] }),
       can("os")
-        ? (!isFiltered ? supabase.from("service_orders").select("id, status, store_id") : supabase.from("service_orders").select("id, status, store_id").eq("store_id", effectiveStoreId))
+        ? (!isFiltered 
+            ? supabase.from("service_orders").select("id, status, store_id, created_at").gte("created_at", start).lte("created_at", end) 
+            : supabase.from("service_orders").select("id, status, store_id, created_at").eq("store_id", effectiveStoreId).gte("created_at", start).lte("created_at", end))
         : Promise.resolve({ data: [] }),
       can("estoque") 
         ? (!isFiltered ? supabase.from("accessories" as any).select("*") : supabase.from("accessories" as any).select("*").eq("store_id", effectiveStoreId))
         : Promise.resolve({ data: [] }),
       can("leads")
-        ? (!isFiltered ? supabase.from("leads").select("id, created_at") : supabase.from("leads").select("id, created_at").or(`store_id.eq.${effectiveStoreId},store_id.is.null`))
+        ? (!isFiltered 
+            ? supabase.from("leads").select("id, created_at").gte("created_at", start).lte("created_at", end) 
+            : supabase.from("leads").select("id, created_at").or(`store_id.eq.${effectiveStoreId},store_id.is.null`).gte("created_at", start).lte("created_at", end))
         : Promise.resolve({ data: [] }),
     ];
 
@@ -206,24 +234,57 @@ const Dashboard = () => {
               : "Visão consolidada de todas as lojas"}
           </p>
         </div>
-        {isAdmin && (
-          <div className="flex items-center gap-2">
-            <Store className="h-4 w-4 text-muted-foreground" />
-            <Select value={activeStoreId} onValueChange={(v) => {
-              setActiveStoreId(v);
-              const s = stores.find(s => s.id === v);
-              window.dispatchEvent(new CustomEvent("store-changed", { detail: { id: v, name: s?.name || "Todas as lojas" } }));
-            }}>
-              <SelectTrigger className="w-[200px] h-10 border-border/50 bg-card shadow-sm">
-                <SelectValue placeholder="Escolher Loja" />
+
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase text-muted-foreground font-semibold">Período</Label>
+            <Select value={period} onValueChange={setPeriod}>
+              <SelectTrigger className="h-9 w-[140px] border-border/50 bg-card shadow-sm text-xs">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todas as Lojas</SelectItem>
-                {stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                <SelectItem value="week">Esta Semana</SelectItem>
+                <SelectItem value="month">Este Mês</SelectItem>
+                <SelectItem value="quarter">Trimestre</SelectItem>
+                <SelectItem value="year">Este Ano</SelectItem>
+                <SelectItem value="custom">Personalizado</SelectItem>
               </SelectContent>
             </Select>
           </div>
-        )}
+
+          {period === "custom" && (
+            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase text-muted-foreground font-semibold">De</Label>
+                <Input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="h-9 w-[130px] border-border/50 bg-card text-xs" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase text-muted-foreground font-semibold">Até</Label>
+                <Input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="h-9 w-[130px] border-border/50 bg-card text-xs" />
+              </div>
+            </div>
+          )}
+
+          {isAdmin && (
+            <div className="space-y-1">
+              <Label className="text-[10px] uppercase text-muted-foreground font-semibold">Loja</Label>
+              <Select value={activeStoreId} onValueChange={(v) => {
+                setActiveStoreId(v);
+                const s = stores.find(s => s.id === v);
+                window.dispatchEvent(new CustomEvent("store-changed", { detail: { id: v, name: s?.name || "Todas as lojas" } }));
+              }}>
+                <SelectTrigger className="w-[180px] h-9 border-border/50 bg-card shadow-sm text-xs">
+                  <SelectValue placeholder="Escolher Loja" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as Lojas</SelectItem>
+                  {stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+      </div>
         {!isAdmin && activeStoreId !== "all" && (
           <div className="flex items-center gap-1.5 rounded-lg bg-primary/10 border border-primary/20 px-3 py-1.5">
             <Store className="h-3.5 w-3.5 text-primary" />
