@@ -208,7 +208,7 @@ serve(async (req) => {
     // ── FIX BUG 2: buscar config com .maybeSingle() para não explodir ───────
     const { data: config, error: configError } = await supabaseClient
       .from("instagram_config")
-      .select("page_access_token, store_id")
+      .select("page_access_token, store_id, ai_active, instagram_business_account_id")
       .eq("is_active", true)
       .limit(1)
       .maybeSingle();

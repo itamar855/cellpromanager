@@ -34,7 +34,7 @@ type Sale = {
   trade_in_value: number | null; payment_cash: number; payment_card: number;
   payment_pix: number; customer_name: string | null; customer_phone: string | null;
   customer_cpf: string | null; customer_address: string | null;
-  customer_email: string | null; customer_id: string | null;
+  customer_id: string | null;
   notes: string | null; created_by: string; created_at: string;
   commission_value: number | null; discount: number | null;
   warranty_days: number | null; installments: number | null; seller_id: string | null;
@@ -278,7 +278,6 @@ const Vendas = () => {
       customer_phone: selectedCustomer?.phone ?? null,
       customer_cpf: selectedCustomer?.cpf ?? null,
       customer_address: selectedCustomer?.address ?? null,
-      customer_email: selectedCustomer?.email ?? null,
       notes: form.notes || null, commission_percent: commissionPercent,
       commission_value: commissionValue, created_by: user.id,
       seller_id: user.id, discount: discount,
@@ -382,16 +381,17 @@ const Vendas = () => {
     try {
       const product = productMap.get(sale.product_id) as any;
       const store = storeMap.get(sale.store_id) as any;
+      const customerMap = new Map(customers.map(c => [c.id, c]));
+      const customer = sale.customer_id ? customerMap.get(sale.customer_id) : null;
       const numeroNota = `VND-${sale.id.slice(0, 8).toUpperCase()}`;
       const data: NotaFiscalData = {
         numeroNota, dataVenda: new Date(sale.created_at).toLocaleString("pt-BR"),
         lojaNome: store?.name ?? "Loja", lojaCnpj: store?.cnpj, lojaEndereco: store?.address,
         lojaTelefone: store?.phone, lojaWhatsapp: store?.whatsapp, lojaInstagram: store?.instagram, lojaLogoUrl: store?.logo_url,
-        clienteNome: sale.customer_name ?? undefined,
-        clienteCpf: sale.customer_cpf ?? undefined,
-        clienteTelefone: sale.customer_phone ?? undefined,
-        clienteEmail: sale.customer_email ?? undefined,
-        clienteEndereco: sale.customer_address ?? undefined,
+        clienteNome: sale.customer_name || customer?.name || undefined,
+        clienteCpf: sale.customer_cpf || customer?.cpf || undefined,
+        clienteTelefone: sale.customer_phone || customer?.phone || undefined,
+        clienteEndereco: sale.customer_address || customer?.address || undefined,
         produtoNome: product?.name ?? "Produto", produtoMarca: product?.brand ?? "",
         produtoModelo: product?.model, produtoImei: product?.imei ?? undefined, produtoCor: product?.color ?? undefined,
         valorVenda: Number(sale.sale_price), valorDinheiro: Number(sale.payment_cash) || undefined,

@@ -129,6 +129,7 @@ const Relatorios = () => {
   const [ranking, setRanking] = useState<any[]>([]);
   const [comissoes, setComissoes] = useState<any[]>([]);
   const [leadsData, setLeadsData] = useState<any>({ total: 0, bySource: [], conversion: 0 });
+  const [customerMap, setCustomerMap] = useState<Map<string, any>>(new Map());
 
   useEffect(() => {
     supabase.from("stores").select("*").then(r => setStores(r.data ?? []));
@@ -201,13 +202,17 @@ const Relatorios = () => {
   const fetchVendas = useCallback(async () => {
     const { start, end } = getPeriodDates(period, customStart, customEnd);
     const effectiveStoreId = userRole === "admin" ? storeId : activeStoreId;
-    const [salesRes, productsRes] = await Promise.all([
+    const [salesRes, productsRes, customersRes] = await Promise.all([
       supabase.from("sales").select("*").gte("created_at", start).lte("created_at", end).order("created_at", { ascending: false }),
       supabase.from("products").select("*"),
+      supabase.from("customers").select("*"),
     ]);
     const sales = (salesRes.data ?? []).filter((s: any) => effectiveStoreId === "all" || s.store_id === effectiveStoreId);
     const products = productsRes.data ?? [];
+    const customers = customersRes.data ?? [];
     const productMap = new Map(products.map((p: any) => [p.id, p]));
+    const cMap = new Map(customers.map((c: any) => [c.id, c]));
+    setCustomerMap(cMap);
     const rows = sales.map((s: any) => {
       const p: any = productMap.get(s.product_id);
       const lucro = Number(s.sale_price) - Number(p?.cost_price || 0);
@@ -315,15 +320,15 @@ const Relatorios = () => {
     setNotaLoading(sale.id);
     try {
       const numeroNota = `VND-${sale.id.slice(0, 8).toUpperCase()}`;
+      const customer = sale.customer_id ? customerMap.get(sale.customer_id) : null;
       const data: NotaFiscalData = {
         numeroNota, dataVenda: new Date(sale.created_at).toLocaleString("pt-BR"),
         lojaNome: store?.name ?? "Loja", lojaCnpj: store?.cnpj, lojaEndereco: store?.address,
         lojaTelefone: store?.phone, lojaWhatsapp: store?.whatsapp, lojaInstagram: store?.instagram, lojaLogoUrl: store?.logo_url,
-        clienteNome: sale.customer_name ?? undefined,
-        clienteCpf: sale.customer_cpf ?? undefined,
-        clienteTelefone: sale.customer_phone ?? undefined,
-        clienteEmail: sale.customer_email ?? undefined,
-        clienteEndereco: sale.customer_address ?? undefined,
+        clienteNome: sale.customer_name || customer?.name || undefined,
+        clienteCpf: sale.customer_cpf || customer?.cpf || undefined,
+        clienteTelefone: sale.customer_phone || customer?.phone || undefined,
+        clienteEndereco: sale.customer_address || customer?.address || undefined,
         produtoNome: product?.name ?? "Produto", produtoMarca: product?.brand ?? "",
         produtoModelo: product?.model, produtoImei: product?.imei ?? undefined, produtoCor: product?.color ?? undefined,
         valorVenda: Number(sale.sale_price), valorDinheiro: Number(sale.payment_cash) || undefined,

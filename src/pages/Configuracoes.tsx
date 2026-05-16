@@ -141,6 +141,7 @@ const Configuracoes = () => {
        page_access_token: instagramConfig.page_access_token,
        instagram_business_account_id: instagramConfig.instagram_business_account_id,
        is_active: instagramConfig.is_active,
+       ai_active: instagramConfig.ai_active,
        store_id: activeStoreId || (stores.length > 0 ? stores[0].id : null)
      };
      const { error } = instagramConfig.id

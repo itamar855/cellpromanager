@@ -502,7 +502,11 @@ const Leads = () => {
     try {
       // Check if it's an Instagram Lead
       if (selectedLead.source === 'instagram' && selectedLead.instagram_user_id) {
-        const { data: igConfig } = await supabase.from("instagram_config").select("*").eq("is_active", true).maybeSingle();
+        const { data: igConfig } = await supabase.from("instagram_config")
+          .select("*")
+          .eq("is_active", true)
+          .eq("store_id", selectedLead.store_id)
+          .maybeSingle();
 
         if (igConfig) {
           const response = await fetch(`https://graph.facebook.com/v19.0/${igConfig.instagram_business_account_id}/messages`, {
@@ -541,7 +545,11 @@ const Leads = () => {
 
         if (!currentPhone) throw new Error("Telefone do lead é necessário.");
 
-        const { data: waConfig } = await supabase.from("whatsapp_config").select("id").eq("is_active", true).maybeSingle();
+        const { data: waConfig } = await supabase.from("whatsapp_config")
+          .select("id")
+          .eq("is_active", true)
+          .eq("store_id", selectedLead.store_id)
+          .maybeSingle();
 
         if (waConfig) {
           let mediaUrlToUpload = null;
