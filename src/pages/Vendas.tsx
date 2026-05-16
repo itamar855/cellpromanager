@@ -265,14 +265,16 @@ const Vendas = () => {
     }
 
     // 1. Tenta baixar o produto do estoque antes de registrar a venda
-    const { error: statusError } = await supabase
+    const { data: updatedProduct, error: statusError } = await supabase
       .from("products")
       .update({ status: "sold", sale_price: salePriceAfterDiscount })
       .eq("id", form.product_id)
-      .eq("status", "in_stock"); // Garante que não foi vendido enquanto o form estava aberto
+      .eq("status", "in_stock")
+      .select();
 
-    if (statusError) {
-      toast.error("Erro ao baixar produto do estoque. Ele pode já ter sido vendido.");
+    if (statusError || !updatedProduct || updatedProduct.length === 0) {
+      console.error("Erro na baixa de estoque:", statusError);
+      toast.error("Erro: O produto não pôde ser baixado. Verifique se ele já foi vendido ou se você tem permissão.");
       setLoading(false);
       return;
     }
