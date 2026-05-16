@@ -64,7 +64,7 @@ export function OsParts({ orderId, storeId, readonly = false }: OsPartsProps) {
           .from("products")
           .select("id, name, brand, model, cost_price, sale_price")
           .eq("store_id", storeId)
-          .eq("status", "em_estoque") // Assuming parts are kept individually with this status
+          .eq("status", "in_stock") // Usando o status padrão do sistema
           .in("product_type", ["peca", "acessorio", "outro"]); // Assuming type categorizes parts
 
         if (productsError) throw productsError;
@@ -94,9 +94,9 @@ export function OsParts({ orderId, storeId, readonly = false }: OsPartsProps) {
       // 1. Update product status to indicate it was used in OS
       const { error: prodError } = await supabase
         .from("products")
-        .update({ status: "usado_os" })
+        .update({ status: "sold" })
         .eq("id", selectedProductId)
-        .eq("status", "em_estoque"); // Optimistic locking
+        .eq("status", "in_stock"); // Bloqueio otimista
 
       if (prodError) throw new Error("Erro ao baixar produto do estoque.");
 
@@ -112,8 +112,8 @@ export function OsParts({ orderId, storeId, readonly = false }: OsPartsProps) {
         });
 
       if (itemError) {
-        // Rollback product status if insert fails
-        await supabase.from("products").update({ status: "em_estoque" }).eq("id", selectedProductId);
+        // Rollback se a inserção falhar
+        await supabase.from("products").update({ status: "in_stock" }).eq("id", selectedProductId);
         throw itemError;
       }
 
@@ -137,10 +137,10 @@ export function OsParts({ orderId, storeId, readonly = false }: OsPartsProps) {
 
       if (itemError) throw itemError;
 
-      // 2. Return product to stock
+      // 2. Voltar produto para o estoque
       const { error: prodError } = await supabase
         .from("products")
-        .update({ status: "em_estoque" })
+        .update({ status: "in_stock" })
         .eq("id", productId);
 
       if (prodError) throw new Error("Peça removida da OS, mas erro ao retornar ao estoque principal.");

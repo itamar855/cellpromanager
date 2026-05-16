@@ -264,6 +264,19 @@ const Vendas = () => {
       tradeInProductId = tip.id;
     }
 
+    // 1. Tenta baixar o produto do estoque antes de registrar a venda
+    const { error: statusError } = await supabase
+      .from("products")
+      .update({ status: "sold", sale_price: salePriceAfterDiscount })
+      .eq("id", form.product_id)
+      .eq("status", "in_stock"); // Garante que não foi vendido enquanto o form estava aberto
+
+    if (statusError) {
+      toast.error("Erro ao baixar produto do estoque. Ele pode já ter sido vendido.");
+      setLoading(false);
+      return;
+    }
+
     const { data: saleData, error: saleError } = await supabase.from("sales").insert({
       product_id: form.product_id, store_id: selectedProduct.store_id,
       sale_price: salePriceAfterDiscount, has_trade_in: form.has_trade_in,
@@ -285,12 +298,17 @@ const Vendas = () => {
       installments: parseInt(form.installments) || 1,
     }).select().single();
 
-    if (saleError) { toast.error(saleError.message); setLoading(false); return; }
+    if (saleError) {
+      // Rollback do status do produto se a venda falhar
+      await supabase.from("products").update({ status: "in_stock", sale_price: null }).eq("id", form.product_id);
+      toast.error(saleError.message); 
+      setLoading(false); 
+      return; 
+    }
 
     triggerWebhook("sale_completed", selectedProduct.store_id, saleData);
     logAction("CREATE_SALE", "sales", (saleData as any).id, null, saleData, selectedProduct.store_id);
 
-    await supabase.from("products").update({ status: "sold", sale_price: salePriceAfterDiscount }).eq("id", form.product_id);
     const desc = `Venda: ${selectedProduct.name}${selectedCustomer?.name ? ` → ${selectedCustomer.name}` : ""}`;
     
     // Calcula taxas e liquidez se conta destino informada
@@ -333,7 +351,16 @@ const Vendas = () => {
     if (!user || cart.length === 0 || !activeStoreId) return;
     setLoading(true);
     try {
-      for (const item of cart) await supabase.from("accessories" as any).update({ quantity: item.acc.quantity - item.qty }).eq("id", item.acc.id);
+      // 1. Atualizar estoque de cada item
+      for (const item of cart) {
+        const { error: accError } = await supabase
+          .from("accessories" as any)
+          .update({ quantity: item.acc.quantity - item.qty })
+          .eq("id", item.acc.id);
+        
+        if (accError) throw new Error(`Erro ao atualizar estoque de ${item.acc.name}: ${accError.message}`);
+      }
+
       const desc = `PDV: ${cart.map(i => `${i.qty}x ${i.acc.name}`).join(", ")}${pdvPayment.customer ? ` → ${pdvPayment.customer}` : ""}`;
       await supabase.from("transactions").insert({ type: "income", category: "acessorio", amount: cartTotal, description: desc, store_id: activeStoreId, created_by: user.id });
       const mp = pdvCash > 0 ? "dinheiro" : pdvCard > 0 ? "cartao_credito" : pdvPix > 0 ? "pix" : "dinheiro";
