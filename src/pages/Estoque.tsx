@@ -237,7 +237,7 @@ const Estoque = () => {
     return (a.name.toLowerCase().includes(q) || (a.brand && a.brand.toLowerCase().includes(q)));
   });
 
-  const inStock = filteredProducts.filter((p) => p.status === "in_stock");
+  const inStock = filteredProducts.filter((p) => p.status !== "sold");
   const totalInvestedProducts = inStock.reduce((sum, p) => sum + Number(p.cost_price), 0);
   const totalInvestedAcc = filteredAccessories.reduce((sum, a) => sum + Number(a.cost_price) * a.quantity, 0);
 
@@ -499,9 +499,9 @@ const Estoque = () => {
             </Dialog>
           </div>
 
-          {filteredProducts.length > 0 ? (
+          {inStock.length > 0 ? (
             <div className="space-y-2">
-              {filteredProducts.map((p) => {
+              {inStock.map((p) => {
                 const margin = p.sale_price ? Number(p.sale_price) - Number(p.cost_price) : null;
                 const conditionLabel = p.condition === "new" ? "Novo" : p.condition === "refurbished" ? "Recondicionado" : p.condition === "seminovo_americano" ? "Seminovo (Americano)" : "Usado";
                 return (
