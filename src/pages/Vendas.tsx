@@ -19,7 +19,7 @@ import {
   Plus, ShoppingBag, Smartphone, CreditCard, Banknote, QrCode,
   Zap, Trash2, Search, FileText, MessageCircle, User as UserIcon, UserPlus,
   ChevronDown, ChevronUp, History, Tag, Shield, Landmark, Store, AlertTriangle, Eye,
-  MapPin, Percent, CalendarDays, StickyNote, ArrowLeftRight, Wallet,
+  MapPin, Percent, CalendarDays, StickyNote, ArrowLeftRight, Wallet, RefreshCcw,
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { gerarNotaFiscalInterna, type NotaFiscalData } from "@/utils/notaFiscalInterna";
@@ -670,6 +670,21 @@ const Vendas = () => {
             </Select>
           </div>
         )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 gap-1.5 text-xs border-border text-muted-foreground hover:text-foreground"
+          onClick={() => {
+            if ('caches' in window) {
+              caches.keys().then(names => names.forEach(name => caches.delete(name)));
+            }
+            toast.success("Cache limpo! Recarregando...");
+            setTimeout(() => window.location.reload(), 800);
+          }}
+        >
+          <RefreshCcw className="h-3.5 w-3.5" />
+          Limpar Cache
+        </Button>
       </div>
       <div className="flex justify-end gap-2">
           {/* PDV */}
@@ -812,10 +827,68 @@ const Vendas = () => {
                 </div>
 
                 {selectedProduct && (
-                  <div className="rounded-lg bg-muted/50 p-3 text-xs space-y-0.5">
-                    <p><span className="text-muted-foreground">Custo:</span> <span className="font-semibold">{formatCurrency(Number(selectedProduct.cost_price))}</span></p>
-                    {selectedProduct.imei && <p><span className="text-muted-foreground">IMEI:</span> {selectedProduct.imei}</p>}
-                    {salePrice > 0 && <p><span className="text-muted-foreground">Lucro estimado:</span> <span className={`font-semibold ${profit >= 0 ? "text-primary" : "text-destructive"}`}>{formatCurrency(profit)}</span></p>}
+                  <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+                    {/* Header do card do produto */}
+                    <div className="flex items-center justify-between px-3 py-2 bg-primary/5 border-b border-border">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Smartphone className="h-4 w-4 text-primary shrink-0" />
+                        <span className="font-semibold text-sm text-foreground truncate">{selectedProduct.name}</span>
+                      </div>
+                      {selectedProduct.brand && (
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-primary/15 text-primary border border-primary/20 shrink-0 ml-2">
+                          {selectedProduct.brand}
+                        </span>
+                      )}
+                    </div>
+                    {/* Detalhes */}
+                    <div className="px-3 py-2.5 space-y-2">
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                        {selectedProduct.model && (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-muted-foreground text-[10px] uppercase tracking-wide">Modelo</span>
+                            <span className="font-medium">{selectedProduct.model}</span>
+                          </div>
+                        )}
+                        {(selectedProduct as any).color && (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-muted-foreground text-[10px] uppercase tracking-wide">Cor</span>
+                            <span className="font-medium flex items-center gap-1">
+                              <span className="inline-block h-2.5 w-2.5 rounded-full border border-border" style={{ background: (selectedProduct as any).color }} />
+                              {(selectedProduct as any).color}
+                            </span>
+                          </div>
+                        )}
+                        {selectedProduct.imei && (
+                          <div className="flex flex-col gap-0.5 col-span-2">
+                            <span className="text-muted-foreground text-[10px] uppercase tracking-wide">IMEI</span>
+                            <span className="font-mono text-[11px] bg-muted/70 px-1.5 py-0.5 rounded border border-border/70">{selectedProduct.imei}</span>
+                          </div>
+                        )}
+                        {selectedProduct.store_id && (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-muted-foreground text-[10px] uppercase tracking-wide">Loja</span>
+                            <span className="font-medium flex items-center gap-1">
+                              <Store className="h-3 w-3 text-muted-foreground" />
+                              {(storeMap.get(selectedProduct.store_id) as any)?.name ?? "—"}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-muted-foreground text-[10px] uppercase tracking-wide">Custo</span>
+                          <span className="font-semibold text-foreground">{formatCurrency(Number(selectedProduct.cost_price))}</span>
+                        </div>
+                      </div>
+                      {salePrice > 0 && (
+                        <div className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-semibold border ${
+                          profit >= 0
+                            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
+                            : "bg-destructive/10 border-destructive/20 text-destructive"
+                        }`}>
+                          <span>Lucro estimado</span>
+                          <span className="text-sm">{formatCurrency(profit)}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
