@@ -858,6 +858,24 @@ const Vendas = () => {
                             </span>
                           </div>
                         )}
+                        {selectedProduct.capacity && (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-muted-foreground text-[10px] uppercase tracking-wide">Capacidade</span>
+                            <span className="font-medium">{selectedProduct.capacity}</span>
+                          </div>
+                        )}
+                        {selectedProduct.battery_percentage !== null && selectedProduct.battery_percentage !== undefined && (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-muted-foreground text-[10px] uppercase tracking-wide">Saúde da Bateria</span>
+                            <span className="font-medium">{selectedProduct.battery_percentage}%</span>
+                          </div>
+                        )}
+                        {selectedProduct.condition && (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-muted-foreground text-[10px] uppercase tracking-wide">Condição</span>
+                            <span className="font-medium capitalize">{selectedProduct.condition}</span>
+                          </div>
+                        )}
                         {selectedProduct.imei && (
                           <div className="flex flex-col gap-0.5 col-span-2">
                             <span className="text-muted-foreground text-[10px] uppercase tracking-wide">IMEI</span>
