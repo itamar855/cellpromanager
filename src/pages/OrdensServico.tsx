@@ -828,15 +828,15 @@ const OrdensServico = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs">Nome *</Label>
-                    <Input value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} placeholder="Nome completo" required className="h-10" />
+                    <Input value={form.customer_name} onChange={(e) => setForm(prev => ({ ...prev, customer_name: e.target.value }))} placeholder="Nome completo" required className="h-10" />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Telefone</Label>
-                    <Input value={form.customer_phone} onChange={(e) => setForm({ ...form, customer_phone: e.target.value })} placeholder="(11) 99999-9999" className="h-10" />
+                    <Input value={form.customer_phone} onChange={(e) => setForm(prev => ({ ...prev, customer_phone: e.target.value }))} placeholder="(11) 99999-9999" className="h-10" />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">CPF</Label>
-                    <Input value={form.customer_cpf} onChange={(e) => setForm({ ...form, customer_cpf: e.target.value })} placeholder="000.000.000-00" className="h-10" />
+                    <Input value={form.customer_cpf} onChange={(e) => setForm(prev => ({ ...prev, customer_cpf: e.target.value }))} placeholder="000.000.000-00" className="h-10" />
                   </div>
                 </div>
               </div>
@@ -858,17 +858,17 @@ const OrdensServico = () => {
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Modelo *</Label>
-                    <Input value={form.device_model} onChange={(e) => setForm({ ...form, device_model: e.target.value })} placeholder="iPhone 13 Pro" required className="h-10" />
+                    <Input value={form.device_model} onChange={(e) => setForm(prev => ({ ...prev, device_model: e.target.value }))} placeholder="iPhone 13 Pro" required className="h-10" />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">IMEI</Label>
-                    <Input value={form.device_imei} onChange={(e) => setForm({ ...form, device_imei: e.target.value })} placeholder="352000000000000" className="h-10" />
+                    <Input value={form.device_imei} onChange={(e) => setForm(prev => ({ ...prev, device_imei: e.target.value }))} placeholder="352000000000000" className="h-10" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs">Cor</Label>
-                    <Input value={form.device_color} onChange={(e) => setForm({ ...form, device_color: e.target.value })} placeholder="Preto" className="h-10" />
+                    <Input value={form.device_color} onChange={(e) => setForm(prev => ({ ...prev, device_color: e.target.value }))} placeholder="Preto" className="h-10" />
                   </div>
                   <div className="space-y-1.5 col-span-2 sm:col-span-1">
                     <Label className="text-xs">Senha / Padrão</Label>
@@ -889,7 +889,7 @@ const OrdensServico = () => {
                       </button>
                     </div>
                     {passwordType === "text" ? (
-                      <Input value={form.device_password} onChange={(e) => setForm({ ...form, device_password: e.target.value })} placeholder="****" className="h-10" />
+                      <Input value={form.device_password} onChange={(e) => setForm(prev => ({ ...prev, device_password: e.target.value }))} placeholder="****" className="h-10" />
                     ) : (
                       <AndroidPatternLock
                         size={210}
@@ -902,12 +902,12 @@ const OrdensServico = () => {
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Acessórios</Label>
-                    <Input value={form.device_accessories} onChange={(e) => setForm({ ...form, device_accessories: e.target.value })} placeholder="Carregador, capa" className="h-10" />
+                    <Input value={form.device_accessories} onChange={(e) => setForm(prev => ({ ...prev, device_accessories: e.target.value }))} placeholder="Carregador, capa" className="h-10" />
                   </div>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Condição Física</Label>
-                  <Textarea value={form.device_condition} onChange={(e) => setForm({ ...form, device_condition: e.target.value })} placeholder="Descreva avarias existentes" className="min-h-[60px]" />
+                  <Textarea value={form.device_condition} onChange={(e) => setForm(prev => ({ ...prev, device_condition: e.target.value }))} placeholder="Descreva avarias existentes" className="min-h-[60px]" />
                 </div>
               </div>
 
@@ -918,14 +918,14 @@ const OrdensServico = () => {
                 </p>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Defeito Relatado *</Label>
-                  <Textarea value={form.reported_defect} onChange={(e) => setForm({ ...form, reported_defect: e.target.value })} placeholder="Descreva o problema relatado pelo cliente" required className="min-h-[60px]" />
+                  <Textarea value={form.reported_defect} onChange={(e) => setForm(prev => ({ ...prev, reported_defect: e.target.value }))} placeholder="Descreva o problema relatado pelo cliente" required className="min-h-[60px]" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs">Loja da OS</Label>
                     <Select 
                       value={form.store_id || (activeStoreId === "all" ? "" : activeStoreId)} 
-                      onValueChange={(v) => setForm({ ...form, store_id: v })}
+                      onValueChange={(v) => setForm(prev => ({ ...prev, store_id: v }))}
                       disabled={activeStoreId !== "all"}
                     >
                       <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
@@ -936,12 +936,12 @@ const OrdensServico = () => {
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Previsão de Entrega</Label>
-                    <Input type="datetime-local" value={form.estimated_completion} onChange={(e) => setForm({ ...form, estimated_completion: e.target.value })} className="h-10" />
+                    <Input type="datetime-local" value={form.estimated_completion} onChange={(e) => setForm(prev => ({ ...prev, estimated_completion: e.target.value }))} className="h-10" />
                   </div>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Serviço Solicitado *</Label>
-                  <Select value={form.requested_service} onValueChange={(v) => setForm({ ...form, requested_service: v })}>
+                  <Select value={form.requested_service} onValueChange={(v) => setForm(prev => ({ ...prev, requested_service: v }))}>
                     <SelectTrigger className="h-10"><SelectValue placeholder="Selecione o serviço" /></SelectTrigger>
                     <SelectContent>
                       {["Troca de Tela","Troca de Bateria","Reparo de Placa","Troca de Conector","Troca de Câmera","Desbloqueio","Formatação","Diagnóstico","Outro"].map((s) => (
@@ -953,11 +953,11 @@ const OrdensServico = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs">Valor Estimado (R$)</Label>
-                    <Input type="number" step="0.01" value={form.estimated_price} onChange={(e) => setForm({ ...form, estimated_price: e.target.value })} placeholder="150.00" className="h-10" />
+                    <Input type="number" step="0.01" value={form.estimated_price} onChange={(e) => setForm(prev => ({ ...prev, estimated_price: e.target.value }))} placeholder="150.00" className="h-10" />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Técnico Responsável</Label>
-                    <Select value={form.technician_id} onValueChange={(v) => setForm({ ...form, technician_id: v })}>
+                    <Select value={form.technician_id} onValueChange={(v) => setForm(prev => ({ ...prev, technician_id: v }))}>
                       <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
                       <SelectContent>
                         {profiles.map((p) => <SelectItem key={p.user_id} value={p.user_id}>{p.display_name ?? p.user_id}</SelectItem>)}
@@ -966,7 +966,7 @@ const OrdensServico = () => {
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Loja</Label>
-                    <Select value={form.store_id} onValueChange={(v) => setForm({ ...form, store_id: v })}>
+                    <Select value={form.store_id} onValueChange={(v) => setForm(prev => ({ ...prev, store_id: v }))}>
                       <SelectTrigger className="h-10"><SelectValue placeholder="Selecione a loja" /></SelectTrigger>
                       <SelectContent>{stores.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                     </Select>
@@ -978,7 +978,7 @@ const OrdensServico = () => {
               <OsChecklist
                 title="Checklist de Entrada"
                 data={form.entry_checklist}
-                onChange={(d) => setForm({ ...form, entry_checklist: d })}
+                onChange={(d) => setForm(prev => ({ ...prev, entry_checklist: d }))}
               />
 
               {/* Termos */}
@@ -988,7 +988,7 @@ const OrdensServico = () => {
                   <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line">{TERMS_TEXT}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Switch checked={form.terms_accepted} onCheckedChange={(v) => setForm({ ...form, terms_accepted: v })} />
+                  <Switch checked={form.terms_accepted} onCheckedChange={(v) => setForm(prev => ({ ...prev, terms_accepted: v }))} />
                   <Label className="text-xs">Cliente aceita os termos acima</Label>
                 </div>
               </div>
@@ -997,7 +997,7 @@ const OrdensServico = () => {
 
               <div className="space-y-1.5">
                 <Label className="text-xs">Observações Internas</Label>
-                <Textarea value={form.internal_notes} onChange={(e) => setForm({ ...form, internal_notes: e.target.value })} placeholder="Notas internas (não aparecem para o cliente)..." className="min-h-[50px]" />
+                <Textarea value={form.internal_notes} onChange={(e) => setForm(prev => ({ ...prev, internal_notes: e.target.value }))} placeholder="Notas internas (não aparecem para o cliente)..." className="min-h-[50px]" />
               </div>
 
               <Button type="submit" className="w-full h-11 font-semibold" disabled={loading || !form.requested_service}>

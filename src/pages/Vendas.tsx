@@ -769,7 +769,7 @@ const Vendas = () => {
               <form onSubmit={handleSubmit} className="space-y-4">
 
                 {/* ── Cliente ── */}
-                <CustomerSection />
+                {CustomerSection()}
 
                 {/* ── Produto ── */}
                 <div className="space-y-1.5">
