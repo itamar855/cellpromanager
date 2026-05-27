@@ -1488,7 +1488,6 @@ const Vendas = () => {
           </div>
         </DialogContent>
       </Dialog>
-      </Dialog>
 
       {/* Edit Sale Dialog */}
       <Dialog open={!!editSale} onOpenChange={open => { if (!open) setEditSale(null); }}>
