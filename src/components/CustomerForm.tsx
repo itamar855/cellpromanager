@@ -4,18 +4,19 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 
-// Props definition
+export interface CustomerFormData {
+  name: string;
+  phone: string;
+  email: string;
+  cpf: string;
+  address: string;
+  notes: string;
+  birth_date: string;
+}
+
 interface CustomerFormProps {
-  initialData: {
-    name: string;
-    phone: string;
-    email: string;
-    cpf: string;
-    address: string;
-    notes: string;
-    birth_date: string;
-  };
-  onSubmit: (data: typeof initialData) => Promise<void>;
+  initialData: CustomerFormData;
+  onSubmit: (data: CustomerFormData) => Promise<void>;
   loading: boolean;
   close: () => void;
 }
