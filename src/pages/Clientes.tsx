@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Search, Users, Phone, Mail, MapPin, ShoppingBag, Wrench, Plus, Pencil, Trash2, History } from "lucide-react";
+import CustomerForm from "@/components/CustomerForm";
 import type { Tables } from "@/integrations/supabase/types";
 
 const formatCurrency = (value: number) =>
@@ -27,7 +28,6 @@ const Clientes = () => {
   const [selected, setSelected] = useState<Tables<"customers"> | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editCustomer, setEditCustomer] = useState<Tables<"customers"> | null>(null);
-  const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
   const [selectedSale, setSelectedSale] = useState<any | null>(null);
   const [selectedOS, setSelectedOS] = useState<any | null>(null);
@@ -86,34 +86,27 @@ const Clientes = () => {
 
   const openCreate = () => {
     setEditCustomer(null);
-    setForm(emptyForm);
     setDialogOpen(true);
   };
 
   const openEdit = (customer: Tables<"customers">) => {
     setEditCustomer(customer);
-    setForm({
-      name: customer.name, phone: customer.phone || "",
-      email: customer.email || "", cpf: customer.cpf || "",
-      address: customer.address || "", notes: customer.notes || "", birth_date: customer.birth_date || "",
-    });
     setSelected(null);
     setDialogOpen(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitCustomer = async (formData: typeof emptyForm) => {
     if (!user) return;
     setLoading(true);
 
     const payload: any = {
-      name: form.name, 
-      phone: form.phone || null, 
-      email: form.email || null,
-      cpf: form.cpf || null, 
-      address: form.address || null, 
-      notes: form.notes || null, 
-      birth_date: form.birth_date || null,
+      name: formData.name,
+      phone: formData.phone || null,
+      email: formData.email || null,
+      cpf: formData.cpf || null, 
+      address: formData.address || null, 
+      notes: formData.notes || null, 
+      birth_date: formData.birth_date || null,
       created_by: user.id,
       store_id: activeStoreId !== "all" ? activeStoreId : null,
     };
@@ -273,47 +266,28 @@ const Clientes = () => {
         )}
       </div>
 
-      {/* Dialog cadastro/edição */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="font-display">{editCustomer ? "Editar Cliente" : "Novo Cliente"}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Nome *</Label>
-              <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Nome completo" required className="h-10" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Telefone</Label>
-                <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="(74) 99999-9999" className="h-10" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">CPF</Label>
-                <Input value={form.cpf} onChange={e => setForm(f => ({ ...f, cpf: e.target.value }))} placeholder="000.000.000-00" className="h-10" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">E-mail</Label>
-                <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="email@exemplo.com" className="h-10" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Data de Nascimento</Label>
-                <Input type="date" value={form.birth_date} onChange={e => setForm(f => ({ ...f, birth_date: e.target.value }))} className="h-10" />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Observações</Label>
-              <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Notas sobre o cliente..." className="min-h-[60px]" />
-            </div>
-            <Button type="submit" className="w-full h-11 font-semibold" disabled={loading}>
-              {loading ? "Salvando..." : editCustomer ? "Salvar Alterações" : "Cadastrar Cliente"}
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
+          {/* Dialog cadastro/edição */}
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="font-display">{editCustomer ? "Editar Cliente" : "Novo Cliente"}</DialogTitle>
+              </DialogHeader>
+              <CustomerForm
+                initialData={editCustomer ? {
+                  name: editCustomer.name,
+                  phone: editCustomer.phone || "",
+                  email: editCustomer.email || "",
+                  cpf: editCustomer.cpf || "",
+                  address: editCustomer.address || "",
+                  notes: editCustomer.notes || "",
+                  birth_date: editCustomer.birth_date || "",
+                } : emptyForm}
+                onSubmit={submitCustomer}
+                loading={loading}
+                close={() => setDialogOpen(false)}
+              />
+            </DialogContent>
+          </Dialog>
 
       {/* Dialog detalhe */}
       <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
