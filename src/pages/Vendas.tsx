@@ -103,6 +103,9 @@ const Vendas = () => {
     notes: "",
     customer_name: "",
   });
+  const [editSaleCustomerId, setEditSaleCustomerId] = useState<string>("");
+  const [showEditNewCustomerForm, setShowEditNewCustomerForm] = useState(false);
+  const [editNewCustomerForm, setEditNewCustomerForm] = useState(emptyCustomerForm);
   const searchRef = useRef<HTMLDivElement>(null);
 
   const [pdvPayment, setPdvPayment] = useState({ cash: "", card: "", pix: "", customer: "", store_id: "" });
@@ -209,6 +212,37 @@ const Vendas = () => {
     setShowNewCustomerForm(false);
     setNewCustomerForm(emptyCustomerForm);
     setLoading(false);
+  };
+
+  const handleCreateCustomerForEdit = async () => {
+    if (!user || !editNewCustomerForm.name) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from("customers").insert({
+        name: editNewCustomerForm.name,
+        phone: editNewCustomerForm.phone || null,
+        cpf: editNewCustomerForm.cpf || null,
+        address: editNewCustomerForm.address || null,
+        email: editNewCustomerForm.email || null,
+        created_by: user.id,
+      }).select().single();
+      
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      
+      toast.success("Cliente cadastrado com sucesso!");
+      await fetchData();
+      setEditSaleCustomerId(data.id);
+      setEditForm(prev => ({ ...prev, customer_name: data.name }));
+      setShowEditNewCustomerForm(false);
+      setEditNewCustomerForm(emptyCustomerForm);
+    } catch (err: any) {
+      toast.error("Erro ao cadastrar cliente: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const storeMap = new Map(stores.map(s => [s.id, s]));
@@ -492,6 +526,7 @@ const Vendas = () => {
 
   const handleOpenEdit = (sale: Sale) => {
     setEditSale(sale);
+    setEditSaleCustomerId(sale.customer_id || "manual");
     const product = products.find(p => p.id === sale.product_id);
     const cost = product ? Number(product.cost_price) : 0;
     const salePriceAfterDiscount = Number(sale.sale_price) - (Number(sale.discount) || 0);
@@ -543,6 +578,8 @@ const Vendas = () => {
       const commPercent = parseFloat(editForm.commission_percent) || 0;
       const commissionValue = Math.max(0, (profit * commPercent) / 100);
 
+      const selectedCust = editSaleCustomerId === "manual" ? null : customers.find(c => c.id === editSaleCustomerId);
+
       // 1. Update the sale record
       const { error: saleError } = await supabase
         .from("sales")
@@ -557,7 +594,11 @@ const Vendas = () => {
           commission_percent: commPercent,
           commission_value: commissionValue,
           notes: editForm.notes || null,
-          customer_name: editForm.customer_name || null,
+          customer_name: selectedCust ? selectedCust.name : (editForm.customer_name || null),
+          customer_id: selectedCust ? selectedCust.id : null,
+          customer_phone: selectedCust ? selectedCust.phone : (editSaleCustomerId === "manual" ? null : editSale.customer_phone),
+          customer_cpf: selectedCust ? selectedCust.cpf : (editSaleCustomerId === "manual" ? null : editSale.customer_cpf),
+          customer_address: selectedCust ? selectedCust.address : (editSaleCustomerId === "manual" ? null : editSale.customer_address),
         })
         .eq("id", editSale.id);
 
@@ -1252,10 +1293,12 @@ const Vendas = () => {
                           <MessageCircle className="h-3 w-3" />WhatsApp
                         </Button>
                       )}
-                      <Button className="h-7 px-2 text-[10px] gap-1 text-destructive border border-destructive/30 bg-transparent hover:bg-destructive/10 shadow-none"
-                        onClick={() => { setDeleteId(sale.id); setJustification(""); setDeleteDialogOpen(true); }} disabled={loading}>
-                        <Trash2 className="h-3.5 w-3.5" />Excluir
-                      </Button>
+                      {userRole !== "vendedor" && (
+                        <Button className="h-7 px-2 text-[10px] gap-1 text-destructive border border-destructive/30 bg-transparent hover:bg-destructive/10 shadow-none"
+                          onClick={() => { setDeleteId(sale.id); setJustification(""); setDeleteDialogOpen(true); }} disabled={loading}>
+                          <Trash2 className="h-3.5 w-3.5" />Excluir
+                        </Button>
+                      )}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
@@ -1499,14 +1542,106 @@ const Vendas = () => {
           </DialogHeader>
           <form onSubmit={handleSaveEdit} className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Nome do Cliente</Label>
-              <Input
-                value={editForm.customer_name}
-                onChange={e => setEditForm({ ...editForm, customer_name: e.target.value })}
-                placeholder="Ex: Luana Yasmim"
-                className="h-10"
-              />
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold">Cliente</Label>
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  className="h-auto p-0 text-xs text-primary hover:bg-transparent hover:underline"
+                  onClick={() => setShowEditNewCustomerForm(v => !v)}
+                >
+                  <UserPlus className="h-3 w-3 mr-1" />
+                  {showEditNewCustomerForm ? "Cancelar cadastro" : "Cadastrar novo cliente"}
+                </Button>
+              </div>
+
+              {!showEditNewCustomerForm ? (
+                <Select
+                  value={editSaleCustomerId}
+                  onValueChange={v => {
+                    setEditSaleCustomerId(v);
+                    if (v !== "manual") {
+                      const c = customers.find(x => x.id === v);
+                      if (c) setEditForm(prev => ({ ...prev, customer_name: c.name }));
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="Selecione um cliente cadastrado..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual">✍️ Digitar nome manualmente...</SelectItem>
+                    {customers.map(c => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name} {c.phone ? `(${c.phone})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <p className="text-xs font-semibold text-primary">Novo Cliente (para esta venda)</p>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Nome *</Label>
+                    <Input 
+                      value={editNewCustomerForm.name} 
+                      onChange={e => setEditNewCustomerForm(f => ({ ...f, name: e.target.value }))} 
+                      placeholder="Nome completo" 
+                      className="h-9" 
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Telefone</Label>
+                      <Input 
+                        value={editNewCustomerForm.phone} 
+                        onChange={e => setEditNewCustomerForm(f => ({ ...f, phone: e.target.value }))} 
+                        placeholder="(87) 99999-9999" 
+                        className="h-9" 
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">CPF</Label>
+                      <Input 
+                        value={editNewCustomerForm.cpf} 
+                        onChange={e => setEditNewCustomerForm(f => ({ ...f, cpf: e.target.value }))} 
+                        placeholder="000.000.000-00" 
+                        className="h-9" 
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Endereço</Label>
+                    <Input 
+                      value={editNewCustomerForm.address} 
+                      onChange={e => setEditNewCustomerForm(f => ({ ...f, address: e.target.value }))} 
+                      placeholder="Rua, número, bairro..." 
+                      className="h-9" 
+                    />
+                  </div>
+                  <Button 
+                    type="button"
+                    className="w-full h-9" 
+                    onClick={handleCreateCustomerForEdit} 
+                    disabled={loading || !editNewCustomerForm.name}
+                  >
+                    {loading ? "Salvando..." : "Salvar e Selecionar"}
+                  </Button>
+                </div>
+              )}
             </div>
+
+            {!showEditNewCustomerForm && editSaleCustomerId === "manual" && (
+              <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                <Label className="text-xs font-semibold">Nome do Cliente (Manual/Novo)</Label>
+                <Input
+                  value={editForm.customer_name}
+                  onChange={e => setEditForm({ ...editForm, customer_name: e.target.value })}
+                  placeholder="Ex: Luana Yasmim"
+                  className="h-10"
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
