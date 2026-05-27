@@ -168,6 +168,19 @@ const Estoque = () => {
     if (editAcc) {
       ({ error } = await supabase.from("accessories" as any).update(payload).eq("id", editAcc.id));
     } else {
+      // Verifica se o acessório já existe
+      const { data: existingAcc } = await supabase
+        .from("accessories" as any)
+        .select("id")
+        .ilike("name", accForm.name)
+        .eq("store_id", activeStoreId)
+        .maybeSingle();
+
+      if (existingAcc) {
+        toast.error("Este acessório já existe no estoque! Busque por ele e edite-o para atualizar a quantidade.");
+        setLoading(false);
+        return;
+      }
       ({ error } = await supabase.from("accessories" as any).insert(payload));
     }
 

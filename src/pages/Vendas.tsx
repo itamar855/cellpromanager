@@ -254,27 +254,74 @@ const Vendas = () => {
 
     let tradeInProductId: string | null = null;
     if (form.has_trade_in && form.trade_in_device_name) {
-      const { data: tip, error: tiErr } = await supabase.from("products").insert({
-        name: form.trade_in_device_name, brand: form.trade_in_device_brand,
-        model: form.trade_in_device_model || "N/A", imei: form.trade_in_device_imei || null,
-        cost_price: tradeInVal, store_id: selectedProduct.store_id,
-        created_by: user.id, status: "in_stock",
-      }).select("id").single();
-      if (tiErr) { toast.error(tiErr.message); setLoading(false); return; }
-      tradeInProductId = tip.id;
+      let existingTradeIn = null;
+
+      if (form.trade_in_device_imei) {
+        const { data: existingProduct } = await supabase
+          .from("products")
+          .select("*")
+          .eq("imei", form.trade_in_device_imei)
+          .maybeSingle();
+        existingTradeIn = existingProduct;
+      }
+
+      if (existingTradeIn) {
+        const { data: updatedTip, error: tiErr } = await supabase
+          .from("products")
+          .update({
+            status: "in_stock",
+            cost_price: tradeInVal,
+            store_id: selectedProduct.store_id,
+            sale_price: null
+          })
+          .eq("id", existingTradeIn.id)
+          .select("id")
+          .single();
+
+        if (tiErr) { toast.error(tiErr.message); setLoading(false); return; }
+        tradeInProductId = updatedTip?.id || existingTradeIn.id;
+      } else {
+        const { data: tip, error: tiErr } = await supabase.from("products").insert({
+          name: form.trade_in_device_name, brand: form.trade_in_device_brand,
+          model: form.trade_in_device_model || "N/A", imei: form.trade_in_device_imei || null,
+          cost_price: tradeInVal, store_id: selectedProduct.store_id,
+          created_by: user.id, status: "in_stock",
+        }).select("id").single();
+        if (tiErr) { toast.error(tiErr.message); setLoading(false); return; }
+        tradeInProductId = tip.id;
+      }
     }
 
     // 1. Tenta baixar o produto do estoque antes de registrar a venda
-    const { data: updatedProduct, error: statusError } = await supabase
+    // Verifica primeiro se está disponível
+    const { data: checkProd } = await supabase
       .from("products")
-      .update({ status: "sold", sale_price: salePriceAfterDiscount })
+      .select("status")
       .eq("id", form.product_id)
-      .eq("status", "in_stock")
-      .select();
+      .single();
 
-    if (statusError || !updatedProduct || updatedProduct.length === 0) {
+    if (checkProd?.status !== "in_stock") {
+      toast.error("Erro: O produto já foi vendido ou não está mais disponível no estoque.");
+      setLoading(false);
+      return;
+    }
+
+    // Usamos count: exact para capturar race conditions (vendas simultâneas)
+    const { error: statusError, count } = await supabase
+      .from("products")
+      .update({ status: "sold", sale_price: salePriceAfterDiscount }, { count: "exact" })
+      .eq("id", form.product_id)
+      .eq("status", "in_stock");
+
+    if (count === 0 && !statusError) {
+      toast.error("Erro: Este aparelho acabou de ser vendido ou não está mais disponível!");
+      setLoading(false);
+      return;
+    }
+
+    if (statusError) {
       console.error("Erro na baixa de estoque:", statusError);
-      toast.error("Erro: O produto não pôde ser baixado. Verifique se ele já foi vendido ou se você tem permissão.");
+      toast.error("Erro: O produto não pôde ser baixado. Verifique se você tem permissão.");
       setLoading(false);
       return;
     }
