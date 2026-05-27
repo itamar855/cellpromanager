@@ -18,7 +18,8 @@ import { toast } from "sonner";
 import {
   Plus, ShoppingBag, Smartphone, CreditCard, Banknote, QrCode,
   Zap, Trash2, Search, FileText, MessageCircle, User as UserIcon, UserPlus,
-  ChevronDown, ChevronUp, History, Tag, Shield, Landmark, Store, AlertTriangle,
+  ChevronDown, ChevronUp, History, Tag, Shield, Landmark, Store, AlertTriangle, Eye,
+  MapPin, Percent, CalendarDays, StickyNote, ArrowLeftRight, Wallet,
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { gerarNotaFiscalInterna, type NotaFiscalData } from "@/utils/notaFiscalInterna";
@@ -30,13 +31,15 @@ const formatCurrency = (v: number) =>
 
 type Sale = {
   id: string; product_id: string; store_id: string; sale_price: number;
-  has_trade_in: boolean; trade_in_device_name: string | null;
+  has_trade_in: boolean; trade_in_device_name: string | null; trade_in_device_brand: string | null;
+  trade_in_device_model: string | null; trade_in_device_imei: string | null;
   trade_in_value: number | null; payment_cash: number; payment_card: number;
   payment_pix: number; customer_name: string | null; customer_phone: string | null;
   customer_cpf: string | null; customer_address: string | null;
   customer_id: string | null;
   notes: string | null; created_by: string; created_at: string;
-  commission_value: number | null; discount: number | null;
+  commission_value: number | null; commission_percent: number | null;
+  discount: number | null;
   warranty_days: number | null; installments: number | null; seller_id: string | null;
   trade_in_product_id: string | null;
 };
@@ -85,6 +88,8 @@ const Vendas = () => {
   const [justification, setJustification] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [salesSearch, setSalesSearch] = useState("");
+  const [selectedViewSale, setSelectedViewSale] = useState<Sale | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
 
   const [pdvPayment, setPdvPayment] = useState({ cash: "", card: "", pix: "", customer: "", store_id: "" });
@@ -201,6 +206,20 @@ const Vendas = () => {
   const availableProducts = products.filter(p => p.status === "in_stock");
   const selectedProduct = products.find(p => p.id === form.product_id);
 
+  // Filtro da lista de vendas por cliente, modelo ou IMEI
+  const filteredSales = sales.filter(sale => {
+    if (!salesSearch.trim()) return true;
+    const q = salesSearch.toLowerCase().trim();
+    const product = productMap.get(sale.product_id) as any;
+    return (
+      (sale.customer_name && sale.customer_name.toLowerCase().includes(q)) ||
+      (product?.name && product.name.toLowerCase().includes(q)) ||
+      (product?.model && product.model.toLowerCase().includes(q)) ||
+      (product?.imei && product.imei.toLowerCase().includes(q)) ||
+      (product?.brand && product.brand.toLowerCase().includes(q))
+    );
+  });
+
   const discount = parseFloat(form.discount) || 0;
   const tradeInVal = parseFloat(form.trade_in_value) || 0;
   const cashVal = parseFloat(form.payment_cash) || 0;
@@ -306,22 +325,29 @@ const Vendas = () => {
       return;
     }
 
-    // Usamos count: exact para capturar race conditions (vendas simultâneas)
-    const { error: statusError, count } = await supabase
+    // Tenta atualizar o status para 'sold' com filtro em 'in_stock' (evita race condition)
+    const { error: statusError } = await supabase
       .from("products")
-      .update({ status: "sold", sale_price: salePriceAfterDiscount }, { count: "exact" })
+      .update({ status: "sold", sale_price: salePriceAfterDiscount })
       .eq("id", form.product_id)
       .eq("status", "in_stock");
 
-    if (count === 0 && !statusError) {
-      toast.error("Erro: Este aparelho acabou de ser vendido ou não está mais disponível!");
+    if (statusError) {
+      console.error("Erro na baixa de estoque:", statusError);
+      toast.error("Erro: O produto não pôde ser baixado do estoque. Verifique as permissões.");
       setLoading(false);
       return;
     }
 
-    if (statusError) {
-      console.error("Erro na baixa de estoque:", statusError);
-      toast.error("Erro: O produto não pôde ser baixado. Verifique se você tem permissão.");
+    // Confirma que a atualização realmente aconteceu (proteção contra race condition)
+    const { data: confirmProd } = await supabase
+      .from("products")
+      .select("status")
+      .eq("id", form.product_id)
+      .single();
+
+    if (confirmProd?.status !== "sold") {
+      toast.error("Erro: Este aparelho acabou de ser vendido por outra pessoa. Tente outro aparelho.");
       setLoading(false);
       return;
     }
@@ -928,6 +954,17 @@ const Vendas = () => {
           </Dialog>
         </div>
 
+      {/* Busca de vendas */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          value={salesSearch}
+          onChange={e => setSalesSearch(e.target.value)}
+          placeholder="Buscar por cliente, modelo, IMEI ou marca..."
+          className="pl-9 h-10"
+        />
+      </div>
+
       {/* Lista de vendas */}
       <div className="space-y-2">
         {pdvSales.map(tx => (
@@ -952,16 +989,25 @@ const Vendas = () => {
           </Card>
         ))}
 
-        {sales.map(sale => {
+        {filteredSales.map(sale => {
           const product = productMap.get(sale.product_id) as any;
           const isLoading = notaLoading === sale.id;
           return (
-            <Card key={sale.id} className="border-border/50 shadow-lg shadow-black/10">
+            <Card
+              key={sale.id}
+              className="border-border/50 shadow-lg shadow-black/10 cursor-pointer hover:border-primary/40 transition-colors"
+              onClick={() => setSelectedViewSale(sale)}
+            >
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-sm truncate">{product?.name || "Aparelho"}</p>
+                      {product?.imei && (
+                        <span className="text-[10px] font-mono text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded border border-border/60 hidden sm:inline">
+                          {product.imei}
+                        </span>
+                      )}
                       {activeStoreId === "all" && (
                         <Badge variant="outline" className="text-[9px] bg-muted/50 border-primary/20 text-primary">
                           {(storeMap.get(sale.store_id) as any)?.name}
@@ -974,12 +1020,16 @@ const Vendas = () => {
                       {Number(sale.payment_card) > 0 && <Badge className="text-[10px] border border-border bg-transparent text-foreground">💳 {formatCurrency(Number(sale.payment_card))}{sale.installments && sale.installments > 1 ? ` (${sale.installments}x)` : ""}</Badge>}
                       {Number(sale.payment_pix) > 0 && <Badge className="text-[10px] border border-border bg-transparent text-foreground">📱 {formatCurrency(Number(sale.payment_pix))}</Badge>}
                       {Number(sale.discount) > 0 && <Badge className="text-[10px] text-yellow-500 border border-yellow-500/30 bg-transparent">🏷️ -{formatCurrency(Number(sale.discount))}</Badge>}
-                      {sale.warranty_days && sale.warranty_days !== 90 && <Badge className="text-[10px] text-blue-500 border border-blue-500/30 bg-transparent">🛡️ {sale.warranty_days}d</Badge>}
+                      {sale.warranty_days && <Badge className="text-[10px] text-blue-500 border border-blue-500/30 bg-transparent">🛡️ {sale.warranty_days}d</Badge>}
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-1">
-                      {sale.customer_name ? `Cliente: ${sale.customer_name}` : "Venda avulsa"} · {sale.seller_id && profileMap.get(sale.seller_id) ? `Vendedor: ${profileMap.get(sale.seller_id)} · ` : ""} {new Date(sale.created_at).toLocaleDateString("pt-BR")}
+                      {sale.customer_name ? `Cliente: ${sale.customer_name}` : "Venda avulsa"}{sale.seller_id && profileMap.get(sale.seller_id) ? ` · Vendedor: ${profileMap.get(sale.seller_id)}` : ""} · {new Date(sale.created_at).toLocaleDateString("pt-BR")}
                     </p>
-                    <div className="flex gap-2 mt-2">
+                    <div className="flex gap-2 mt-2" onClick={e => e.stopPropagation()}>
+                      <Button className="h-7 px-2 text-[10px] gap-1 border border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 shadow-none"
+                        onClick={() => setSelectedViewSale(sale)}>
+                        <Eye className="h-3 w-3" />Ver detalhes
+                      </Button>
                       <Button className="h-7 px-2 text-[10px] gap-1 border border-border bg-transparent text-foreground hover:bg-muted shadow-none"
                         onClick={() => handleGerarNota(sale, false)} disabled={isLoading}>
                         <FileText className="h-3 w-3" />{isLoading ? "Gerando..." : "Comprovante"}
@@ -998,6 +1048,7 @@ const Vendas = () => {
                   </div>
                   <div className="text-right shrink-0">
                     <p className="font-display font-bold text-sm text-primary">{formatCurrency(Number(sale.sale_price))}</p>
+                    {Number(sale.discount) > 0 && <p className="text-[10px] text-yellow-500">-{formatCurrency(Number(sale.discount))}</p>}
                     {sale.has_trade_in && sale.trade_in_value && <p className="text-[10px] text-muted-foreground">Troca: {formatCurrency(Number(sale.trade_in_value))}</p>}
                     {Number(sale.commission_value) > 0 && <p className="text-[10px] text-yellow-500">Comissão: {formatCurrency(Number(sale.commission_value))}</p>}
                   </div>
@@ -1007,7 +1058,7 @@ const Vendas = () => {
           );
         })}
 
-        {sales.length === 0 && pdvSales.length === 0 && (
+        {filteredSales.length === 0 && pdvSales.length === 0 && (
           <Card className="border-border/50">
             <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <ShoppingBag className="h-10 w-10 mb-3 opacity-30" />
@@ -1016,6 +1067,174 @@ const Vendas = () => {
           </Card>
         )}
       </div>
+      {/* Sale Detail View Dialog */}
+      <Dialog open={!!selectedViewSale} onOpenChange={open => { if (!open) setSelectedViewSale(null); }}>
+        <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
+          {selectedViewSale && (() => {
+            const product = productMap.get(selectedViewSale.product_id) as any;
+            const store = storeMap.get(selectedViewSale.store_id) as any;
+            const sellerName = selectedViewSale.seller_id ? profileMap.get(selectedViewSale.seller_id) : null;
+            const totalPaid = Number(selectedViewSale.payment_cash) + Number(selectedViewSale.payment_card) + Number(selectedViewSale.payment_pix) + (selectedViewSale.has_trade_in ? Number(selectedViewSale.trade_in_value) : 0);
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="font-display flex items-center gap-2">
+                    <Eye className="h-4 w-4 text-primary" />
+                    Detalhes da Venda
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 pt-1">
+
+                  {/* Produto */}
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-2">
+                    <p className="text-xs font-semibold text-primary uppercase tracking-wide flex items-center gap-1.5"><Smartphone className="h-3.5 w-3.5" /> Aparelho</p>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-bold text-base">{product?.name || "—"}</p>
+                        {product?.brand && <p className="text-xs text-muted-foreground">{product.brand}{product?.model ? ` · ${product.model}` : ""}</p>}
+                        {product?.color && <p className="text-xs text-muted-foreground">Cor: {product.color}</p>}
+                        {product?.storage && <p className="text-xs text-muted-foreground">Armazenamento: {product.storage}</p>}
+                      </div>
+                      {product?.imei && (
+                        <div className="text-right">
+                          <p className="text-[10px] text-muted-foreground">IMEI</p>
+                          <p className="font-mono text-xs bg-muted px-2 py-0.5 rounded border border-border">{product.imei}</p>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                      <Store className="h-3 w-3" /> {store?.name || "—"}
+                    </p>
+                  </div>
+
+                  {/* Cliente */}
+                  {(selectedViewSale.customer_name || selectedViewSale.customer_phone || selectedViewSale.customer_cpf) && (
+                    <div className="rounded-xl border border-border bg-card p-4 space-y-1.5">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5"><UserIcon className="h-3.5 w-3.5" /> Cliente</p>
+                      {selectedViewSale.customer_name && <p className="font-semibold text-sm">{selectedViewSale.customer_name}</p>}
+                      {selectedViewSale.customer_phone && <p className="text-xs text-muted-foreground">{selectedViewSale.customer_phone}</p>}
+                      {selectedViewSale.customer_cpf && <p className="text-xs text-muted-foreground">CPF: {selectedViewSale.customer_cpf}</p>}
+                      {selectedViewSale.customer_address && <p className="text-xs text-muted-foreground flex items-start gap-1"><MapPin className="h-3 w-3 mt-0.5 shrink-0" />{selectedViewSale.customer_address}</p>}
+                    </div>
+                  )}
+
+                  {/* Valores */}
+                  <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5"><Wallet className="h-3.5 w-3.5" /> Financeiro</p>
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Valor de venda</span>
+                        <span className="font-bold text-primary">{formatCurrency(Number(selectedViewSale.sale_price))}</span>
+                      </div>
+                      {Number(selectedViewSale.discount) > 0 && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">Desconto</span>
+                          <span className="text-yellow-500 font-semibold">-{formatCurrency(Number(selectedViewSale.discount))}</span>
+                        </div>
+                      )}
+                      <div className="border-t border-border/50 pt-1.5 space-y-1">
+                        {Number(selectedViewSale.payment_cash) > 0 && (
+                          <div className="flex justify-between text-xs">
+                            <span className="flex items-center gap-1 text-muted-foreground"><Banknote className="h-3 w-3" /> Dinheiro</span>
+                            <span>{formatCurrency(Number(selectedViewSale.payment_cash))}</span>
+                          </div>
+                        )}
+                        {Number(selectedViewSale.payment_card) > 0 && (
+                          <div className="flex justify-between text-xs">
+                            <span className="flex items-center gap-1 text-muted-foreground"><CreditCard className="h-3 w-3" /> Cartão{selectedViewSale.installments && selectedViewSale.installments > 1 ? ` (${selectedViewSale.installments}x)` : ""}</span>
+                            <span>{formatCurrency(Number(selectedViewSale.payment_card))}</span>
+                          </div>
+                        )}
+                        {Number(selectedViewSale.payment_pix) > 0 && (
+                          <div className="flex justify-between text-xs">
+                            <span className="flex items-center gap-1 text-muted-foreground"><QrCode className="h-3 w-3" /> PIX</span>
+                            <span>{formatCurrency(Number(selectedViewSale.payment_pix))}</span>
+                          </div>
+                        )}
+                        {selectedViewSale.has_trade_in && Number(selectedViewSale.trade_in_value) > 0 && (
+                          <div className="flex justify-between text-xs">
+                            <span className="flex items-center gap-1 text-muted-foreground"><ArrowLeftRight className="h-3 w-3" /> Troca</span>
+                            <span>{formatCurrency(Number(selectedViewSale.trade_in_value))}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex justify-between text-xs pt-1 border-t border-border/50">
+                        <span className="font-medium">Total pago</span>
+                        <span className="font-bold">{formatCurrency(totalPaid)}</span>
+                      </div>
+                      {Number(selectedViewSale.commission_value) > 0 && (
+                        <div className="flex justify-between text-xs">
+                          <span className="flex items-center gap-1 text-muted-foreground"><Percent className="h-3 w-3" /> Comissão</span>
+                          <span className="text-yellow-500">{formatCurrency(Number(selectedViewSale.commission_value))}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Trade-in */}
+                  {selectedViewSale.has_trade_in && selectedViewSale.trade_in_device_name && (
+                    <div className="rounded-xl border border-primary/20 bg-card p-4 space-y-1.5">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5"><ArrowLeftRight className="h-3.5 w-3.5" /> Aparelho na Troca</p>
+                      <p className="font-semibold text-sm">{selectedViewSale.trade_in_device_name}</p>
+                      {selectedViewSale.trade_in_device_brand && <p className="text-xs text-muted-foreground">{selectedViewSale.trade_in_device_brand}{selectedViewSale.trade_in_device_model ? ` · ${selectedViewSale.trade_in_device_model}` : ""}</p>}
+                      {selectedViewSale.trade_in_device_imei && <p className="font-mono text-xs bg-muted px-2 py-0.5 rounded border border-border w-fit">IMEI: {selectedViewSale.trade_in_device_imei}</p>}
+                      <p className="text-xs font-semibold text-primary">Valor abatido: {formatCurrency(Number(selectedViewSale.trade_in_value))}</p>
+                    </div>
+                  )}
+
+                  {/* Garantia + Info */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-border bg-card p-3 text-center">
+                      <Shield className="h-4 w-4 text-blue-500 mx-auto mb-1" />
+                      <p className="text-xs text-muted-foreground">Garantia</p>
+                      <p className="font-bold text-sm">{selectedViewSale.warranty_days || 90} dias</p>
+                    </div>
+                    <div className="rounded-xl border border-border bg-card p-3 text-center">
+                      <CalendarDays className="h-4 w-4 text-primary mx-auto mb-1" />
+                      <p className="text-xs text-muted-foreground">Data da venda</p>
+                      <p className="font-bold text-sm">{new Date(selectedViewSale.created_at).toLocaleDateString("pt-BR")}</p>
+                    </div>
+                  </div>
+
+                  {sellerName && (
+                    <p className="text-xs text-muted-foreground text-center">Vendedor: <span className="font-semibold text-foreground">{sellerName}</span></p>
+                  )}
+
+                  {/* Observações */}
+                  {selectedViewSale.notes && (
+                    <div className="rounded-xl border border-border bg-card p-4">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5"><StickyNote className="h-3.5 w-3.5" /> Observações</p>
+                      <p className="text-sm text-muted-foreground">{selectedViewSale.notes}</p>
+                    </div>
+                  )}
+
+                  {/* Ações */}
+                  <div className="flex gap-2 pt-1">
+                    <Button
+                      className="flex-1 h-9 text-xs gap-1.5 border border-border bg-transparent text-foreground hover:bg-muted"
+                      onClick={() => handleGerarNota(selectedViewSale, false)}
+                      disabled={notaLoading === selectedViewSale.id}
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      {notaLoading === selectedViewSale.id ? "Gerando..." : "Baixar Comprovante"}
+                    </Button>
+                    {selectedViewSale.customer_phone && (
+                      <Button
+                        className="flex-1 h-9 text-xs gap-1.5 text-green-500 border border-green-500/30 bg-transparent hover:bg-green-500/10"
+                        onClick={() => handleGerarNota(selectedViewSale, true)}
+                        disabled={notaLoading === selectedViewSale.id}
+                      >
+                        <MessageCircle className="h-3.5 w-3.5" />WhatsApp
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
