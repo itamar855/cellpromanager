@@ -754,11 +754,33 @@ const Vendas = () => {
                   }}>
                     <SelectTrigger className="h-10"><SelectValue placeholder="Selecione o aparelho" /></SelectTrigger>
                     <SelectContent>
-                      {availableProducts.map(p => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name} {p.brand && `· ${p.brand}`} {p.imei && `· IMEI: ${p.imei}`} ({(storeMap.get(p.store_id) as any)?.name || "?"})
-                        </SelectItem>
-                      ))}
+                      {availableProducts.map(p => {
+                        const storeName = (storeMap.get(p.store_id) as any)?.name || "?";
+                        return (
+                          <SelectItem key={p.id} value={p.id} className="py-2.5 focus:bg-accent">
+                            <div className="flex flex-col gap-1 w-full text-left">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-semibold text-sm text-foreground">{p.name}</span>
+                                {p.brand && (
+                                  <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                                    {p.brand}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
+                                {p.imei && (
+                                  <span className="font-mono bg-muted/80 border border-border/80 px-1.5 py-0.2 rounded text-[11px] text-foreground/80">
+                                    IMEI: {p.imei}
+                                  </span>
+                                )}
+                                <span className="flex items-center gap-1 bg-secondary/80 px-1.5 py-0.2 rounded text-[10px] font-medium text-secondary-foreground">
+                                  📍 {storeName}
+                                </span>
+                              </div>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
