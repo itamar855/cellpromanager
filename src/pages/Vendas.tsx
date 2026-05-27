@@ -19,7 +19,7 @@ import {
   Plus, ShoppingBag, Smartphone, CreditCard, Banknote, QrCode,
   Zap, Trash2, Search, FileText, MessageCircle, User as UserIcon, UserPlus,
   ChevronDown, ChevronUp, History, Tag, Shield, Landmark, Store, AlertTriangle, Eye,
-  MapPin, Percent, CalendarDays, StickyNote, ArrowLeftRight, Wallet, RefreshCcw,
+  MapPin, Percent, CalendarDays, StickyNote, ArrowLeftRight, Wallet, RefreshCcw, Pencil,
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { gerarNotaFiscalInterna, type NotaFiscalData } from "@/utils/notaFiscalInterna";
@@ -90,6 +90,19 @@ const Vendas = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [salesSearch, setSalesSearch] = useState("");
   const [selectedViewSale, setSelectedViewSale] = useState<Sale | null>(null);
+  const [editSale, setEditSale] = useState<Sale | null>(null);
+  const [editForm, setEditForm] = useState({
+    sale_price: "",
+    discount: "",
+    payment_cash: "",
+    payment_card: "",
+    payment_pix: "",
+    installments: "1",
+    warranty_days: "90",
+    commission_percent: "0",
+    notes: "",
+    customer_name: "",
+  });
   const searchRef = useRef<HTMLDivElement>(null);
 
   const [pdvPayment, setPdvPayment] = useState({ cash: "", card: "", pix: "", customer: "", store_id: "" });
@@ -472,6 +485,108 @@ const Vendas = () => {
       fetchData();
     } catch (error: any) {
       toast.error("Erro ao remover venda: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenEdit = (sale: Sale) => {
+    setEditSale(sale);
+    const product = products.find(p => p.id === sale.product_id);
+    const cost = product ? Number(product.cost_price) : 0;
+    const salePriceAfterDiscount = Number(sale.sale_price) - (Number(sale.discount) || 0);
+    const profit = salePriceAfterDiscount - cost;
+    
+    let commPercent = "0";
+    if (profit > 0 && sale.commission_value) {
+      commPercent = ((Number(sale.commission_value) * 100) / profit).toFixed(1);
+    }
+
+    setEditForm({
+      sale_price: sale.sale_price.toString(),
+      discount: (sale.discount || 0).toString(),
+      payment_cash: (sale.payment_cash || 0).toString(),
+      payment_card: (sale.payment_card || 0).toString(),
+      payment_pix: (sale.payment_pix || 0).toString(),
+      installments: (sale.installments || 1).toString(),
+      warranty_days: (sale.warranty_days || 90).toString(),
+      commission_percent: commPercent,
+      notes: sale.notes || "",
+      customer_name: sale.customer_name || "",
+    });
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editSale) return;
+    setLoading(true);
+
+    try {
+      const salePrice = parseFloat(editForm.sale_price) || 0;
+      const discount = parseFloat(editForm.discount) || 0;
+      const salePriceAfterDiscount = Math.max(0, salePrice - discount);
+
+      const cashVal = parseFloat(editForm.payment_cash) || 0;
+      const cardVal = parseFloat(editForm.payment_card) || 0;
+      const pixVal = parseFloat(editForm.payment_pix) || 0;
+      const totalPayment = cashVal + cardVal + pixVal;
+
+      if (Math.abs(salePriceAfterDiscount - totalPayment) > 0.01) {
+        toast.error("A soma dos pagamentos deve ser igual ao valor líquido (Valor - Desconto)!");
+        setLoading(false);
+        return;
+      }
+
+      const product = products.find(p => p.id === editSale.product_id);
+      const cost = product ? Number(product.cost_price) : 0;
+      const profit = salePriceAfterDiscount - cost;
+      const commPercent = parseFloat(editForm.commission_percent) || 0;
+      const commissionValue = Math.max(0, (profit * commPercent) / 100);
+
+      // 1. Update the sale record
+      const { error: saleError } = await supabase
+        .from("sales")
+        .update({
+          sale_price: salePrice,
+          discount: discount,
+          payment_cash: cashVal,
+          payment_card: cardVal,
+          payment_pix: pixVal,
+          installments: parseInt(editForm.installments) || 1,
+          warranty_days: parseInt(editForm.warranty_days) || 90,
+          commission_percent: commPercent,
+          commission_value: commissionValue,
+          notes: editForm.notes || null,
+          customer_name: editForm.customer_name || null,
+        })
+        .eq("id", editSale.id);
+
+      if (saleError) throw saleError;
+
+      // 2. Update product sale_price in database
+      await supabase
+        .from("products")
+        .update({ sale_price: salePriceAfterDiscount })
+        .eq("id", editSale.product_id);
+
+      // 3. Update associated transactions
+      const desc = `Venda: ${product?.name ?? "Aparelho"}${editForm.customer_name ? ` → ${editForm.customer_name}` : ""}`;
+      await supabase
+        .from("transactions")
+        .update({
+          amount: salePriceAfterDiscount,
+          net_amount: salePriceAfterDiscount,
+          description: desc,
+        })
+        .eq("product_id", editSale.product_id)
+        .eq("type", "sale");
+
+      logAction("UPDATE_RECORD", "sales", editSale.id, editSale, editForm, editSale.store_id);
+      toast.success("Venda atualizada com sucesso!");
+      setEditSale(null);
+      fetchData();
+    } catch (err: any) {
+      toast.error("Erro ao atualizar venda: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -1121,6 +1236,12 @@ const Vendas = () => {
                         onClick={() => setSelectedViewSale(sale)}>
                         <Eye className="h-3 w-3" />Ver detalhes
                       </Button>
+                      {userRole === "admin" && (
+                        <Button className="h-7 px-2 text-[10px] gap-1 border border-yellow-500/40 bg-yellow-500/5 text-yellow-600 dark:text-yellow-500 hover:bg-yellow-500/10 shadow-none"
+                          onClick={() => handleOpenEdit(sale)}>
+                          <Pencil className="h-3 w-3" />Editar
+                        </Button>
+                      )}
                       <Button className="h-7 px-2 text-[10px] gap-1 border border-border bg-transparent text-foreground hover:bg-muted shadow-none"
                         onClick={() => handleGerarNota(sale, false)} disabled={isLoading}>
                         <FileText className="h-3 w-3" />{isLoading ? "Gerando..." : "Comprovante"}
@@ -1365,6 +1486,159 @@ const Vendas = () => {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+      </Dialog>
+
+      {/* Edit Sale Dialog */}
+      <Dialog open={!!editSale} onOpenChange={open => { if (!open) setEditSale(null); }}>
+        <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2 text-primary">
+              <Pencil className="h-5 w-5" /> Editar Lançamento de Venda
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSaveEdit} className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Nome do Cliente</Label>
+              <Input
+                value={editForm.customer_name}
+                onChange={e => setEditForm({ ...editForm, customer_name: e.target.value })}
+                placeholder="Ex: Luana Yasmim"
+                className="h-10"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Valor Bruto da Venda (R$)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={editForm.sale_price}
+                  onChange={e => setEditForm({ ...editForm, sale_price: e.target.value })}
+                  placeholder="0.00"
+                  required
+                  className="h-10 font-medium text-foreground"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Desconto (R$)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={editForm.discount}
+                  onChange={e => setEditForm({ ...editForm, discount: e.target.value })}
+                  placeholder="0.00"
+                  className="h-10 text-yellow-500 font-semibold"
+                />
+              </div>
+            </div>
+
+            <div className="border-t border-border/60 pt-3">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Formas de Pagamento</span>
+              <div className="grid grid-cols-3 gap-3 mt-2">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-muted-foreground flex items-center gap-1"><Banknote className="h-3 w-3" /> Dinheiro</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={editForm.payment_cash}
+                    onChange={e => setEditForm({ ...editForm, payment_cash: e.target.value })}
+                    placeholder="0.00"
+                    className="h-9"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-muted-foreground flex items-center gap-1"><CreditCard className="h-3 w-3" /> Cartão</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={editForm.payment_card}
+                    onChange={e => setEditForm({ ...editForm, payment_card: e.target.value })}
+                    placeholder="0.00"
+                    className="h-9"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-muted-foreground flex items-center gap-1"><QrCode className="h-3 w-3" /> PIX</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={editForm.payment_pix}
+                    onChange={e => setEditForm({ ...editForm, payment_pix: e.target.value })}
+                    placeholder="0.00"
+                    className="h-9"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Parcelas no Cartão</Label>
+                <Select value={editForm.installments} onValueChange={v => setEditForm({ ...editForm, installments: v })}>
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="Selecione as parcelas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(n => (
+                      <SelectItem key={n} value={n.toString()}>
+                        {n}x {n === 1 ? "à vista" : "sem juros"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Garantia (dias)</Label>
+                <Select value={editForm.warranty_days} onValueChange={v => setEditForm({ ...editForm, warranty_days: v })}>
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="Selecione a garantia" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">Sem garantia</SelectItem>
+                    <SelectItem value="30">30 dias</SelectItem>
+                    <SelectItem value="90">90 dias (padrão)</SelectItem>
+                    <SelectItem value="180">180 dias</SelectItem>
+                    <SelectItem value="365">1 ano</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Comissão do Vendedor (%)</Label>
+              <Input
+                type="number"
+                step="0.1"
+                value={editForm.commission_percent}
+                onChange={e => setEditForm({ ...editForm, commission_percent: e.target.value })}
+                placeholder="0"
+                className="h-10"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Observações</Label>
+              <Textarea
+                value={editForm.notes}
+                onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
+                placeholder="Ex: Observações gerais da alteração de venda..."
+                className="min-h-[80px]"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setEditSale(null)}>
+                Cancelar
+              </Button>
+              <Button type="submit" className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90" disabled={loading}>
+                {loading ? "Salvando..." : "Salvar Alterações"}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
