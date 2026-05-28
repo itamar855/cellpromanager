@@ -359,8 +359,9 @@ const Vendas = () => {
     }
 
     // 1. Marca o produto como vendido via RPC (SECURITY DEFINER bypassa RLS)
+    // Fazemos casting do RPC name como 'any' para evitar que o TS estrito da Vercel exija a definição no arquivo types local
     const { data: rpcResult, error: rpcError } = await supabase
-      .rpc("mark_product_sold", {
+      .rpc("mark_product_sold" as any, {
         p_product_id: form.product_id,
         p_sale_price: salePriceAfterDiscount,
       });
@@ -372,7 +373,7 @@ const Vendas = () => {
       return;
     }
 
-    const rpcRes = rpcResult as { success: boolean; error?: string; status?: string };
+    const rpcRes = rpcResult as unknown as { success: boolean; error?: string; status?: string };
     if (!rpcRes?.success) {
       const reason = rpcRes?.error || "Produto indisponível";
       if (rpcRes?.status && rpcRes.status !== "in_stock") {
