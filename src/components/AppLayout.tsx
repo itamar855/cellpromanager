@@ -219,7 +219,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         {/* Mobile bottom nav */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-lg border-t border-border safe-bottom z-50">
           <div className="flex overflow-x-auto scrollbar-none py-1 px-1">
-            {navItems.map((item) => {
+            {filteredNavItems.map((item) => {
               const isActive = location.pathname === item.path;
               const Icon = item.icon || Smartphone;
               return (

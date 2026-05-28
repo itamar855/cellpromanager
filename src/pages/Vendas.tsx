@@ -180,11 +180,12 @@ const Vendas = () => {
     setCustomerSearch(c.name);
     setCustomerResults([]);
     setShowNewCustomerForm(false);
-    // Busca histórico de compras (apenas na loja atual)
-    const { data } = await supabase.from("sales").select("*")
-      .eq("store_id", activeStoreId)
-      .or(`customer_id.eq.${c.id},customer_phone.eq.${c.phone ?? ""}`)
-      .order("created_at", { ascending: false }).limit(5);
+    // Busca histórico de compras (apenas na loja atual, com guard para null)
+    const storeFilter = activeStoreId && activeStoreId !== "all" ? activeStoreId : null;
+    let histQuery = supabase.from("sales").select("*")
+      .or(`customer_id.eq.${c.id},customer_phone.eq.${c.phone ?? ""}`);
+    if (storeFilter) histQuery = histQuery.eq("store_id", storeFilter);
+    const { data } = await histQuery.order("created_at", { ascending: false }).limit(5);
     setCustomerSalesHistory((data as unknown as Sale[]) ?? []);
   };
 
@@ -342,7 +343,7 @@ const Vendas = () => {
           })
           .eq("id", existingTradeIn.id)
           .select("id")
-          .single();
+          .maybeSingle();
 
         if (tiErr) { toast.error(tiErr.message); setLoading(false); return; }
         tradeInProductId = updatedTip?.id || existingTradeIn.id;
@@ -373,7 +374,7 @@ const Vendas = () => {
         .from("products")
         .select("status")
         .eq("id", form.product_id)
-        .single();
+        .maybeSingle();
 
       if (checkProd?.status === "sold") {
         toast.error("Este aparelho acabou de ser vendido por outra pessoa. Tente outro aparelho.");
