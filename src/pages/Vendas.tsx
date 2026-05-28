@@ -373,30 +373,33 @@ const Vendas = () => {
     }
 
     // Tenta atualizar o status para 'sold' com filtro em 'in_stock' (evita race condition)
-    const { error: statusError } = await supabase
+    const { data: updatedRows, error: statusError } = await supabase
       .from("products")
       .update({ status: "sold", sale_price: salePriceAfterDiscount })
       .eq("id", form.product_id)
-      .eq("status", "in_stock");
+      .eq("status", "in_stock")
+      .select();
 
     if (statusError) {
       console.error("Erro na baixa de estoque:", statusError);
-      toast.error("Erro: O produto não pôde ser baixado do estoque. Verifique as permissões.");
+      toast.error("Erro: O produto não pôde ser baixado do estoque. " + statusError.message);
       setLoading(false);
       return;
     }
 
-    // Confirma que a atualização realmente aconteceu (proteção contra race condition)
-    const { data: confirmProd } = await supabase
-      .from("products")
-      .select("status")
-      .eq("id", form.product_id)
-      .single();
+    if (!updatedRows || updatedRows.length === 0) {
+      const { data: debugProd } = await supabase
+        .from("products")
+        .select("status")
+        .eq("id", form.product_id)
+        .single();
 
-    if (confirmProd?.status !== "sold") {
-      toast.error("Erro: Este aparelho acabou de ser vendido por outra pessoa. Tente outro aparelho.");
-      setLoading(false);
-      return;
+      if (debugProd?.status !== "sold") {
+        console.warn("Falha ao atualizar o status do produto. RLS pode estar bloqueando. Status atual:", debugProd?.status);
+        toast.error(`Erro: Não foi possível dar baixa no aparelho (Status atual: ${debugProd?.status || 'indisponível'}). Verifique as permissões de atualização (RLS) no Supabase.`);
+        setLoading(false);
+        return;
+      }
     }
 
     const { data: saleData, error: saleError } = await supabase.from("sales").insert({
