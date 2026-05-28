@@ -359,11 +359,13 @@ const Vendas = () => {
     }
 
     // 1. Marca o produto como vendido via RPC (SECURITY DEFINER bypassa RLS)
-    // Fazemos casting do RPC name como 'any' para evitar que o TS estrito da Vercel exija a definição no arquivo types local
+    // Passamos um único argumento 'payload' como JSONB para garantir compatibilidade total de assinatura no Supabase
     const { data: rpcResult, error: rpcError } = await supabase
       .rpc("mark_product_sold" as any, {
-        p_product_id: form.product_id,
-        p_sale_price: salePriceAfterDiscount,
+        payload: {
+          p_product_id: form.product_id,
+          p_sale_price: salePriceAfterDiscount,
+        }
       });
 
     if (rpcError) {
