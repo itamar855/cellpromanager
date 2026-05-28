@@ -358,31 +358,65 @@ const Vendas = () => {
       }
     }
 
-    // 1. Marca o produto como vendido via RPC (SECURITY DEFINER bypassa RLS)
-    // Chamamos a função de nome exclusivo para evitar conflitos de assinatura no cache do PostgREST
-    const { data: rpcResult, error: rpcError } = await supabase
-      .rpc("mark_device_as_sold" as any, {
-        p_product_id: form.product_id,
-        p_sale_price: salePriceAfterDiscount,
-      });
+    // 1. Marca o produto como vendido (Baixa do Estoque)
+    // Usamos uma estratégia sênior de resiliência com Fallback duplo:
+    // Tenta primeiro o UPDATE direto via REST (já que liberamos o RLS e GRANT).
+    // Se falhar, tenta via RPC de nome exclusivo como fallback secundário.
+    let updateSuccess = false;
+    let updateErrorMsg = "";
 
-    if (rpcError) {
-      console.error("Erro RPC mark_product_sold:", rpcError);
-      toast.error("Erro ao baixar produto do estoque: " + rpcError.message);
-      setLoading(false);
-      return;
+    try {
+      console.log("Tentando baixar produto via UPDATE direto...");
+      const { data: directData, error: directError } = await supabase
+        .from("products")
+        .update({ status: "sold", sale_price: salePriceAfterDiscount })
+        .eq("id", form.product_id)
+        .eq("status", "in_stock")
+        .select();
+
+      if (!directError && directData && directData.length > 0) {
+        updateSuccess = true;
+        console.log("Baixa de estoque realizada com sucesso via REST direto!");
+      } else if (directError) {
+        console.warn("Update direto falhou por erro. Tentando via RPC...", directError.message);
+        updateErrorMsg = directError.message;
+      } else {
+        console.warn("Update direto retornou 0 linhas. O produto pode não estar in_stock.");
+        updateErrorMsg = "Produto já vendido ou indisponível.";
+      }
+    } catch (err: any) {
+      console.warn("Exceção no update direto. Tentando via RPC...", err);
+      updateErrorMsg = err?.message || "Erro desconhecido no update direto";
     }
 
-    const rpcRes = rpcResult as unknown as { success: boolean; error?: string; status?: string };
-    if (!rpcRes?.success) {
-      const reason = rpcRes?.error || "Produto indisponível";
-      if (rpcRes?.status && rpcRes.status !== "in_stock") {
-        toast.error("Erro: O produto já foi vendido ou não está mais disponível no estoque.");
-      } else {
-        toast.error("Erro ao baixar produto: " + reason);
+    // Se o update direto falhou ou retornou 0 linhas, tentamos a função RPC como redundância
+    if (!updateSuccess) {
+      console.log("Iniciando fallback via chamada RPC mark_device_as_sold...");
+      const { data: rpcResult, error: rpcError } = await supabase
+        .rpc("mark_device_as_sold" as any, {
+          p_product_id: form.product_id,
+          p_sale_price: salePriceAfterDiscount,
+        });
+
+      if (rpcError) {
+        console.error("Ambas as tentativas falharam. Erro RPC:", rpcError);
+        toast.error(`Erro ao baixar produto do estoque: ${updateErrorMsg} (RPC: ${rpcError.message})`);
+        setLoading(false);
+        return;
       }
-      setLoading(false);
-      return;
+
+      const rpcRes = rpcResult as unknown as { success: boolean; error?: string; status?: string };
+      if (!rpcRes?.success) {
+        const reason = rpcRes?.error || "Produto indisponível";
+        if (rpcRes?.status && rpcRes.status !== "in_stock") {
+          toast.error("Erro: O produto já foi vendido ou não está mais disponível no estoque.");
+        } else {
+          toast.error("Erro ao baixar produto: " + reason);
+        }
+        setLoading(false);
+        return;
+      }
+      console.log("Baixa de estoque realizada com sucesso via RPC Fallback!");
     }
 
     const { data: saleData, error: saleError } = await supabase.from("sales").insert({
