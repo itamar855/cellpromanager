@@ -365,7 +365,7 @@ const Vendas = () => {
       .eq("id", form.product_id)
       .eq("status", "in_stock")
       .select()
-      .single();
+      .maybeSingle();
 
     if (updateError || !updatedProduct) {
       // Verifica se o produto já foi vendido por outra pessoa
