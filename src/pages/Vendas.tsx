@@ -358,53 +358,30 @@ const Vendas = () => {
       }
     }
 
-    // 1. Tenta baixar o produto do estoque antes de registrar a venda
-    // Verifica primeiro se está disponível
-    const { data: checkProd } = await supabase
-      .from("products")
-      .select("status")
-      .eq("id", form.product_id)
-      .single();
+    // 1. Marca o produto como vendido via RPC (SECURITY DEFINER bypassa RLS)
+    const { data: rpcResult, error: rpcError } = await supabase
+      .rpc("mark_product_sold", {
+        p_product_id: form.product_id,
+        p_sale_price: salePriceAfterDiscount,
+      });
 
-    if (checkProd?.status !== "in_stock") {
-      toast.error("Erro: O produto já foi vendido ou não está mais disponível no estoque.");
+    if (rpcError) {
+      console.error("Erro RPC mark_product_sold:", rpcError);
+      toast.error("Erro ao baixar produto do estoque: " + rpcError.message);
       setLoading(false);
       return;
     }
 
-    // Log de diagnóstico
-    const { data: sessionData } = await supabase.auth.getSession();
-    const userRoleInSession = sessionData?.session?.user?.role;
-    const userIdInSession = sessionData?.session?.user?.id;
-    console.log("PDV Diagnóstico - User:", userIdInSession, "Role:", userRoleInSession);
-
-    // Tenta atualizar o status para 'sold' sem o filtro adicional para eliminar problemas de matching
-    const { data: updatedRows, error: statusError } = await supabase
-      .from("products")
-      .update({ status: "sold", sale_price: salePriceAfterDiscount })
-      .eq("id", form.product_id)
-      .select();
-
-    if (statusError) {
-      console.error("Erro na baixa de estoque:", statusError);
-      toast.error("Erro: O produto não pôde ser baixado do estoque. " + statusError.message);
-      setLoading(false);
-      return;
-    }
-
-    if (!updatedRows || updatedRows.length === 0) {
-      const { data: debugProd } = await supabase
-        .from("products")
-        .select("status, name, created_by")
-        .eq("id", form.product_id)
-        .single();
-
-      if (debugProd?.status !== "sold") {
-        console.warn("Falha ao atualizar o status do produto. Status atual:", debugProd?.status);
-        toast.error(`Erro: RLS ou regras impediram o update. (Status: ${debugProd?.status || 'indisponível'}, Criado por: ${debugProd?.created_by || 'N/A'}, Seu User ID: ${userIdInSession || 'N/A'}, Seu Role: ${userRoleInSession || 'N/A'}).`);
-        setLoading(false);
-        return;
+    const rpcRes = rpcResult as { success: boolean; error?: string; status?: string };
+    if (!rpcRes?.success) {
+      const reason = rpcRes?.error || "Produto indisponível";
+      if (rpcRes?.status && rpcRes.status !== "in_stock") {
+        toast.error("Erro: O produto já foi vendido ou não está mais disponível no estoque.");
+      } else {
+        toast.error("Erro ao baixar produto: " + reason);
       }
+      setLoading(false);
+      return;
     }
 
     const { data: saleData, error: saleError } = await supabase.from("sales").insert({
