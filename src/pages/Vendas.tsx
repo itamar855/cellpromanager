@@ -359,13 +359,11 @@ const Vendas = () => {
     }
 
     // 1. Marca o produto como vendido via RPC (SECURITY DEFINER bypassa RLS)
-    // Passamos um único argumento 'payload' como JSONB para garantir compatibilidade total de assinatura no Supabase
+    // Chamamos a função de nome exclusivo para evitar conflitos de assinatura no cache do PostgREST
     const { data: rpcResult, error: rpcError } = await supabase
-      .rpc("mark_product_sold" as any, {
-        payload: {
-          p_product_id: form.product_id,
-          p_sale_price: salePriceAfterDiscount,
-        }
+      .rpc("mark_device_as_sold" as any, {
+        p_product_id: form.product_id,
+        p_sale_price: salePriceAfterDiscount,
       });
 
     if (rpcError) {
