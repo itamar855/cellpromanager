@@ -372,12 +372,17 @@ const Vendas = () => {
       return;
     }
 
-    // Tenta atualizar o status para 'sold' com filtro em 'in_stock' (evita race condition)
+    // Log de diagnóstico
+    const { data: sessionData } = await supabase.auth.getSession();
+    const userRoleInSession = sessionData?.session?.user?.role;
+    const userIdInSession = sessionData?.session?.user?.id;
+    console.log("PDV Diagnóstico - User:", userIdInSession, "Role:", userRoleInSession);
+
+    // Tenta atualizar o status para 'sold' sem o filtro adicional para eliminar problemas de matching
     const { data: updatedRows, error: statusError } = await supabase
       .from("products")
       .update({ status: "sold", sale_price: salePriceAfterDiscount })
       .eq("id", form.product_id)
-      .eq("status", "in_stock")
       .select();
 
     if (statusError) {
@@ -390,13 +395,13 @@ const Vendas = () => {
     if (!updatedRows || updatedRows.length === 0) {
       const { data: debugProd } = await supabase
         .from("products")
-        .select("status")
+        .select("status, name, created_by")
         .eq("id", form.product_id)
         .single();
 
       if (debugProd?.status !== "sold") {
-        console.warn("Falha ao atualizar o status do produto. RLS pode estar bloqueando. Status atual:", debugProd?.status);
-        toast.error(`Erro: Não foi possível dar baixa no aparelho (Status atual: ${debugProd?.status || 'indisponível'}). Verifique as permissões de atualização (RLS) no Supabase.`);
+        console.warn("Falha ao atualizar o status do produto. Status atual:", debugProd?.status);
+        toast.error(`Erro: RLS ou regras impediram o update. (Status: ${debugProd?.status || 'indisponível'}, Criado por: ${debugProd?.created_by || 'N/A'}, Seu User ID: ${userIdInSession || 'N/A'}, Seu Role: ${userRoleInSession || 'N/A'}).`);
         setLoading(false);
         return;
       }
