@@ -359,6 +359,34 @@ const Vendas = () => {
       }
     }
 
+    // DIAGNÓSTICO: verifica o produto no banco ANTES do update
+    const { data: prodBefore, error: prodBeforeError } = await supabase
+      .from("products")
+      .select("id, status, store_id, name")
+      .eq("id", form.product_id)
+      .maybeSingle();
+
+    console.log("[VENDA DEBUG] product_id:", form.product_id);
+    console.log("[VENDA DEBUG] prodBefore:", prodBefore);
+    console.log("[VENDA DEBUG] prodBeforeError:", prodBeforeError);
+    console.log("[VENDA DEBUG] salePriceAfterDiscount:", salePriceAfterDiscount);
+
+    if (prodBeforeError) {
+      toast.error("Erro ao verificar produto: " + prodBeforeError.message);
+      setLoading(false);
+      return;
+    }
+    if (!prodBefore) {
+      toast.error("Produto nao encontrado no banco. ID: " + form.product_id);
+      setLoading(false);
+      return;
+    }
+    if (prodBefore.status !== "in_stock") {
+      toast.error(`Status invalido no banco: "${prodBefore.status}". Esperado: "in_stock".`);
+      setLoading(false);
+      return;
+    }
+
     // 1. Baixa do produto do estoque (UPDATE direto - RLS desabilitada na tabela products)
     const { data: updatedProduct, error: updateError } = await supabase
       .from("products")
@@ -368,18 +396,26 @@ const Vendas = () => {
       .select()
       .maybeSingle();
 
+    console.log("[VENDA DEBUG] updatedProduct:", updatedProduct);
+    console.log("[VENDA DEBUG] updateError:", JSON.stringify(updateError));
+
     if (updateError || !updatedProduct) {
-      // Verifica se o produto já foi vendido por outra pessoa
       const { data: checkProd } = await supabase
         .from("products")
         .select("status")
         .eq("id", form.product_id)
         .maybeSingle();
 
+      console.log("[VENDA DEBUG] checkProd pos-falha:", checkProd);
+
       if (checkProd?.status === "sold") {
         toast.error("Este aparelho acabou de ser vendido por outra pessoa. Tente outro aparelho.");
       } else {
-        toast.error("Erro ao baixar produto do estoque: " + (updateError?.message || "Produto indisponível."));
+        const errMsg = updateError
+          ? `[${updateError.code}] ${updateError.message} | ${updateError.details} | hint: ${updateError.hint}`
+          : `Update 0 linhas. Status no banco: "${checkProd?.status ?? "nao encontrado"}"`;
+        console.error("[VENDA DEBUG] Falha update:", errMsg);
+        toast.error("Erro: " + errMsg);
       }
       setLoading(false);
       return;
