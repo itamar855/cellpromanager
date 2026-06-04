@@ -67,6 +67,8 @@ type ProfileWithRole = Tables<"profiles"> & {
   assignedStoreIds?: string[];
   commission_sales_percent?: number;
   commission_services_percent?: number;
+  commission_on_sales?: boolean;
+  commission_on_services?: boolean;
 };
 
 const Equipe = () => {

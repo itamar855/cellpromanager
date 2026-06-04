@@ -340,7 +340,7 @@ const Vendas = () => {
   const [currentUserCommissionPercent, setCurrentUserCommissionPercent] = useState("10");
 
   const resetForm = () => {
-    setForm({ product_id: "", sale_price: "", has_trade_in: false, trade_in_device_name: "", trade_in_device_brand: "iPhone", trade_in_device_model: "", trade_in_device_imei: "", trade_in_value: "", payment_cash: "", payment_card: "", payment_pix: "", notes: "", commission_percent: currentUserCommissionPercent, discount: "0", warranty_days: "90", installments: "1", destination_account_id: "" });
+    setForm({ product_id: "", sale_price: "", has_trade_in: false, trade_in_device_name: "", trade_in_device_brand: "iPhone", trade_in_device_model: "", trade_in_device_imei: "", trade_in_value: "", payment_cash: "", payment_card: "", payment_pix: "", notes: "", commission_percent: currentUserCommissionPercent, discount: "0", warranty_days: "90", installments: "1", destination_account_id: "", retro_date: "" });
     clearCustomer();
   };
   const resetPdv = () => { setCart([]); setPdvPayment({ cash: "", card: "", pix: "", customer: "", store_id: activeStoreId || "" }); setAccSearch(""); };
@@ -655,7 +655,7 @@ const Vendas = () => {
          .eq("id", editSale.product_id);
 
       // 3. Update associated transactions
-      const desc = `Venda: ${editForm.product_name || product?.name ?? "Aparelho"}${editForm.customer_name ? ` → ${editForm.customer_name}` : ""}`;
+      const desc = `Venda: ${(editForm.product_name || product?.name) ?? "Aparelho"}${editForm.customer_name ? ` → ${editForm.customer_name}` : ""}`;
       await supabase
         .from("transactions")
         .update({
