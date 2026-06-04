@@ -89,7 +89,8 @@ const Estoque = () => {
     product_type: "celular", condition: "used", color: "", capacity: "",
     battery_percentage: "",
     needsRepair: false,
-    selectedRepairs: [] as string[]
+    selectedRepairs: [] as string[],
+    notes: ""
   });
 
   const [accForm, setAccForm] = useState({
@@ -146,7 +147,8 @@ const Estoque = () => {
       color: form.color || null, 
       capacity: form.capacity ? (form.capacity.toUpperCase().endsWith("GB") ? form.capacity.toUpperCase() : `${form.capacity.toUpperCase()}GB`) : null,
       battery_percentage: form.battery_percentage ? parseInt(form.battery_percentage) : null,
-      status: initialStatus
+      status: initialStatus,
+      notes: form.notes || null
     }).select().single();
     
     if (error) {
@@ -178,7 +180,7 @@ const Estoque = () => {
 
       toast.success(form.needsRepair ? "Aparelho cadastrado e enviado para Reparo!" : "Aparelho cadastrado!");
       setDialogOpen(false);
-      setForm({ name: "", brand: "iPhone", model: "", imei: "", serial_number: "", cost_price: "", sale_price: "", store_id: "", product_type: "celular", condition: "used", color: "", capacity: "", battery_percentage: "", needsRepair: false, selectedRepairs: [] });
+      setForm({ name: "", brand: "iPhone", model: "", imei: "", serial_number: "", cost_price: "", sale_price: "", store_id: "", product_type: "celular", condition: "used", color: "", capacity: "", battery_percentage: "", needsRepair: false, selectedRepairs: [], notes: "" });
       fetchData();
     }
     setLoading(false);
@@ -579,6 +581,15 @@ const Estoque = () => {
                     <Label className="text-xs">IMEI</Label>
                     <Input value={form.imei} onChange={(e) => setForm({ ...form, imei: e.target.value })} placeholder="Obrigatório para celulares" className="h-10" />
                   </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Descrição / Histórico do Aparelho (Observações)</Label>
+                    <textarea 
+                      value={form.notes} 
+                      onChange={(e) => setForm({ ...form, notes: e.target.value })} 
+                      placeholder="Ex: Aparelho já foi substituído tela." 
+                      className="w-full min-h-[60px] rounded-md border border-input bg-background px-3 py-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    />
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs">Custo (R$)</Label>
@@ -674,6 +685,11 @@ const Estoque = () => {
                             {p.brand} · {p.model} {p.capacity && `· ${p.capacity}`} {p.color && `· ${p.color}`} {(p as any).battery_percentage && `· 🔋 ${(p as any).battery_percentage}%`} · {conditionLabel}
                             {p.imei && ` · IMEI: ${p.imei}`}
                           </p>
+                          {p.notes && (
+                            <p className="text-[11px] bg-muted/40 text-muted-foreground border border-border/40 px-2 py-1 rounded-md mt-1.5 inline-block">
+                              📝 {p.notes}
+                            </p>
+                          )}
                           {activeStoreId === "all" && (
                             <Badge variant="outline" className="text-[9px] mt-1 bg-muted/50 border-primary/20 text-primary">
                               {storeMap.get(p.store_id) || "—"}

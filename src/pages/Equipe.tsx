@@ -65,6 +65,8 @@ type ProfileWithRole = Tables<"profiles"> & {
   phone?: string | null;
   permissions?: Permissions;
   assignedStoreIds?: string[];
+  commission_sales_percent?: number;
+  commission_services_percent?: number;
 };
 
 const Equipe = () => {
@@ -83,6 +85,8 @@ const Equipe = () => {
   });
   const [loading, setLoading] = useState(false);
   const [justification, setJustification] = useState("");
+  const [editSalesCommission, setEditSalesCommission] = useState("10");
+  const [editServicesCommission, setEditServicesCommission] = useState("10");
 
   const fetchData = async () => {
     const [profilesRes, rolesRes, storesRes, memberStoresRes] = await Promise.all([
@@ -96,7 +100,12 @@ const Equipe = () => {
     const roles = rolesRes.data ?? [];
     const ms = memberStoresRes.data ?? [];
     
-    const roleMap = new Map((roles as any[]).map((r) => [r.user_id, { role: r.role, permissions: r.permissions }]));
+    const roleMap = new Map((roles as any[]).map((r) => [r.user_id, { 
+      role: r.role, 
+      permissions: r.permissions,
+      commission_sales_percent: r.commission_sales_percent,
+      commission_services_percent: r.commission_services_percent
+    }]));
     const storeMapGroup = new Map<string, string[]>();
     (ms as any[]).forEach(item => {
       if (!storeMapGroup.has(item.user_id)) storeMapGroup.set(item.user_id, []);
@@ -111,6 +120,8 @@ const Equipe = () => {
           role: (roleData as any)?.role ?? null,
           permissions: ((roleData as any)?.permissions as Permissions) ?? null,
           assignedStoreIds: storeMapGroup.get(p.user_id) || [],
+          commission_sales_percent: (roleData as any)?.commission_sales_percent ?? 0,
+          commission_services_percent: (roleData as any)?.commission_services_percent ?? 0,
         };
       })
     );
@@ -129,6 +140,8 @@ const Equipe = () => {
     setEditPhone((member as any).phone || "");
     setEditStoreIds(member.assignedStoreIds || []);
     setPermissions(member.permissions || defaultPermissions(member.role || "vendedor"));
+    setEditSalesCommission(String(member.commission_sales_percent ?? 10));
+    setEditServicesCommission(String(member.commission_services_percent ?? 10));
     setJustification("");
   };
 
@@ -147,7 +160,9 @@ const Equipe = () => {
         .from("user_roles")
         .update({ 
           role: newRole as any,
-          permissions: permissions
+          permissions: permissions,
+          commission_sales_percent: parseFloat(editSalesCommission) || 0,
+          commission_services_percent: parseFloat(editServicesCommission) || 0
         })
         .eq("user_id", selectedMember.user_id);
       if (error) { toast.error(error.message); setLoading(false); return; }
@@ -157,7 +172,9 @@ const Equipe = () => {
         .insert({ 
           user_id: selectedMember.user_id, 
           role: newRole as any,
-          permissions: permissions
+          permissions: permissions,
+          commission_sales_percent: parseFloat(editSalesCommission) || 0,
+          commission_services_percent: parseFloat(editServicesCommission) || 0
         });
       if (error) { toast.error(error.message); setLoading(false); return; }
     }
@@ -375,6 +392,34 @@ const Equipe = () => {
                       </div>
                     ))}
                     {stores.length === 0 && <p className="text-[10px] text-muted-foreground p-2">Nenhuma loja cadastrada.</p>}
+                  </div>
+                </div>
+
+                {/* Comissões de Vendas e Serviços */}
+                <div className="grid grid-cols-2 gap-3 border border-border/80 rounded-xl p-3.5 bg-muted/20">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-foreground">Comissão p/ Vendas (%)</Label>
+                    <Input 
+                      type="number" 
+                      step="0.1" 
+                      min="0" 
+                      max="100" 
+                      value={editSalesCommission} 
+                      onChange={e => setEditSalesCommission(e.target.value)} 
+                      className="h-10 bg-background" 
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-foreground">Comissão p/ Serviços (%)</Label>
+                    <Input 
+                      type="number" 
+                      step="0.1" 
+                      min="0" 
+                      max="100" 
+                      value={editServicesCommission} 
+                      onChange={e => setEditServicesCommission(e.target.value)} 
+                      className="h-10 bg-background" 
+                    />
                   </div>
                 </div>
 
