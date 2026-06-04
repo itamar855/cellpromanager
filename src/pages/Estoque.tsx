@@ -14,9 +14,10 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Search, Package, ArrowRightLeft, AlertTriangle, Zap, Pencil, Trash2, Store } from "lucide-react";
+import { Plus, Search, Package, ArrowRightLeft, AlertTriangle, Zap, Pencil, Trash2, Store, Wrench } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { logAction } from "@/utils/auditLogger";
+import DeviceRepairModal from "@/components/DeviceRepairModal";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -67,6 +68,8 @@ const Estoque = () => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteType, setDeleteType] = useState<"product" | "accessory" | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [repairModalOpen, setRepairModalOpen] = useState(false);
+  const [repairProduct, setRepairProduct] = useState<any>(null);
 
   const [form, setForm] = useState({
     name: "", brand: "iPhone" as string, model: "", imei: "",
@@ -595,6 +598,12 @@ const Estoque = () => {
                           <Button className="h-7 text-[10px] gap-1 bg-transparent text-muted-foreground hover:bg-muted" onClick={() => loadHistory(p)}>
                             Ver Histórico
                           </Button>
+                          {(p.status === "in_stock" || p.status === "repair") && (
+                            <Button className="h-7 text-[10px] gap-1 bg-transparent text-muted-foreground hover:bg-muted"
+                              onClick={() => { setRepairProduct(p as any); setRepairModalOpen(true); }}>
+                              <Wrench className="h-3.5 w-3.5" /> Reparo
+                            </Button>
+                          )}
                           <div className="flex gap-1 mt-1">
                             <Button className="h-7 w-7 p-0 bg-transparent text-foreground hover:bg-muted" onClick={() => openEditProduct(p)}>
                               <Pencil className="h-3.5 w-3.5" />
@@ -990,6 +999,12 @@ const Estoque = () => {
           </div>
         </DialogContent>
       </Dialog>
+      <DeviceRepairModal
+        product={repairProduct}
+        isOpen={repairModalOpen}
+        onClose={() => { setRepairModalOpen(false); setRepairProduct(null); }}
+        onSuccess={fetchData}
+      />
     </div>
   );
 };
