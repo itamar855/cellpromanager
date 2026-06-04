@@ -1165,8 +1165,18 @@ const Vendas = () => {
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Comissão (%)</Label>
-                    <Input type="number" step="0.5" min="0" max="100" value={form.commission_percent} onChange={e => setForm({ ...form, commission_percent: e.target.value })} className="h-10" />
+                    <Label className="text-xs flex items-center gap-1">
+                      <Percent className="h-3 w-3" /> Comissão (%)
+                      {userRole === "vendedor" && <span className="ml-1 text-[9px] text-muted-foreground font-normal">(somente admin)</span>}
+                    </Label>
+                    {userRole === "vendedor" ? (
+                      <div className="h-10 rounded-md border border-border bg-muted/40 flex items-center px-3 text-sm text-muted-foreground gap-2 cursor-not-allowed">
+                        <Shield className="h-3.5 w-3.5 shrink-0" />
+                        <span>{form.commission_percent}% — definido pelo admin</span>
+                      </div>
+                    ) : (
+                      <Input type="number" step="0.5" min="0" max="100" value={form.commission_percent} onChange={e => setForm({ ...form, commission_percent: e.target.value })} className="h-10" />
+                    )}
                   </div>
                 </div>
 
@@ -1732,15 +1742,25 @@ const Vendas = () => {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Comissão do Vendedor (%)</Label>
-              <Input
-                type="number"
-                step="0.1"
-                value={editForm.commission_percent}
-                onChange={e => setEditForm({ ...editForm, commission_percent: e.target.value })}
-                placeholder="0"
-                className="h-10"
-              />
+              <Label className="text-xs font-semibold flex items-center gap-1">
+                Comissão do Vendedor (%)
+                {userRole === "vendedor" && <span className="ml-1 text-[9px] text-muted-foreground font-normal">(somente admin)</span>}
+              </Label>
+              {userRole === "vendedor" ? (
+                <div className="h-10 rounded-md border border-border bg-muted/40 flex items-center px-3 text-sm text-muted-foreground gap-2 cursor-not-allowed">
+                  <Shield className="h-3.5 w-3.5 shrink-0" />
+                  <span>{editForm.commission_percent}% — somente o admin pode alterar</span>
+                </div>
+              ) : (
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={editForm.commission_percent}
+                  onChange={e => setEditForm({ ...editForm, commission_percent: e.target.value })}
+                  placeholder="0"
+                  className="h-10"
+                />
+              )}
             </div>
 
             <div className="space-y-1.5">
