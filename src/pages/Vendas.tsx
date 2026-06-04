@@ -48,13 +48,14 @@ type Customer = Tables<"customers">;
 type Accessory = { id: string; store_id: string; name: string; category: string; brand: string | null; quantity: number; cost_price: number; sale_price: number | null };
 type CartItem = { acc: Accessory; qty: number; price: number };
 
-const createPendingCashEntry = async (storeId: string, userId: string, amount: number, description: string, paymentMethod: string) => {
+const createPendingCashEntry = async (storeId: string, userId: string, amount: number, description: string, paymentMethod: string, retroDate?: string) => {
   const { data: register } = await supabase.from("cash_registers" as any).select("id").eq("store_id", storeId).eq("status", "open").maybeSingle();
   const registerId = register ? (register as any).id : null;
   await supabase.from("cash_entries" as any).insert({
     cash_register_id: registerId, store_id: storeId,
     type: "entrada", amount, description,
     payment_method: paymentMethod, receipt_url: null, confirmed: false, created_by: userId,
+    ...(retroDate ? { created_at: new Date(retroDate + "T12:00:00").toISOString() } : {}),
   });
 };
 
@@ -105,7 +106,13 @@ const Vendas = () => {
     product_name: "",
     product_cost: "",
     product_imei: "",
-    retro_date: "", // Campo para data retroativa na edição
+    retro_date: "",
+    // Trade-in fields
+    has_trade_in: false,
+    trade_in_device_name: "",
+    trade_in_device_brand: "iPhone",
+    trade_in_device_imei: "",
+    trade_in_value: "",
   });
   const [editSaleCustomerId, setEditSaleCustomerId] = useState<string>("");
   const [showEditNewCustomerForm, setShowEditNewCustomerForm] = useState(false);
@@ -447,6 +454,7 @@ const Vendas = () => {
       seller_id: user.id, discount: discount,
       warranty_days: parseInt(form.warranty_days) || 90,
       installments: parseInt(form.installments) || 1,
+      ...(form.retro_date ? { created_at: new Date(form.retro_date + "T12:00:00").toISOString() } : {}),
     }).select().single();
 
     if (saleError) {
@@ -488,10 +496,11 @@ const Vendas = () => {
       description: desc, store_id: selectedProduct.store_id, product_id: form.product_id,
       created_by: user.id, destination_account_id: form.destination_account_id || null,
       expected_settlement_date: expectedDate.toISOString(),
+      ...(form.retro_date ? { created_at: new Date(form.retro_date + "T12:00:00").toISOString() } : {}),
     });
     
     const mainPayment = cashVal > 0 ? "dinheiro" : cardVal > 0 ? "cartao_credito" : pixVal > 0 ? "pix" : "dinheiro";
-    await createPendingCashEntry(selectedProduct.store_id, user.id, cashVal > 0 ? cashVal : salePriceAfterDiscount, desc, mainPayment);
+    await createPendingCashEntry(selectedProduct.store_id, user.id, cashVal > 0 ? cashVal : salePriceAfterDiscount, desc, mainPayment, form.retro_date);
 
     toast.success("Venda registrada! Confirme o recebimento no caixa.");
     setDialogOpen(false); resetForm(); fetchData();
@@ -581,6 +590,12 @@ const Vendas = () => {
       product_cost: product?.cost_price ? product.cost_price.toString() : "",
       product_imei: product?.imei || "",
       retro_date: new Date(sale.created_at).toISOString().split('T')[0],
+      // Trade-in existente
+      has_trade_in: sale.has_trade_in || false,
+      trade_in_device_name: sale.trade_in_device_name || "",
+      trade_in_device_brand: sale.trade_in_device_brand || "iPhone",
+      trade_in_device_imei: sale.trade_in_device_imei || "",
+      trade_in_value: sale.trade_in_value ? sale.trade_in_value.toString() : "",
     });
   };
 
@@ -597,10 +612,11 @@ const Vendas = () => {
       const cashVal = parseFloat(editForm.payment_cash) || 0;
       const cardVal = parseFloat(editForm.payment_card) || 0;
       const pixVal = parseFloat(editForm.payment_pix) || 0;
-      const totalPayment = cashVal + cardVal + pixVal;
+      const tradeInVal = editForm.has_trade_in ? (parseFloat(editForm.trade_in_value) || 0) : 0;
+      const totalPayment = cashVal + cardVal + pixVal + tradeInVal;
 
       if (Math.abs(salePriceAfterDiscount - totalPayment) > 0.01) {
-        toast.error("A soma dos pagamentos deve ser igual ao valor líquido (Valor - Desconto)!");
+        toast.error("A soma dos pagamentos (+ valor do trade-in) deve ser igual ao valor líquido!");
         setLoading(false);
         return;
       }
@@ -636,11 +652,47 @@ const Vendas = () => {
           customer_phone: selectedCust ? selectedCust.phone : (editSaleCustomerId === "manual" ? null : editSale.customer_phone),
           customer_cpf: selectedCust ? selectedCust.cpf : (editSaleCustomerId === "manual" ? null : editSale.customer_cpf),
           customer_address: selectedCust ? selectedCust.address : (editSaleCustomerId === "manual" ? null : editSale.customer_address),
+          has_trade_in: editForm.has_trade_in,
+          trade_in_device_name: editForm.has_trade_in ? (editForm.trade_in_device_name || null) : null,
+          trade_in_device_brand: editForm.has_trade_in ? (editForm.trade_in_device_brand || null) : null,
+          trade_in_device_imei: editForm.has_trade_in ? (editForm.trade_in_device_imei || null) : null,
+          trade_in_value: editForm.has_trade_in ? tradeInVal : null,
           ...(retroIso ? { created_at: retroIso } : {}),
         })
         .eq("id", editSale.id);
 
       if (saleError) throw saleError;
+
+      // 1b. If trade-in device was added/updated, register it in products (estoque)
+      if (editForm.has_trade_in && editForm.trade_in_device_name && tradeInVal > 0) {
+        // Check if there's already a trade-in product linked to this sale
+        if (editSale.trade_in_product_id) {
+          // Update existing trade-in product
+          await supabase.from("products").update({
+            name: editForm.trade_in_device_name,
+            brand: editForm.trade_in_device_brand || null,
+            imei: editForm.trade_in_device_imei || null,
+            cost_price: tradeInVal,
+            status: "in_stock",
+          }).eq("id", editSale.trade_in_product_id);
+        } else {
+          // Create new trade-in product in stock
+          const { data: tipData } = await supabase.from("products").insert({
+            name: editForm.trade_in_device_name,
+            brand: editForm.trade_in_device_brand || null,
+            model: "N/A",
+            imei: editForm.trade_in_device_imei || null,
+            cost_price: tradeInVal,
+            store_id: editSale.store_id,
+            created_by: user!.id,
+            status: "in_stock",
+          }).select("id").single();
+          // Link the new trade-in product to the sale
+          if (tipData) {
+            await supabase.from("sales").update({ trade_in_product_id: tipData.id }).eq("id", editSale.id);
+          }
+        }
+      }
 
       // 2. Update product details (sale_price, name, cost_price, imei) in database
       const productCostVal = parseFloat(editForm.product_cost) || 0;
@@ -662,6 +714,7 @@ const Vendas = () => {
           amount: salePriceAfterDiscount,
           net_amount: salePriceAfterDiscount,
           description: desc,
+          ...(retroIso ? { created_at: retroIso } : {}),
         })
         .eq("product_id", editSale.product_id)
         .eq("type", "sale");
@@ -1263,6 +1316,21 @@ const Vendas = () => {
                 <div className="space-y-1.5">
                   <Label className="text-xs">Observações</Label>
                   <Textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Observações da venda..." className="min-h-[60px]" />
+                </div>
+
+                {/* Data Retroativa */}
+                <div className="border border-amber-500/30 rounded-xl p-3 bg-amber-500/5 space-y-1.5">
+                  <Label className="text-xs font-bold text-amber-600 flex items-center gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    Data da Venda (Retroativa)
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground">Opcional. Escolha a data se o aparelho foi vendido em uma data retroativa.</p>
+                  <Input
+                    type="date"
+                    value={form.retro_date}
+                    onChange={e => setForm({ ...form, retro_date: e.target.value })}
+                    className="h-10 border-amber-500/30"
+                  />
                 </div>
 
                 <Button type="submit" className="w-full h-11 font-semibold" disabled={loading || !form.product_id || Math.abs(remaining) > 0.01}>
