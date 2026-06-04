@@ -36,8 +36,6 @@ const DebugPanel = () => {
   const [tableHealth, setTableHealth] = useState<DbTableHealth[]>([]);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
 
-  // Apenas admins podem ver o painel
-  if (userRole !== "admin") return null;
 
   const refreshLogs = useCallback(() => {
     const allLogs = debugLogger.getLogs();
@@ -93,6 +91,9 @@ const DebugPanel = () => {
     degraded: "🟡",
     error: "🔴",
   };
+
+  // Apenas admins podem ver o painel
+  if (userRole !== "admin") return null;
 
   return (
     <>
