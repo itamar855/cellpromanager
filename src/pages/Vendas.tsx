@@ -102,6 +102,10 @@ const Vendas = () => {
     commission_percent: "0",
     notes: "",
     customer_name: "",
+    product_name: "",
+    product_cost: "",
+    product_imei: "",
+    retro_date: "", // Campo para data retroativa na edição
   });
   const [editSaleCustomerId, setEditSaleCustomerId] = useState<string>("");
   const [showEditNewCustomerForm, setShowEditNewCustomerForm] = useState(false);
@@ -118,6 +122,7 @@ const Vendas = () => {
     payment_pix: "", notes: "", commission_percent: "10",
     discount: "0", warranty_days: "90", installments: "1",
     destination_account_id: "",
+    retro_date: "", // Campo para data retroativa
   });
 
   const fetchData = async () => {
@@ -138,7 +143,7 @@ const Vendas = () => {
       accountsQuery = accountsQuery.eq("store_id", activeStoreId);
     }
 
-    const [salesRes, productsRes, storesRes, accRes, pdvRes, profilesRes, customersRes, accountsRes] = await Promise.all([
+    const [salesRes, productsRes, storesRes, accRes, pdvRes, profilesRes, customersRes, accountsRes, currentRoleRes] = await Promise.all([
       salesQuery.order("created_at", { ascending: false }),
       productsQuery,
       supabase.from("stores").select("*"),
@@ -147,7 +152,18 @@ const Vendas = () => {
       supabase.from("profiles").select("*"),
       supabase.from("customers").select("*").order("name"),
       accountsQuery,
+      supabase.from("user_roles").select("commission_sales_percent, commission_on_sales").eq("user_id", user?.id).maybeSingle()
     ]);
+
+    let userCommPercent = "10";
+    if (currentRoleRes?.data) {
+      const data = currentRoleRes.data as any;
+      if (data.commission_on_sales === false) {
+        userCommPercent = "0";
+      } else {
+        userCommPercent = String(data.commission_sales_percent ?? 10);
+      }
+    }
 
     setSales((salesRes.data as unknown as Sale[]) ?? []);
     setProducts(productsRes.data ?? []);
@@ -157,6 +173,11 @@ const Vendas = () => {
     setProfiles(profilesRes.data ?? []);
     setCustomers(customersRes.data ?? []);
     setBankAccounts(accountsRes.data ?? []);
+    
+    // Atualizar valor inicial do form com a comissão do usuário logado
+    setForm(prev => ({ ...prev, commission_percent: userCommPercent }));
+    setCurrentUserCommissionPercent(userCommPercent);
+
     setLoading(false);
   };
 
@@ -254,8 +275,24 @@ const Vendas = () => {
   const availableProducts = products.filter(p => p.status === "in_stock");
   const selectedProduct = products.find(p => p.id === form.product_id);
 
-  // Filtro da lista de vendas por cliente, modelo ou IMEI
+  // Estados para filtro por data
+  const [filterStartDate, setFilterStartDate] = useState("");
+  const [filterEndDate, setFilterEndDate] = useState("");
+
+  // Filtro da lista de vendas por cliente, modelo, IMEI ou data
   const filteredSales = sales.filter(sale => {
+    // Filtro por data
+    if (filterStartDate) {
+      const start = new Date(filterStartDate + "T00:00:00");
+      const saleDate = new Date(sale.created_at);
+      if (saleDate < start) return false;
+    }
+    if (filterEndDate) {
+      const end = new Date(filterEndDate + "T23:59:59");
+      const saleDate = new Date(sale.created_at);
+      if (saleDate > end) return false;
+    }
+
     if (!salesSearch.trim()) return true;
     const q = salesSearch.toLowerCase().trim();
     const product = productMap.get(sale.product_id) as any;
@@ -299,8 +336,11 @@ const Vendas = () => {
   const updateCartPrice = (id: string, price: number) => setCart(p => p.map(i => i.acc.id === id ? { ...i, price } : i));
   const filteredAcc = accessories.filter(a => a.name.toLowerCase().includes(accSearch.toLowerCase()) || (a.brand && a.brand.toLowerCase().includes(accSearch.toLowerCase())));
 
+  // Guarda comissão carregada do usuário atual
+  const [currentUserCommissionPercent, setCurrentUserCommissionPercent] = useState("10");
+
   const resetForm = () => {
-    setForm({ product_id: "", sale_price: "", has_trade_in: false, trade_in_device_name: "", trade_in_device_brand: "iPhone", trade_in_device_model: "", trade_in_device_imei: "", trade_in_value: "", payment_cash: "", payment_card: "", payment_pix: "", notes: "", commission_percent: "10", discount: "0", warranty_days: "90", installments: "1", destination_account_id: "" });
+    setForm({ product_id: "", sale_price: "", has_trade_in: false, trade_in_device_name: "", trade_in_device_brand: "iPhone", trade_in_device_model: "", trade_in_device_imei: "", trade_in_value: "", payment_cash: "", payment_card: "", payment_pix: "", notes: "", commission_percent: currentUserCommissionPercent, discount: "0", warranty_days: "90", installments: "1", destination_account_id: "" });
     clearCustomer();
   };
   const resetPdv = () => { setCart([]); setPdvPayment({ cash: "", card: "", pix: "", customer: "", store_id: activeStoreId || "" }); setAccSearch(""); };
@@ -537,6 +577,10 @@ const Vendas = () => {
       commission_percent: commPercent,
       notes: sale.notes || "",
       customer_name: sale.customer_name || "",
+      product_name: product?.name || "",
+      product_cost: product?.cost_price ? product.cost_price.toString() : "",
+      product_imei: product?.imei || "",
+      retro_date: new Date(sale.created_at).toISOString().split('T')[0],
     });
   };
 
@@ -570,6 +614,10 @@ const Vendas = () => {
       const selectedCust = editSaleCustomerId === "manual" ? null : customers.find(c => c.id === editSaleCustomerId);
 
       // 1. Update the sale record
+      const retroIso = editForm.retro_date
+        ? new Date(editForm.retro_date + "T12:00:00").toISOString()
+        : undefined;
+
       const { error: saleError } = await supabase
         .from("sales")
         .update({
@@ -588,19 +636,26 @@ const Vendas = () => {
           customer_phone: selectedCust ? selectedCust.phone : (editSaleCustomerId === "manual" ? null : editSale.customer_phone),
           customer_cpf: selectedCust ? selectedCust.cpf : (editSaleCustomerId === "manual" ? null : editSale.customer_cpf),
           customer_address: selectedCust ? selectedCust.address : (editSaleCustomerId === "manual" ? null : editSale.customer_address),
+          ...(retroIso ? { created_at: retroIso } : {}),
         })
         .eq("id", editSale.id);
 
       if (saleError) throw saleError;
 
-      // 2. Update product sale_price in database
+      // 2. Update product details (sale_price, name, cost_price, imei) in database
+      const productCostVal = parseFloat(editForm.product_cost) || 0;
       await supabase
-        .from("products")
-        .update({ sale_price: salePriceAfterDiscount })
-        .eq("id", editSale.product_id);
+         .from("products")
+         .update({ 
+           sale_price: salePriceAfterDiscount,
+           name: editForm.product_name || product?.name,
+           cost_price: productCostVal || product?.cost_price,
+           imei: editForm.product_imei || product?.imei
+         })
+         .eq("id", editSale.product_id);
 
       // 3. Update associated transactions
-      const desc = `Venda: ${product?.name ?? "Aparelho"}${editForm.customer_name ? ` → ${editForm.customer_name}` : ""}`;
+      const desc = `Venda: ${editForm.product_name || product?.name ?? "Aparelho"}${editForm.customer_name ? ` → ${editForm.customer_name}` : ""}`;
       await supabase
         .from("transactions")
         .update({
@@ -611,8 +666,26 @@ const Vendas = () => {
         .eq("product_id", editSale.product_id)
         .eq("type", "sale");
 
-      logAction("UPDATE_RECORD", "sales", editSale.id, editSale, editForm, editSale.store_id);
-      toast.success("Venda atualizada com sucesso!");
+      // Log action with changes details for the Audit Trail
+      const oldVal = {
+        sale: editSale,
+        product: {
+          name: product?.name,
+          cost_price: product?.cost_price,
+          imei: product?.imei
+        }
+      };
+      const newVal = {
+        sale: editForm,
+        product: {
+          name: editForm.product_name,
+          cost_price: productCostVal,
+          imei: editForm.product_imei
+        }
+      };
+
+      logAction("UPDATE_RECORD", "sales", editSale.id, oldVal, newVal, editSale.store_id);
+      toast.success("Venda e dados do aparelho atualizados com sucesso!");
       setEditSale(null);
       fetchData();
     } catch (err: any) {
@@ -1201,14 +1274,46 @@ const Vendas = () => {
         </div>
 
       {/* Busca de vendas */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          value={salesSearch}
-          onChange={e => setSalesSearch(e.target.value)}
-          placeholder="Buscar por cliente, modelo, IMEI ou marca..."
-          className="pl-9 h-10"
-        />
+      <div className="flex flex-col md:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={salesSearch}
+            onChange={e => setSalesSearch(e.target.value)}
+            placeholder="Buscar por cliente, modelo, IMEI ou marca..."
+            className="pl-9 h-10"
+          />
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1">
+            <Label className="text-[10px] text-muted-foreground uppercase font-bold shrink-0">De</Label>
+            <Input
+              type="date"
+              value={filterStartDate}
+              onChange={e => setFilterStartDate(e.target.value)}
+              className="h-10 text-xs w-[130px]"
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            <Label className="text-[10px] text-muted-foreground uppercase font-bold shrink-0">Até</Label>
+            <Input
+              type="date"
+              value={filterEndDate}
+              onChange={e => setFilterEndDate(e.target.value)}
+              className="h-10 text-xs w-[130px]"
+            />
+          </div>
+          {(filterStartDate || filterEndDate) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => { setFilterStartDate(""); setFilterEndDate(""); }}
+              className="h-10 text-xs text-destructive hover:bg-destructive/10"
+            >
+              Limpar
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Lista de vendas */}
@@ -1276,7 +1381,8 @@ const Vendas = () => {
                         onClick={() => setSelectedViewSale(sale)}>
                         <Eye className="h-3 w-3" />Ver detalhes
                       </Button>
-                      {userRole === "admin" && (
+                      {/* Admin e vendedor têm acesso à edição da venda (com auditoria detalhada) */}
+                      {(userRole === "admin" || userRole === "vendedor") && (
                         <Button className="h-7 px-2 text-[10px] gap-1 border border-yellow-500/40 bg-yellow-500/5 text-yellow-600 dark:text-yellow-500 hover:bg-yellow-500/10 shadow-none"
                           onClick={() => handleOpenEdit(sale)}>
                           <Pencil className="h-3 w-3" />Editar
@@ -1642,6 +1748,42 @@ const Vendas = () => {
               </div>
             )}
 
+            {/* Dados do Aparelho Vendido (Editável pelo Admin ou Vendedor com registro de auditoria) */}
+            <div className="border border-border/80 rounded-xl p-3 bg-muted/20 space-y-3">
+              <span className="text-xs font-bold text-foreground uppercase tracking-wide">Dados do Aparelho Vendido</span>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Nome do Aparelho</Label>
+                <Input
+                  value={editForm.product_name}
+                  onChange={e => setEditForm({ ...editForm, product_name: e.target.value })}
+                  placeholder="Ex: iPhone 11 64GB"
+                  className="h-10"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">Custo do Aparelho (R$)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={editForm.product_cost}
+                    onChange={e => setEditForm({ ...editForm, product_cost: e.target.value })}
+                    placeholder="0.00"
+                    className="h-10"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">IMEI do Aparelho</Label>
+                  <Input
+                    value={editForm.product_imei}
+                    onChange={e => setEditForm({ ...editForm, product_imei: e.target.value })}
+                    placeholder="Sem IMEI / Opcional"
+                    className="h-10 font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">Valor Bruto da Venda (R$)</Label>
@@ -1770,6 +1912,21 @@ const Vendas = () => {
                 onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
                 placeholder="Ex: Observações gerais da alteração de venda..."
                 className="min-h-[80px]"
+              />
+            </div>
+
+            {/* Data Retroativa */}
+            <div className="border border-amber-500/30 rounded-xl p-3 bg-amber-500/5 space-y-1.5">
+              <Label className="text-xs font-bold text-amber-600 flex items-center gap-1.5">
+                <CalendarDays className="h-3.5 w-3.5" />
+                Data da Venda (Retroativa)
+              </Label>
+              <p className="text-[11px] text-muted-foreground">Altere a data caso a venda tenha ocorrido em data diferente do lançamento no sistema.</p>
+              <Input
+                type="date"
+                value={editForm.retro_date}
+                onChange={e => setEditForm({ ...editForm, retro_date: e.target.value })}
+                className="h-10 border-amber-500/30"
               />
             </div>
 

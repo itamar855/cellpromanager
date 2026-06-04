@@ -104,7 +104,9 @@ const Equipe = () => {
       role: r.role, 
       permissions: r.permissions,
       commission_sales_percent: r.commission_sales_percent,
-      commission_services_percent: r.commission_services_percent
+      commission_services_percent: r.commission_services_percent,
+      commission_on_sales: r.commission_on_sales,
+      commission_on_services: r.commission_on_services
     }]));
     const storeMapGroup = new Map<string, string[]>();
     (ms as any[]).forEach(item => {
@@ -122,6 +124,8 @@ const Equipe = () => {
           assignedStoreIds: storeMapGroup.get(p.user_id) || [],
           commission_sales_percent: (roleData as any)?.commission_sales_percent ?? 0,
           commission_services_percent: (roleData as any)?.commission_services_percent ?? 0,
+          commission_on_sales: (roleData as any)?.commission_on_sales ?? true,
+          commission_on_services: (roleData as any)?.commission_on_services ?? true,
         };
       })
     );
@@ -162,7 +166,9 @@ const Equipe = () => {
           role: newRole as any,
           permissions: permissions,
           commission_sales_percent: parseFloat(editSalesCommission) || 0,
-          commission_services_percent: parseFloat(editServicesCommission) || 0
+          commission_services_percent: parseFloat(editServicesCommission) || 0,
+          commission_on_sales: selectedMember.commission_on_sales ?? true,
+          commission_on_services: selectedMember.commission_on_services ?? true
         })
         .eq("user_id", selectedMember.user_id);
       if (error) { toast.error(error.message); setLoading(false); return; }
@@ -174,7 +180,9 @@ const Equipe = () => {
           role: newRole as any,
           permissions: permissions,
           commission_sales_percent: parseFloat(editSalesCommission) || 0,
-          commission_services_percent: parseFloat(editServicesCommission) || 0
+          commission_services_percent: parseFloat(editServicesCommission) || 0,
+          commission_on_sales: selectedMember.commission_on_sales ?? true,
+          commission_on_services: selectedMember.commission_on_services ?? true
         });
       if (error) { toast.error(error.message); setLoading(false); return; }
     }
@@ -419,6 +427,31 @@ const Equipe = () => {
                       value={editServicesCommission} 
                       onChange={e => setEditServicesCommission(e.target.value)} 
                       className="h-10 bg-background" 
+                    />
+                  </div>
+                </div>
+
+                {/* Ativação/Desativação de Comissão */}
+                <div className="border border-border/80 rounded-xl p-3 bg-muted/20 space-y-2.5">
+                  <span className="text-xs font-bold text-foreground uppercase tracking-wide">Status de Comissionamento</span>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="comm-on-sales" className="text-xs font-medium cursor-pointer">Recebe comissão de Vendas</Label>
+                    <Switch
+                      id="comm-on-sales"
+                      checked={selectedMember.commission_on_sales ?? true}
+                      onCheckedChange={(v) => {
+                        setSelectedMember(prev => prev ? { ...prev, commission_on_sales: v } : null);
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="comm-on-services" className="text-xs font-medium cursor-pointer">Recebe comissão de Serviços</Label>
+                    <Switch
+                      id="comm-on-services"
+                      checked={selectedMember.commission_on_services ?? true}
+                      onCheckedChange={(v) => {
+                        setSelectedMember(prev => prev ? { ...prev, commission_on_services: v } : null);
+                      }}
                     />
                   </div>
                 </div>

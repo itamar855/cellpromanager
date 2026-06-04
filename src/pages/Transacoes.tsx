@@ -53,6 +53,9 @@ const Transacoes = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [justification, setJustification] = useState("");
+  const [filterStartDate, setFilterStartDate] = useState("");
+  const [filterEndDate, setFilterEndDate] = useState("");
+  const [txSearch, setTxSearch] = useState("");
   
   const [reconcileDialogOpen, setReconcileDialogOpen] = useState(false);
   const [reconcilingTx, setReconcilingTx] = useState<Tables<"transactions"> | null>(null);
@@ -277,6 +280,27 @@ const Transacoes = () => {
   const accountMap = new Map(accounts.map((a) => [a.id, a.bank_name]));
   const isIncome = (type: string) => type === "sale" || type === "income";
 
+  // Filtro de transações por data e busca
+  const filteredTransactions = transactions.filter(tx => {
+    if (filterStartDate) {
+      const start = new Date(filterStartDate + "T00:00:00");
+      if (new Date(tx.created_at) < start) return false;
+    }
+    if (filterEndDate) {
+      const end = new Date(filterEndDate + "T23:59:59");
+      if (new Date(tx.created_at) > end) return false;
+    }
+    if (txSearch.trim()) {
+      const q = txSearch.toLowerCase();
+      return (
+        (tx.description && tx.description.toLowerCase().includes(q)) ||
+        (tx.category && tx.category.toLowerCase().includes(q)) ||
+        typeLabels[tx.type]?.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
+
   return (
     <div className="space-y-4">
       {/* Hidden file inputs */}
@@ -429,6 +453,45 @@ const Transacoes = () => {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Filtros de data e busca */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="relative flex-1 min-w-[160px]">
+          <input
+            type="text"
+            value={txSearch}
+            onChange={e => setTxSearch(e.target.value)}
+            placeholder="Buscar descrição, categoria..."
+            className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Label className="text-xs text-muted-foreground shrink-0">De</Label>
+          <Input
+            type="date"
+            value={filterStartDate}
+            onChange={e => setFilterStartDate(e.target.value)}
+            className="h-10 w-[150px]"
+          />
+          <Label className="text-xs text-muted-foreground shrink-0">Até</Label>
+          <Input
+            type="date"
+            value={filterEndDate}
+            onChange={e => setFilterEndDate(e.target.value)}
+            className="h-10 w-[150px]"
+          />
+          {(filterStartDate || filterEndDate || txSearch) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-10 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => { setFilterStartDate(""); setFilterEndDate(""); setTxSearch(""); }}
+            >
+              Limpar
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 mt-4">
@@ -479,7 +542,16 @@ const Transacoes = () => {
       </div>
 
       <div className="space-y-2">
-        {transactions.map((tx) => (
+        {filteredTransactions.length === 0 && (
+          <Card className="border-border/50">
+            <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+              <ArrowUpDown className="h-8 w-8 mb-2 opacity-30" />
+              <p className="text-sm font-medium">Nenhuma transação encontrada</p>
+              <p className="text-xs mt-1">Tente ajustar os filtros de data ou busca</p>
+            </CardContent>
+          </Card>
+        )}
+        {filteredTransactions.map((tx) => (
           <Card key={tx.id} className="border-border/50 shadow-sm overflow-hidden group hover:border-primary/30 transition-colors">
             <CardContent className="p-3.5 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0 flex-1">

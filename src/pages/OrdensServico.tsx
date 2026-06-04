@@ -402,6 +402,8 @@ const OrdensServico = () => {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterStoreId, setFilterStoreId] = useState("all");
+  const [filterStartDate, setFilterStartDate] = useState("");
+  const [filterEndDate, setFilterEndDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [signatureData, setSignatureData] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -745,6 +747,18 @@ const OrdensServico = () => {
   };
 
   const filtered = orders.filter((o: any) => {
+    // Filtro por data
+    if (filterStartDate) {
+      const start = new Date(filterStartDate + "T00:00:00");
+      const orderDate = new Date(o.created_at);
+      if (orderDate < start) return false;
+    }
+    if (filterEndDate) {
+      const end = new Date(filterEndDate + "T23:59:59");
+      const orderDate = new Date(o.created_at);
+      if (orderDate > end) return false;
+    }
+
     const q = search.toLowerCase();
     const match = o.customer_name.toLowerCase().includes(q) ||
       (o.device_imei && o.device_imei.includes(search)) ||
@@ -1020,11 +1034,37 @@ const OrdensServico = () => {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="flex gap-2 w-full">
-        <div className="relative flex-1">
+      {/* Search + Date Filter */}
+      <div className="flex gap-2 w-full flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nome, IMEI, modelo ou nº da OS..." className="pl-9 h-10" />
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Label className="text-xs text-muted-foreground shrink-0">De</Label>
+          <Input
+            type="date"
+            value={filterStartDate}
+            onChange={e => setFilterStartDate(e.target.value)}
+            className="h-10 w-[145px]"
+          />
+          <Label className="text-xs text-muted-foreground shrink-0">Até</Label>
+          <Input
+            type="date"
+            value={filterEndDate}
+            onChange={e => setFilterEndDate(e.target.value)}
+            className="h-10 w-[145px]"
+          />
+          {(filterStartDate || filterEndDate) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-10 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => { setFilterStartDate(""); setFilterEndDate(""); }}
+            >
+              Limpar
+            </Button>
+          )}
         </div>
         <Button className={`px-4 h-10 border text-xs gap-2 ${viewMode === "list" ? "bg-primary text-primary-foreground" : "bg-transparent text-foreground hover:bg-muted"}`} onClick={() => setViewMode(v => v === "list" ? "kanban" : "list")}>
           {viewMode === "list" ? "Ver Kanban" : "Ver Lista"}
