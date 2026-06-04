@@ -53,9 +53,15 @@ export default function DeviceRepairModal({ product, isOpen, onClose, onSuccess 
   const [selectedRepairs, setSelectedRepairs] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
   const [selectedPartId, setSelectedPartId] = useState("");
+
+  // Manual (avulsa) part entry
+  const [addMode, setAddMode] = useState<'stock' | 'manual'>('stock');
+  const [manualPartName, setManualPartName] = useState("");
+  const [manualPartCost, setManualPartCost] = useState("");
   
   // Voucher upload states
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputPartsRef = useRef<HTMLInputElement>(null);
   const [uploadingVoucher, setUploadingVoucher] = useState<'device' | 'parts' | null>(null);
 
   useEffect(() => {
@@ -67,6 +73,9 @@ export default function DeviceRepairModal({ product, isOpen, onClose, onSuccess 
       setSelectedRepairs([]);
       setNotes("");
       setSelectedPartId("");
+      setManualPartName("");
+      setManualPartCost("");
+      setAddMode('stock');
     }
   }, [isOpen, product]);
 
@@ -200,6 +209,37 @@ export default function DeviceRepairModal({ product, isOpen, onClose, onSuccess 
       onSuccess();
     } catch (err: any) {
       toast.error("Erro ao vincular peça: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddManualPart = async () => {
+    if (!activeRepair || !manualPartName.trim() || !manualPartCost) return;
+    const cost = parseFloat(manualPartCost);
+    if (isNaN(cost) || cost < 0) { toast.error("Informe um custo válido."); return; }
+
+    setLoading(true);
+    try {
+      const { error: itemError } = await supabase
+        .from("product_repair_items" as any)
+        .insert({
+          repair_id: activeRepair.id,
+          part_product_id: null,
+          part_name: manualPartName.trim(),
+          quantity: 1,
+          unit_cost: cost
+        });
+
+      if (itemError) throw itemError;
+
+      toast.success("Peça avulsa adicionada ao reparo!");
+      setManualPartName("");
+      setManualPartCost("");
+      fetchRepairData();
+      onSuccess();
+    } catch (err: any) {
+      toast.error("Erro ao adicionar peça: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -405,38 +445,97 @@ export default function DeviceRepairModal({ product, isOpen, onClose, onSuccess 
 
                 {/* Seção de Peças */}
                 <div className="space-y-3 border border-border rounded-xl p-4 bg-muted/10">
-                  <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
-                    <Cpu className="h-4 w-4" /> Peças Utilizadas
-                  </p>
-
-                  <div className="flex items-end gap-2">
-                    <div className="flex-1 space-y-1">
-                      <Label className="text-[10px] uppercase font-semibold text-muted-foreground">Adicionar Peça do Estoque</Label>
-                      <Select value={selectedPartId} onValueChange={setSelectedPartId}>
-                        <SelectTrigger className="h-9 text-xs bg-background">
-                          <SelectValue placeholder="Selecione uma peça..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableParts.length === 0 ? (
-                            <SelectItem value="none" disabled className="text-xs">Nenhuma peça em estoque nesta loja.</SelectItem>
-                          ) : (
-                            availableParts.map(p => (
-                              <SelectItem key={p.id} value={p.id} className="text-xs">
-                                {p.name} {p.brand} {p.model} - Custo: {formatCurrency(p.cost_price)}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
+                      <Cpu className="h-4 w-4" /> Peças Utilizadas
+                    </p>
+                    {/* Toggle Estoque / Avulso */}
+                    <div className="flex rounded-lg border border-border overflow-hidden text-[10px] font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setAddMode('stock')}
+                        className={`px-2.5 py-1 transition-colors ${
+                          addMode === 'stock'
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-background text-muted-foreground hover:bg-muted/50'
+                        }`}
+                      >
+                        Do Estoque
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAddMode('manual')}
+                        className={`px-2.5 py-1 transition-colors border-l border-border ${
+                          addMode === 'manual'
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-background text-muted-foreground hover:bg-muted/50'
+                        }`}
+                      >
+                        Avulso
+                      </button>
                     </div>
-                    <Button 
-                      className="h-9 px-3" 
-                      onClick={handleAddPart}
-                      disabled={!selectedPartId || selectedPartId === "none" || loading}
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
                   </div>
+
+                  {addMode === 'stock' ? (
+                    <div className="flex items-end gap-2">
+                      <div className="flex-1 space-y-1">
+                        <Label className="text-[10px] uppercase font-semibold text-muted-foreground">Peça cadastrada no Estoque</Label>
+                        <Select value={selectedPartId} onValueChange={setSelectedPartId}>
+                          <SelectTrigger className="h-9 text-xs bg-background">
+                            <SelectValue placeholder="Selecione uma peça..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableParts.length === 0 ? (
+                              <SelectItem value="none" disabled className="text-xs">Nenhuma peça em estoque nesta loja.</SelectItem>
+                            ) : (
+                              availableParts.map(p => (
+                                <SelectItem key={p.id} value={p.id} className="text-xs">
+                                  {p.name} {p.brand} {p.model} — {formatCurrency(p.cost_price)}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        className="h-9 px-3"
+                        onClick={handleAddPart}
+                        disabled={!selectedPartId || selectedPartId === "none" || loading}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label className="text-[10px] uppercase font-semibold text-muted-foreground">Peça avulsa (sem cadastro no estoque)</Label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={manualPartName}
+                          onChange={e => setManualPartName(e.target.value)}
+                          placeholder="Nome da peça (ex: Tela iPhone 13)"
+                          className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={manualPartCost}
+                          onChange={e => setManualPartCost(e.target.value)}
+                          placeholder="R$ Custo"
+                          className="w-24 h-9 rounded-md border border-input bg-background px-3 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                        <Button
+                          className="h-9 px-3 shrink-0"
+                          onClick={handleAddManualPart}
+                          disabled={!manualPartName.trim() || !manualPartCost || loading}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">A peça avulsa não dá baixa no estoque, apenas registra o custo.</p>
+                    </div>
+                  )}
 
                   {/* Lista de Peças Vinculadas */}
                   {repairItems.length === 0 ? (
@@ -505,11 +604,11 @@ export default function DeviceRepairModal({ product, isOpen, onClose, onSuccess 
                           </div>
                           <div className="flex gap-1">
                             <Button size="sm" variant="outline" className="h-7 text-[10px] flex-1" onClick={() => window.open((product as any).parts_payment_voucher, "_blank")}>Ver</Button>
-                            <Button size="sm" variant="ghost" className="h-7 text-[10px] text-destructive flex-1" onClick={() => fileInputRef.current?.click()}>Alterar</Button>
+                            <Button size="sm" variant="ghost" className="h-7 text-[10px] text-destructive flex-1" onClick={() => fileInputPartsRef.current?.click()}>Alterar</Button>
                           </div>
                         </div>
                       ) : (
-                        <Button variant="outline" className="w-full h-9 text-xs gap-1.5 bg-background" onClick={() => fileInputRef.current?.click()}>
+                        <Button variant="outline" className="w-full h-9 text-xs gap-1.5 bg-background" onClick={() => fileInputPartsRef.current?.click()}>
                           <Upload className="h-3.5 w-3.5" /> Enviar Arquivo
                         </Button>
                       )}
@@ -522,10 +621,14 @@ export default function DeviceRepairModal({ product, isOpen, onClose, onSuccess 
                     type="file"
                     accept="image/*,application/pdf"
                     className="hidden"
-                    onChange={(e) => {
-                      const hasDevice = (product as any).device_payment_voucher;
-                      handleUploadVoucher(e, hasDevice ? 'parts' : 'device');
-                    }}
+                    onChange={(e) => handleUploadVoucher(e, 'device')}
+                  />
+                  <input
+                    ref={fileInputPartsRef}
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    onChange={(e) => handleUploadVoucher(e, 'parts')}
                   />
                 </div>
 
