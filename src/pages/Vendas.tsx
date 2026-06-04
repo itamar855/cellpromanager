@@ -111,6 +111,7 @@ const Vendas = () => {
     has_trade_in: false,
     trade_in_device_name: "",
     trade_in_device_brand: "iPhone",
+    trade_in_device_model: "",
     trade_in_device_imei: "",
     trade_in_value: "",
   });
@@ -594,6 +595,7 @@ const Vendas = () => {
       has_trade_in: sale.has_trade_in || false,
       trade_in_device_name: sale.trade_in_device_name || "",
       trade_in_device_brand: sale.trade_in_device_brand || "iPhone",
+      trade_in_device_model: sale.trade_in_device_model || "",
       trade_in_device_imei: sale.trade_in_device_imei || "",
       trade_in_value: sale.trade_in_value ? sale.trade_in_value.toString() : "",
     });
@@ -655,6 +657,7 @@ const Vendas = () => {
           has_trade_in: editForm.has_trade_in,
           trade_in_device_name: editForm.has_trade_in ? (editForm.trade_in_device_name || null) : null,
           trade_in_device_brand: editForm.has_trade_in ? (editForm.trade_in_device_brand || null) : null,
+          trade_in_device_model: editForm.has_trade_in ? (editForm.trade_in_device_model || null) : null,
           trade_in_device_imei: editForm.has_trade_in ? (editForm.trade_in_device_imei || null) : null,
           trade_in_value: editForm.has_trade_in ? tradeInVal : null,
           ...(retroIso ? { created_at: retroIso } : {}),
@@ -671,6 +674,7 @@ const Vendas = () => {
           await supabase.from("products").update({
             name: editForm.trade_in_device_name,
             brand: editForm.trade_in_device_brand || null,
+            model: editForm.trade_in_device_model || "N/A",
             imei: editForm.trade_in_device_imei || null,
             cost_price: tradeInVal,
             status: "in_stock",
@@ -680,7 +684,7 @@ const Vendas = () => {
           const { data: tipData } = await supabase.from("products").insert({
             name: editForm.trade_in_device_name,
             brand: editForm.trade_in_device_brand || null,
-            model: "N/A",
+            model: editForm.trade_in_device_model || "N/A",
             imei: editForm.trade_in_device_imei || null,
             cost_price: tradeInVal,
             store_id: editSale.store_id,
