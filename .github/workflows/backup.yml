@@ -1,0 +1,189 @@
+name: Database Backup
+
+on:
+  schedule:
+    # Roda diariamente às 03:00 UTC (00:00 BRT)
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Forçar backup mesmo sem alterações'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Supabase JS
+        run: npm install @supabase/supabase-js
+
+      - name: Export Database
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          node << 'SCRIPT'
+          const { createClient } = require('@supabase/supabase-js');
+          const fs = require('fs');
+          const path = require('path');
+          const crypto = require('crypto');
+
+          const url = process.env.SUPABASE_URL;
+          const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+          if (!url || !key) {
+            console.error('❌ SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY são obrigatórios.');
+            console.error('   Configure os secrets no GitHub: Settings → Secrets and variables → Actions');
+            process.exit(1);
+          }
+
+          const supabase = createClient(url, key);
+
+          const TABLES = [
+            'products', 'sales', 'stores', 'transactions', 'customers',
+            'accessories', 'user_roles', 'member_stores', 'profiles',
+            'audit_logs', 'auto_replies', 'bank_accounts', 'bills',
+            'cash_entries', 'cash_registers', 'channel_configs', 'chat_media',
+            'duplicate_prevention_logs', 'fixed_expenses', 'instagram_config',
+            'instagram_webhooks_logs', 'lead_messages', 'lead_responses',
+            'leads', 'product_history', 'product_repairs', 'service_order_costs',
+            'service_order_history', 'service_order_items', 'service_order_photos',
+            'service_orders', 'stock_transfers', 'store_bank_accounts',
+            'suppliers', 'webhooks', 'whatsapp_config', 'debug_logs'
+          ];
+
+          async function run() {
+            const backupDir = path.join(process.cwd(), 'backups', 'latest');
+            fs.mkdirSync(backupDir, { recursive: true });
+
+            const metadata = {
+              timestamp: new Date().toISOString(),
+              project_id: url.match(/\/\/(.+)\.supabase/)?.[1] || 'unknown',
+              tables: {},
+              total_rows: 0,
+              data_hash: '',
+            };
+
+            let allDataStr = '';
+
+            console.log('📦 Iniciando backup do banco de dados...\n');
+
+            for (const table of TABLES) {
+              try {
+                // Busca até 10000 registros por tabela
+                const { data, error } = await supabase
+                  .from(table)
+                  .select('*')
+                  .order('created_at', { ascending: false })
+                  .limit(10000);
+
+                if (error) {
+                  // Tabela pode não existir ainda
+                  if (error.message.includes('does not exist') || error.code === '42P01') {
+                    console.log(`  ⏭️  ${table}: tabela não existe (pulando)`);
+                    continue;
+                  }
+                  console.log(`  ⚠️  ${table}: ${error.message}`);
+                  metadata.tables[table] = { rows: 0, error: error.message };
+                  continue;
+                }
+
+                const rows = data || [];
+                const filePath = path.join(backupDir, `${table}.json`);
+                const content = JSON.stringify(rows, null, 2);
+                fs.writeFileSync(filePath, content);
+
+                metadata.tables[table] = { rows: rows.length };
+                metadata.total_rows += rows.length;
+                allDataStr += content;
+
+                const icon = rows.length > 0 ? '✅' : '📭';
+                console.log(`  ${icon} ${table}: ${rows.length} registros`);
+              } catch (e) {
+                console.log(`  ❌ ${table}: ${e.message}`);
+                metadata.tables[table] = { rows: 0, error: e.message };
+              }
+            }
+
+            // Hash para detectar mudanças
+            metadata.data_hash = crypto
+              .createHash('sha256')
+              .update(allDataStr)
+              .digest('hex')
+              .substring(0, 16);
+
+            // Salvar metadata
+            fs.writeFileSync(
+              path.join(backupDir, 'metadata.json'),
+              JSON.stringify(metadata, null, 2)
+            );
+
+            console.log(`\n📊 Resumo:`);
+            console.log(`   Total de registros: ${metadata.total_rows}`);
+            console.log(`   Hash dos dados: ${metadata.data_hash}`);
+            console.log(`   Timestamp: ${metadata.timestamp}`);
+          }
+
+          run().catch(e => {
+            console.error('❌ Falha no backup:', e);
+            process.exit(1);
+          });
+          SCRIPT
+
+      - name: Check for changes
+        id: changes
+        run: |
+          git add backups/
+          if git diff --cached --quiet; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "📝 Nenhuma alteração detectada no banco de dados."
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "📝 Alterações detectadas! Commitando backup..."
+          fi
+
+      - name: Commit and Push
+        if: steps.changes.outputs.changed == 'true' || github.event.inputs.force == 'true'
+        run: |
+          git config user.name "CellManagerPro Backup Bot"
+          git config user.email "backup@cellmanagerpro.app"
+          
+          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M UTC")
+          ROWS=$(cat backups/latest/metadata.json | python3 -c "import sys,json; print(json.load(sys.stdin)['total_rows'])" 2>/dev/null || echo "?")
+          
+          git add backups/
+          git commit -m "🔄 Backup automático - ${TIMESTAMP} (${ROWS} registros)"
+          git push
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f backups/latest/metadata.json ]; then
+            echo "### 📦 Backup do Banco de Dados" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Info | Valor |" >> $GITHUB_STEP_SUMMARY
+            echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+            TIMESTAMP=$(cat backups/latest/metadata.json | python3 -c "import sys,json; print(json.load(sys.stdin)['timestamp'])" 2>/dev/null || echo "N/A")
+            ROWS=$(cat backups/latest/metadata.json | python3 -c "import sys,json; print(json.load(sys.stdin)['total_rows'])" 2>/dev/null || echo "N/A")
+            HASH=$(cat backups/latest/metadata.json | python3 -c "import sys,json; print(json.load(sys.stdin)['data_hash'])" 2>/dev/null || echo "N/A")
+            echo "| Timestamp | ${TIMESTAMP} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Total Registros | ${ROWS} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Hash | ${HASH} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Alterações | ${{ steps.changes.outputs.changed || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
+          fi
