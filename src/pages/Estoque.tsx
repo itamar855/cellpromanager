@@ -19,6 +19,18 @@ import type { Tables } from "@/integrations/supabase/types";
 import { logAction } from "@/utils/auditLogger";
 import DeviceRepairModal from "@/components/DeviceRepairModal";
 
+const REPAIR_OPTIONS = [
+  "Troca de Tela",
+  "Troca de Bateria",
+  "Conector de Carga",
+  "Reparo de Carcaça/Tampa Traseira",
+  "Câmera (Traseira/Frontal)",
+  "Reparo de Placa (Micro Soldagem)",
+  "Botões/Biometria",
+  "Desoxidação (Contato com água)",
+  "Outro Reparo"
+];
+
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
@@ -76,6 +88,8 @@ const Estoque = () => {
     serial_number: "", cost_price: "", sale_price: "", store_id: "",
     product_type: "celular", condition: "used", color: "", capacity: "",
     battery_percentage: "",
+    needsRepair: false,
+    selectedRepairs: [] as string[]
   });
 
   const [accForm, setAccForm] = useState({
@@ -119,6 +133,9 @@ const Estoque = () => {
     e.preventDefault();
     if (!user) return;
     setLoading(true);
+
+    const initialStatus = form.needsRepair ? "repair" : "in_stock";
+
     const { data, error } = await supabase.from("products").insert({
       name: form.name, brand: form.brand, model: form.model,
       imei: form.imei || null, serial_number: form.serial_number || null,
@@ -129,6 +146,7 @@ const Estoque = () => {
       color: form.color || null, 
       capacity: form.capacity ? (form.capacity.toUpperCase().endsWith("GB") ? form.capacity.toUpperCase() : `${form.capacity.toUpperCase()}GB`) : null,
       battery_percentage: form.battery_percentage ? parseInt(form.battery_percentage) : null,
+      status: initialStatus
     }).select().single();
     
     if (error) {
@@ -137,9 +155,30 @@ const Estoque = () => {
       await supabase.from("product_history" as any).insert({
         product_id: data.id, action: "Entrada inicial", new_cost: data.cost_price, created_by: user.id,
       });
-      toast.success("Aparelho cadastrado!");
+
+      if (form.needsRepair && form.selectedRepairs.length > 0) {
+        // Criar o registro de reparo pendente associado
+        const { error: repairError } = await supabase
+          .from("product_repairs" as any)
+          .insert({
+            product_id: data.id,
+            store_id: activeStoreId,
+            repair_types: form.selectedRepairs,
+            notes: "Reparo iniciado no cadastro de compra",
+            status: "pending",
+            created_by: user.id
+          });
+        if (repairError) {
+          console.error("Erro ao criar reparo inicial:", repairError);
+          toast.error("Aparelho cadastrado, mas erro ao iniciar reparo inicial: " + repairError.message);
+        } else {
+          await logAction("CREATE_RECORD", "product_repairs", data.id, null, { repair_types: form.selectedRepairs }, activeStoreId);
+        }
+      }
+
+      toast.success(form.needsRepair ? "Aparelho cadastrado e enviado para Reparo!" : "Aparelho cadastrado!");
       setDialogOpen(false);
-      setForm({ name: "", brand: "iPhone", model: "", imei: "", serial_number: "", cost_price: "", sale_price: "", store_id: "", product_type: "celular", condition: "used", color: "", capacity: "", battery_percentage: "" });
+      setForm({ name: "", brand: "iPhone", model: "", imei: "", serial_number: "", cost_price: "", sale_price: "", store_id: "", product_type: "celular", condition: "used", color: "", capacity: "", battery_percentage: "", needsRepair: false, selectedRepairs: [] });
       fetchData();
     }
     setLoading(false);
@@ -554,8 +593,61 @@ const Estoque = () => {
                     <Label className="text-xs">Loja (Vinculada à Loja Ativa)</Label>
                     <Input value={storeMap.get(activeStoreId || "") || ""} readOnly className="h-10" />
                   </div>
+
+                  {/* Seção de Reparos no Cadastro */}
+                  <div className="border border-border/80 rounded-xl p-3.5 space-y-3 bg-muted/20">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-xs font-bold text-foreground cursor-pointer" htmlFor="needs-repair-toggle">
+                          Precisa de Reparo?
+                        </Label>
+                        <p className="text-[10px] text-muted-foreground">O aparelho será enviado direto para a aba de reparos</p>
+                      </div>
+                      <input
+                        id="needs-repair-toggle"
+                        type="checkbox"
+                        checked={form.needsRepair}
+                        onChange={(e) => setForm({ ...form, needsRepair: e.target.checked })}
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary accent-primary cursor-pointer"
+                      />
+                    </div>
+
+                    {form.needsRepair && (
+                      <div className="space-y-2 pt-1 border-t border-border/50 animate-in fade-in-50 duration-200">
+                        <Label className="text-[11px] font-bold text-muted-foreground uppercase">Reparos Necessários (Multi-seleção)</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {REPAIR_OPTIONS.map((option) => {
+                            const selected = form.selectedRepairs.includes(option);
+                            return (
+                              <button
+                                key={option}
+                                type="button"
+                                onClick={() => {
+                                  setForm({
+                                    ...form,
+                                    selectedRepairs: selected
+                                      ? form.selectedRepairs.filter((t) => t !== option)
+                                      : [...form.selectedRepairs, option]
+                                  });
+                                }}
+                                className={`text-left text-[11px] p-2 rounded-lg border transition-all flex items-center justify-between ${
+                                  selected
+                                    ? "bg-primary/10 border-primary text-primary font-medium"
+                                    : "bg-background border-border text-muted-foreground hover:bg-muted/30"
+                                }`}
+                              >
+                                <span>{option}</span>
+                                {selected && <span className="text-primary text-[10px]">✔</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <Button type="submit" className="w-full h-11 font-semibold" disabled={loading || !activeStoreId}>
-                    {loading ? "Salvando..." : "Cadastrar Aparelho"}
+                    {loading ? "Salvando..." : form.needsRepair ? "Cadastrar e Enviar para Reparo" : "Cadastrar Aparelho"}
                   </Button>
                 </form>
               </DialogContent>

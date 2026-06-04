@@ -89,7 +89,7 @@ export default function DeviceRepairModal({ product, isOpen, onClose, onSuccess 
         // 2. Fetch parts used in this repair
         const { data: itemsData, error: itemsError } = await (supabase
           .from("product_repair_items" as any)
-          .select(`*, products (name, brand, model)`) as any)
+          .select(`*`) as any)
           .eq("repair_id", repairData.id);
 
         if (itemsError) throw itemsError;
@@ -178,7 +178,8 @@ export default function DeviceRepairModal({ product, isOpen, onClose, onSuccess 
         .from("product_repair_items" as any)
         .insert({
           repair_id: activeRepair.id,
-          product_id: selectedPartId,
+          part_product_id: selectedPartId,
+          part_name: part.name,
           quantity: 1,
           unit_cost: part.cost_price
         });
@@ -447,14 +448,14 @@ export default function DeviceRepairModal({ product, isOpen, onClose, onSuccess 
                       {repairItems.map(item => (
                         <div key={item.id} className="flex items-center justify-between text-xs p-2.5 rounded-lg border border-border bg-background group">
                           <div>
-                            <p className="font-semibold text-foreground">{item.products?.name} {item.products?.brand}</p>
-                            <p className="text-[10px] text-muted-foreground">Modelo compatível: {item.products?.model} · Custo da Peça: {formatCurrency(item.unit_cost)}</p>
+                            <p className="font-semibold text-foreground">{item.part_name}</p>
+                            <p className="text-[10px] text-muted-foreground">Custo da Peça: {formatCurrency(item.unit_cost)}</p>
                           </div>
                           <Button 
                             variant="ghost" 
                             size="icon" 
                             className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                            onClick={() => handleRemovePart(item.id, item.product_id)}
+                            onClick={() => handleRemovePart(item.id, item.part_product_id)}
                             disabled={loading}
                           >
                             <Trash2 className="h-4 w-4" />
