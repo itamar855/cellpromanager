@@ -1917,6 +1917,89 @@ const Vendas = () => {
               </div>
             </div>
 
+            {/* Trade-in */}
+            <div className="flex items-center justify-between rounded-lg border border-border p-3">
+              <div className="flex items-center gap-2">
+                <Smartphone className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium">Aparelho na troca</p>
+                  <p className="text-[11px] text-muted-foreground">Cliente entrega como parte do pagamento</p>
+                </div>
+              </div>
+              <Switch
+                checked={editForm.has_trade_in}
+                onCheckedChange={v => setEditForm({ ...editForm, has_trade_in: v })}
+              />
+            </div>
+
+            {editForm.has_trade_in && (
+              <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                <p className="text-xs font-semibold text-primary">Dados do aparelho na troca</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Nome</Label>
+                    <Input
+                      value={editForm.trade_in_device_name}
+                      onChange={e => setEditForm({ ...editForm, trade_in_device_name: e.target.value })}
+                      placeholder="iPhone 11 64GB"
+                      className="h-10"
+                      required={editForm.has_trade_in}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Marca</Label>
+                    <Select
+                      value={editForm.trade_in_device_brand}
+                      onValueChange={v => setEditForm({ ...editForm, trade_in_device_brand: v })}
+                    >
+                      <SelectTrigger className="h-10">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {["iPhone", "Samsung", "Xiaomi", "Outro"].map(b => (
+                          <SelectItem key={b} value={b}>
+                            {b}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Modelo</Label>
+                    <Input
+                      value={editForm.trade_in_device_model || ""}
+                      onChange={e => setEditForm({ ...editForm, trade_in_device_model: e.target.value })}
+                      placeholder="A2221"
+                      className="h-10"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">IMEI</Label>
+                    <Input
+                      value={editForm.trade_in_device_imei}
+                      onChange={e => setEditForm({ ...editForm, trade_in_device_imei: e.target.value })}
+                      placeholder="Opcional"
+                      className="h-10"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Valor da troca (R$)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={editForm.trade_in_value}
+                    onChange={e => setEditForm({ ...editForm, trade_in_value: e.target.value })}
+                    placeholder="1500.00"
+                    required={editForm.has_trade_in}
+                    className="h-10"
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">Parcelas no Cartão</Label>
