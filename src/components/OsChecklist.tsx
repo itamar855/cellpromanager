@@ -29,14 +29,26 @@ export type CheckItemStatus = "ok" | "defeito" | "na" | "nao_testado";
 
 export type ChecklistData = Record<string, CheckItemStatus>;
 
+export const VISUAL_CHECKLIST_ITEMS = [
+  "Display / LCD",
+  "Botão Home / Biometria",
+  "Botão Power",
+  "Botões de Volume",
+  "Carcaça Exterior",
+  "Vidro Traseiro",
+  "Parafusos do Fundo",
+  "Gaveta do Chip"
+];
+
 interface OsChecklistProps {
   data: ChecklistData;
   onChange: (newData: ChecklistData) => void;
   title?: string;
   readonly?: boolean;
+  deviceIsOff?: boolean;
 }
 
-export function OsChecklist({ data, onChange, title = "Checklist do Aparelho", readonly = false }: OsChecklistProps) {
+export function OsChecklist({ data, onChange, title = "Checklist do Aparelho", readonly = false, deviceIsOff = false }: OsChecklistProps) {
   const handleChange = (item: string, status: CheckItemStatus) => {
     if (readonly) return;
     onChange({ ...data, [item]: status });
@@ -84,12 +96,19 @@ export function OsChecklist({ data, onChange, title = "Checklist do Aparelho", r
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {CHECKLIST_ITEMS.map((item) => {
             const value = data[item] || "nao_testado";
+            const isVisual = VISUAL_CHECKLIST_ITEMS.includes(item);
+            const isFieldDisabled = readonly || (deviceIsOff && !isVisual);
+
             return (
-              <div key={item} className="space-y-1.5">
-                <Label className="text-[10px] truncate max-w-full block" title={item}>
-                  {item}
+              <div key={item} className={`space-y-1.5 ${isFieldDisabled && !readonly ? "opacity-60" : ""}`}>
+                <Label className="text-[10px] truncate max-w-full block flex items-center gap-1" title={item}>
+                  {item} {deviceIsOff && !isVisual && <span className="text-[9px] text-muted-foreground">(Desligado)</span>}
                 </Label>
-                <Select value={value} onValueChange={(val) => handleChange(item, val as CheckItemStatus)}>
+                <Select 
+                  value={value} 
+                  onValueChange={(val) => handleChange(item, val as CheckItemStatus)}
+                  disabled={isFieldDisabled}
+                >
                   <SelectTrigger className={`h-8 text-xs ${getStatusColor(value)}`}>
                     <SelectValue />
                   </SelectTrigger>

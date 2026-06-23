@@ -1490,6 +1490,7 @@ export type Database = {
           device_imei: string | null
           device_model: string
           device_password: string | null
+          device_is_off: boolean | null
           entry_checklist: Json | null
           estimated_completion: string | null
           estimated_price: number | null
@@ -1523,6 +1524,7 @@ export type Database = {
           device_imei?: string | null
           device_model: string
           device_password?: string | null
+          device_is_off?: boolean | null
           entry_checklist?: Json | null
           estimated_completion?: string | null
           estimated_price?: number | null
@@ -1556,6 +1558,7 @@ export type Database = {
           device_imei?: string | null
           device_model?: string
           device_password?: string | null
+          device_is_off?: boolean | null
           entry_checklist?: Json | null
           estimated_completion?: string | null
           estimated_price?: number | null

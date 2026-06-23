@@ -24,7 +24,8 @@ import {
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { KanbanBoard } from "@/components/KanbanBoard";
-import { OsChecklist, ChecklistData } from "@/components/OsChecklist";
+import { OsChecklist, ChecklistData, CHECKLIST_ITEMS, VISUAL_CHECKLIST_ITEMS } from "@/components/OsChecklist";
+import { Checkbox } from "@/components/ui/checkbox";
 import { OsPhotoGallery } from "@/components/OsPhotoGallery";
 import { OsParts } from "@/components/OsParts";
 import { triggerWebhook } from "@/utils/webhookSender";
@@ -244,6 +245,19 @@ const generateOSPdf = async (order: any, store: any, techName: string, publicUrl
       doc.text(String(order.device_password), M + 7, y + 8.5);
       y += 15;
     }
+    if (order.device_is_off) {
+      divider();
+      doc.setFillColor(254, 242, 242);
+      doc.rect(M + 3, y - 1, CW - 6, 11, "F");
+      doc.setDrawColor(220, 38, 38);
+      doc.setLineWidth(0.4);
+      doc.rect(M + 3, y - 1, CW - 6, 11, "S");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(220, 38, 38);
+      doc.text("ATENCAO: APARELHO DEU ENTRADA DESLIGADO", M + 7, y + 3);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(120, 50, 50);
+      doc.text("Nao temos como testar seus perifericos e afirmar que estao em perfeito funcionamento.", M + 7, y + 7.5);
+      y += 14;
+    }
     if (order.device_condition) { divider(); fullField("Condicao Fisica", order.device_condition); }
   });
 
@@ -378,6 +392,10 @@ const generateThermalPdf = async (order: any, store: any, techName: string, publ
   if (order.customer_phone) textL("Tel", order.customer_phone);
   line();
   textL("Aparelho", `${order.device_brand} ${order.device_model}`);
+  if (order.device_is_off) {
+    textC("ALERTA: APARELHO RECEBIDO DESLIGADO", 7, true);
+    textC("Nao testamos perifericos.", 7);
+  }
   textL("Defeito", order.reported_defect);
   textL("Serviço", order.requested_service);
   if (order.final_price) textL("Valor", formatCurrency(Number(order.final_price)));
@@ -429,6 +447,7 @@ const OrdensServico = () => {
 
   const [passwordType, setPasswordType] = useState<"text" | "pattern">("text");
   const [patternImageData, setPatternImageData] = useState<string>("");
+  const [deviceOffAgreed, setDeviceOffAgreed] = useState(false);
 
   const [form, setForm] = useState({
     customer_name: "", customer_phone: "", customer_cpf: "",
@@ -438,6 +457,7 @@ const OrdensServico = () => {
     store_id: "", estimated_price: "", estimated_completion: "",
     technician_id: "", terms_accepted: false, internal_notes: "",
     entry_checklist: {} as ChecklistData,
+    device_is_off: false,
   });
 
   const fetchData = async () => {
@@ -481,6 +501,29 @@ const OrdensServico = () => {
 
   const getPublicUrl = (orderId: string) => `${window.location.origin}/os/${orderId}`;
 
+  const handleDeviceOffChange = (checked: boolean) => {
+    setForm(prev => {
+      const updatedChecklist = { ...prev.entry_checklist };
+      
+      CHECKLIST_ITEMS.forEach(item => {
+        const isVisual = VISUAL_CHECKLIST_ITEMS.includes(item);
+        if (!isVisual) {
+          updatedChecklist[item] = checked ? "na" : "nao_testado";
+        }
+      });
+
+      return {
+        ...prev,
+        device_is_off: checked,
+        entry_checklist: updatedChecklist
+      };
+    });
+
+    if (!checked) {
+      setDeviceOffAgreed(false);
+    }
+  };
+
   const resetForm = () => {
     setForm({
       customer_name: "", customer_phone: "", customer_cpf: "",
@@ -490,13 +533,21 @@ const OrdensServico = () => {
       store_id: "", estimated_price: "", estimated_completion: "",
       technician_id: "", terms_accepted: false, internal_notes: "",
       entry_checklist: {} as ChecklistData,
+      device_is_off: false,
     });
     setSignatureData("");
+    setDeviceOffAgreed(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+
+    if (form.device_is_off && !deviceOffAgreed) {
+      toast.error("O cliente deve concordar com o termo de entrada de aparelho desligado!");
+      return;
+    }
+
     setLoading(true);
 
     const storeIdToUse = activeStoreId === "all" ? form.store_id || stores[0]?.id : activeStoreId;
@@ -536,6 +587,7 @@ const OrdensServico = () => {
       technician_id: form.technician_id || null,
       estimated_price: form.estimated_price ? parseFloat(form.estimated_price) : 0,
       estimated_completion: form.estimated_completion || null,
+      device_is_off: form.device_is_off,
       entry_checklist: form.entry_checklist,
       terms_accepted: form.terms_accepted,
       terms_text: TERMS_TEXT,
@@ -919,6 +971,21 @@ const OrdensServico = () => {
                     <Input value={form.device_accessories} onChange={(e) => setForm(prev => ({ ...prev, device_accessories: e.target.value }))} placeholder="Carregador, capa" className="h-10" />
                   </div>
                 </div>
+                <div className="flex items-center justify-between rounded-lg border border-red-500/20 bg-red-500/5 p-3 my-2">
+                  <div className="space-y-0.5 max-w-[85%]">
+                    <Label className="text-xs text-red-500 font-bold block cursor-pointer" htmlFor="device-is-off-switch">
+                      Aparelho está dando entrada Desligado
+                    </Label>
+                    <span className="text-[10px] text-muted-foreground block">
+                      Não temos como testar seus periféricos e afirmar que estão em perfeito funcionamento.
+                    </span>
+                  </div>
+                  <Switch 
+                    id="device-is-off-switch"
+                    checked={form.device_is_off}
+                    onCheckedChange={(checked) => handleDeviceOffChange(checked)}
+                  />
+                </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Condição Física</Label>
                   <Textarea value={form.device_condition} onChange={(e) => setForm(prev => ({ ...prev, device_condition: e.target.value }))} placeholder="Descreva avarias existentes" className="min-h-[60px]" />
@@ -993,6 +1060,7 @@ const OrdensServico = () => {
                 title="Checklist de Entrada"
                 data={form.entry_checklist}
                 onChange={(d) => setForm(prev => ({ ...prev, entry_checklist: d }))}
+                deviceIsOff={form.device_is_off}
               />
 
               {/* Termos */}
@@ -1006,6 +1074,25 @@ const OrdensServico = () => {
                   <Label className="text-xs">Cliente aceita os termos acima</Label>
                 </div>
               </div>
+
+              {form.device_is_off && (
+                <div className="flex items-start gap-2.5 rounded-lg border border-red-500/25 bg-red-500/5 p-3.5 my-2">
+                  <Checkbox 
+                    id="device-off-agreement"
+                    checked={deviceOffAgreed} 
+                    onCheckedChange={(v) => setDeviceOffAgreed(!!v)} 
+                    className="mt-0.5 border-red-500/50 data-[state=checked]:bg-red-500 data-[state=checked]:text-white"
+                  />
+                  <div className="space-y-1">
+                    <Label htmlFor="device-off-agreement" className="text-xs leading-normal font-semibold text-red-500 cursor-pointer block">
+                      Declaração de Aparelho Desligado *
+                    </Label>
+                    <span className="text-[10.5px] text-muted-foreground block leading-relaxed">
+                      Concordo e declaro estar ciente de que o <strong>Aparelho está dando entrada Desligado (Não temos como testar seus periféricos e afirmar que estão em perfeito funcionamento)</strong>.
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <SignatureCanvas onSave={setSignatureData} initialData={signatureData} />
 
@@ -1187,6 +1274,14 @@ const OrdensServico = () => {
                   {detailOrder.device_color && <p>Cor: {detailOrder.device_color}</p>}
                   {detailOrder.device_condition && <p>Condição: {detailOrder.device_condition}</p>}
                   {detailOrder.device_accessories && <p>Acessórios: {detailOrder.device_accessories}</p>}
+                  {detailOrder.device_is_off && (
+                    <div className="mt-2 p-2.5 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg text-[10px] font-bold leading-normal">
+                      ⚠️ APARELHO DEU ENTRADA DESLIGADO
+                      <span className="block font-medium text-muted-foreground mt-0.5">
+                        Não foi possível testar os periféricos e afirmar que estão em perfeito funcionamento.
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Serviço */}
@@ -1254,9 +1349,15 @@ const OrdensServico = () => {
                     <p className="text-muted-foreground leading-relaxed whitespace-pre-line">{TERMS_TEXT}</p>
                   </div>
                   {detailOrder.terms_accepted && (
-                    <div className="flex items-center gap-1 mt-2 text-primary">
-                      <CheckCircle2 className="h-3 w-3" />
-                      <span className="text-[10px]">Cliente aceitou os termos</span>
+                    <div className="flex items-center gap-1 mt-2 text-primary font-medium">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                      <span className="text-[10px]">Cliente aceitou os termos de serviço</span>
+                    </div>
+                  )}
+                  {detailOrder.device_is_off && (
+                    <div className="flex items-center gap-1 mt-1 text-red-500 font-bold">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-red-500" />
+                      <span className="text-[10px]">Cliente ciente: Aparelho entrou Desligado (sem teste de periféricos)</span>
                     </div>
                   )}
                 </div>

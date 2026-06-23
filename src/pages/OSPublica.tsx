@@ -216,6 +216,15 @@ export default function OSPublica() {
                   <p className="text-xs text-muted-foreground font-semibold uppercase">Defeito Reportado</p>
                   <p className="text-sm font-medium mt-1">"{order.reported_defect}"</p>
                </div>
+
+               {order.device_is_off && (
+                 <div className="mt-3 p-3 bg-red-500/10 text-red-500 border border-red-500/20 rounded-xl text-xs font-bold leading-normal">
+                   ⚠️ APARELHO RECEBIDO DESLIGADO
+                   <span className="block font-medium text-muted-foreground mt-0.5 text-[11.5px] leading-relaxed">
+                     Não temos como testar seus periféricos e afirmar que estão em perfeito funcionamento.
+                   </span>
+                 </div>
+               )}
             </CardContent>
           </Card>
 
