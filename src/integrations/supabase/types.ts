@@ -1018,6 +1018,7 @@ export type Database = {
           model: string
           name: string
           notes: string | null
+          defects: string[] | null
           product_type: string | null
           sale_price: number | null
           serial_number: string | null
@@ -1039,6 +1040,7 @@ export type Database = {
           model: string
           name: string
           notes?: string | null
+          defects?: string[] | null
           product_type?: string | null
           sale_price?: number | null
           serial_number?: string | null
@@ -1060,6 +1062,7 @@ export type Database = {
           model?: string
           name?: string
           notes?: string | null
+          defects?: string[] | null
           product_type?: string | null
           sale_price?: number | null
           serial_number?: string | null

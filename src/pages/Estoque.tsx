@@ -31,6 +31,21 @@ const REPAIR_OPTIONS = [
   "Outro Reparo"
 ];
 
+const PREDEFINED_DEFECTS = [
+  "Câmera Frontal com defeito",
+  "Câmera Traseira com defeito",
+  "Tela com manchas/riscos",
+  "Touch travando",
+  "Bateria viciada",
+  "Não carrega",
+  "Wi-Fi/Bluetooth com falha",
+  "Alto-falante com chiado",
+  "Face ID/Touch ID com defeito",
+  "Botão Power/Volume com defeito",
+  "Vidro traseiro quebrado",
+  "Carcaça amassada/riscada"
+];
+
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
@@ -82,6 +97,10 @@ const Estoque = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [repairModalOpen, setRepairModalOpen] = useState(false);
   const [repairProduct, setRepairProduct] = useState<any>(null);
+  const [defectsDialogOpen, setDefectsDialogOpen] = useState(false);
+  const [defectsProduct, setDefectsProduct] = useState<Tables<"products"> | null>(null);
+  const [defectsList, setDefectsList] = useState<string[]>([]);
+  const [customDefect, setCustomDefect] = useState("");
 
   const [form, setForm] = useState({
     name: "", brand: "iPhone" as string, model: "", imei: "",
@@ -406,6 +425,45 @@ const Estoque = () => {
     setLoading(false);
   };
 
+  const handleSaveDefects = async () => {
+    if (!defectsProduct || !user) return;
+    setLoading(true);
+
+    const oldDefects = defectsProduct.defects || [];
+    const newDefects = defectsList;
+
+    const { error } = await supabase
+      .from("products")
+      .update({ defects: newDefects } as any)
+      .eq("id", defectsProduct.id);
+
+    if (error) {
+      toast.error("Erro ao salvar defeitos: " + error.message);
+    } else {
+      await supabase.from("product_history" as any).insert({
+        product_id: defectsProduct.id,
+        action: "Atualização de Defeitos",
+        notes: `Defeitos atualizados: [${oldDefects.join(", ")}] → [${newDefects.join(", ")}]`,
+        created_by: user.id,
+      });
+
+      await logAction(
+        "UPDATE_RECORD",
+        "products",
+        defectsProduct.id,
+        defectsProduct,
+        { defects: newDefects, justification: "Atualização de defeitos do aparelho" },
+        defectsProduct.store_id
+      );
+
+      toast.success("Defeitos atualizados com sucesso!");
+      setDefectsDialogOpen(false);
+      setDefectsProduct(null);
+      fetchData();
+    }
+    setLoading(false);
+  };
+
   const handleDeleteProduct = async (id: string, reason: string) => {
     const productToDelete = products.find(p => p.id === id);
     if (!productToDelete) return;
@@ -690,6 +748,15 @@ const Estoque = () => {
                               📝 {p.notes}
                             </p>
                           )}
+                          {p.defects && p.defects.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {p.defects.map((def: string, idx: number) => (
+                                <Badge key={idx} variant="outline" className="text-[10px] bg-destructive/10 text-destructive border-destructive/20 font-medium">
+                                  ⚠️ {def}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
                           {activeStoreId === "all" && (
                             <Badge variant="outline" className="text-[9px] mt-1 bg-muted/50 border-primary/20 text-primary">
                               {storeMap.get(p.store_id) || "—"}
@@ -719,6 +786,22 @@ const Estoque = () => {
                             <Button className="h-7 text-[10px] gap-1 bg-transparent text-muted-foreground hover:bg-muted"
                               onClick={() => { setRepairProduct(p as any); setRepairModalOpen(true); }}>
                               <Wrench className="h-3.5 w-3.5" /> Reparo
+                            </Button>
+                          )}
+                          {(p.status === "in_stock" || p.status === "repair") && (
+                            <Button className="h-7 text-[10px] gap-1 bg-transparent text-muted-foreground hover:bg-muted"
+                              onClick={() => {
+                                setDefectsProduct(p);
+                                setDefectsList(p.defects || []);
+                                setCustomDefect("");
+                                setDefectsDialogOpen(true);
+                              }}>
+                              <AlertTriangle className="h-3.5 w-3.5" /> Defeitos
+                              {p.defects && p.defects.length > 0 && (
+                                <span className="ml-0.5 px-1 py-0.5 text-[8px] bg-destructive text-destructive-foreground rounded-full leading-none font-bold">
+                                  {p.defects.length}
+                                </span>
+                              )}
                             </Button>
                           )}
                           <div className="flex gap-1 mt-1">
@@ -885,6 +968,15 @@ const Estoque = () => {
                             {p.brand} · {p.model} {p.capacity && `· ${p.capacity}`} {p.color && `· ${p.color}`} · {conditionLabel}
                             {p.imei && ` · IMEI: ${p.imei}`}
                           </p>
+                          {p.defects && p.defects.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {p.defects.map((def: string, idx: number) => (
+                                <Badge key={idx} variant="outline" className="text-[10px] bg-destructive/10 text-destructive border-destructive/20 font-medium">
+                                  ⚠️ {def}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
                           {activeStoreId === "all" && (
                             <Badge variant="outline" className="text-[9px] mt-1 bg-muted/50 border-primary/20 text-primary">
                               {storeMap.get(p.store_id) || "—"}
@@ -901,6 +993,20 @@ const Estoque = () => {
                             onClick={() => { setRepairProduct(p as any); setRepairModalOpen(true); }}
                           >
                             <Wrench className="h-3.5 w-3.5" /> Gerenciar Reparo
+                          </Button>
+                          <Button className="h-7 text-[10px] gap-1 bg-transparent text-muted-foreground hover:bg-muted"
+                            onClick={() => {
+                              setDefectsProduct(p);
+                              setDefectsList(p.defects || []);
+                              setCustomDefect("");
+                              setDefectsDialogOpen(true);
+                            }}>
+                            <AlertTriangle className="h-3.5 w-3.5" /> Defeitos
+                            {p.defects && p.defects.length > 0 && (
+                              <span className="ml-0.5 px-1 py-0.5 text-[8px] bg-destructive text-destructive-foreground rounded-full leading-none font-bold">
+                                {p.defects.length}
+                              </span>
+                            )}
                           </Button>
                           <Button className="h-7 text-[10px] gap-1 bg-transparent text-muted-foreground hover:bg-muted" onClick={() => loadHistory(p)}>
                             Ver Histórico
@@ -1173,6 +1279,117 @@ const Estoque = () => {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+      {/* Defects Dialog */}
+      <Dialog open={defectsDialogOpen} onOpenChange={setDefectsDialogOpen}>
+        <DialogContent className="max-w-md max-h-[85dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" /> Gerenciar Defeitos do Aparelho
+            </DialogTitle>
+          </DialogHeader>
+          {defectsProduct && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-muted/50 p-3 text-xs space-y-1">
+                <p className="font-semibold">{defectsProduct.name}</p>
+                <p className="text-muted-foreground">{defectsProduct.brand} · {defectsProduct.model} {defectsProduct.capacity && `· ${defectsProduct.capacity}`}</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold">Defeitos Ativos</Label>
+                {defectsList.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">Nenhum defeito registrado.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {defectsList.map((def, idx) => (
+                      <Badge key={idx} variant="destructive" className="text-xs gap-1 py-1 px-2.5 bg-destructive hover:bg-destructive">
+                        {def}
+                        <button type="button" className="ml-1 hover:text-white/80 font-bold" onClick={() => {
+                          setDefectsList(defectsList.filter((_, i) => i !== idx));
+                        }}>
+                          ×
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <hr className="border-border/50" />
+
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold">Defeitos Comuns (Clique para adicionar)</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {PREDEFINED_DEFECTS.map((def) => {
+                    const active = defectsList.includes(def);
+                    return (
+                      <button
+                        key={def}
+                        type="button"
+                        disabled={active}
+                        onClick={() => setDefectsList([...defectsList, def])}
+                        className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                          active
+                            ? "bg-muted text-muted-foreground border-border cursor-not-allowed"
+                            : "bg-background text-foreground border-border hover:bg-muted"
+                        }`}
+                      >
+                        {def}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <hr className="border-border/50" />
+
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold">Outro Defeito (Personalizado)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={customDefect}
+                    onChange={(e) => setCustomDefect(e.target.value)}
+                    placeholder="Ex: Câmera com foco ruim, traseira trincada..."
+                    className="h-9 text-xs"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (customDefect.trim()) {
+                          if (!defectsList.includes(customDefect.trim())) {
+                            setDefectsList([...defectsList, customDefect.trim()]);
+                          }
+                          setCustomDefect("");
+                        }
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (customDefect.trim()) {
+                        if (!defectsList.includes(customDefect.trim())) {
+                          setDefectsList([...defectsList, customDefect.trim()]);
+                        }
+                        setCustomDefect("");
+                      }
+                    }}
+                    className="h-9 px-3 text-xs"
+                  >
+                    Adicionar
+                  </Button>
+                </div>
+              </div>
+
+              <Button
+                onClick={handleSaveDefects}
+                className="w-full h-10 mt-2 font-semibold"
+                disabled={loading}
+              >
+                {loading ? "Salvando..." : "Salvar Alterações"}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
       <DeviceRepairModal
