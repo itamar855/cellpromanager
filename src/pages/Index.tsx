@@ -63,7 +63,7 @@ const Dashboard = () => {
     totalSalesRevenue: 0, totalProfit: 0,
     expensesPJ: 0, expensesPF: 0, storeCount: 0, openOS: 0, salesCount: 0,
     totalAccessories: 0, totalLeads: 0,
-    faturamentoBruto: 0, faturamentoLiquido: 0, custoPecasOS: 0,
+    faturamentoBruto: 0, faturamentoLiquido: 0, custoPecasOS: 0, lucroServicos: 0,
   });
   const [storeData, setStoreData] = useState<{ name: string; aparelhos: number; acessorios: number; investido: number }[]>([]);
   const [dailySales, setDailySales] = useState<{ date: string; total: number }[]>([]);
@@ -178,6 +178,13 @@ const Dashboard = () => {
       .filter((item: any) => activeOSIds.has(item.service_order_id))
       .reduce((sum: number, item: any) => sum + (Number(item.unit_cost) * Number(item.quantity || 1)), 0);
 
+    // Lucro de serviços = receita das OS entregues - custo das peças nessas OS
+    const deliveredOSIds = new Set(osDelivered.map((o: any) => o.id));
+    const custoPecasDelivered = serviceOrderItems
+      .filter((item: any) => deliveredOSIds.has(item.service_order_id))
+      .reduce((sum: number, item: any) => sum + (Number(item.unit_cost) * Number(item.quantity || 1)), 0);
+    const lucroServicos = receitaOS - custoPecasDelivered;
+
     // Despesas PJ adicionais (que não sejam compra de acessório já contabilizado no CMV)
     const despesasPJAdicionais = transactions.filter((t: any) => t.type === "expense_pj" && t.category !== "acessorio").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
     const despesasPFTotal = transactions.filter((t: any) => t.type === "expense_pf" || t.type === "pro_labore").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
@@ -194,6 +201,7 @@ const Dashboard = () => {
       faturamentoBruto,
       faturamentoLiquido,
       custoPecasOS,
+      lucroServicos,
     });
 
     if (isAdmin) {
@@ -377,7 +385,7 @@ const Dashboard = () => {
       )}
 
       {canSeeFinancials && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
           <Card className="border-border/50 shadow-lg shadow-black/10 bg-gradient-to-br from-card to-card/50">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
@@ -406,6 +414,16 @@ const Dashboard = () => {
               </div>
               <p className="font-display text-2xl font-bold text-orange-400">{formatCurrency(stats.custoPecasOS)}</p>
               <p className="text-[10px] text-muted-foreground mt-1">Custo de peças em OS realizadas</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/50 shadow-lg shadow-black/10 bg-gradient-to-br from-card to-card/50">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-semibold">Lucro de Serviços</p>
+                <Wrench className={`h-4 w-4 ${stats.lucroServicos >= 0 ? "text-violet-400" : "text-destructive"}`} />
+              </div>
+              <p className={`font-display text-2xl font-bold ${stats.lucroServicos >= 0 ? "text-violet-400" : "text-destructive"}`}>{formatCurrency(stats.lucroServicos)}</p>
+              <p className="text-[10px] text-muted-foreground mt-1">Receita de OS entregues − custo das peças</p>
             </CardContent>
           </Card>
         </div>
