@@ -122,6 +122,12 @@ const Vendas = () => {
   const isSubmitting = useRef(false);
   const isPdvSubmitting = useRef(false);
 
+  // Estado para edição de venda PDV (acessórios)
+  const [editPdvSale, setEditPdvSale] = useState<any | null>(null);
+  const [editPdvForm, setEditPdvForm] = useState({
+    description: "", amount: "", retro_date: "",
+  });
+
   const [pdvPayment, setPdvPayment] = useState({ cash: "", card: "", pix: "", customer: "", store_id: "" });
 
   const [form, setForm] = useState({
@@ -798,6 +804,37 @@ const Vendas = () => {
     }
   };
 
+  // ── Salvar edição de venda PDV (acessório) ──────────────────────────────
+  const handleSavePdvEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editPdvSale || !user) return;
+    setLoading(true);
+    try {
+      const amount = parseFloat(editPdvForm.amount) || 0;
+      if (amount <= 0) { toast.error("O valor deve ser maior que zero."); setLoading(false); return; }
+      const retroIso = editPdvForm.retro_date
+        ? new Date(editPdvForm.retro_date + "T12:00:00").toISOString()
+        : undefined;
+      const { error } = await supabase
+        .from("transactions")
+        .update({
+          amount,
+          description: editPdvForm.description || editPdvSale.description,
+          ...(retroIso ? { created_at: retroIso } : {}),
+        })
+        .eq("id", editPdvSale.id);
+      if (error) throw error;
+      logAction("UPDATE_RECORD", "transactions", editPdvSale.id, editPdvSale, editPdvForm, editPdvSale.store_id);
+      toast.success("Venda de acessório atualizada!");
+      setEditPdvSale(null);
+      fetchData();
+    } catch (err: any) {
+      toast.error("Erro ao atualizar: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ── Gerar nota ────────────────────────────────────────────────────────────
   const handleGerarNota = async (sale: Sale, whatsapp = false) => {
     setNotaLoading(sale.id);
@@ -1451,6 +1488,23 @@ const Vendas = () => {
                     )}
                   </div>
                   <p className="text-[10px] text-muted-foreground mt-1">{new Date(tx.created_at).toLocaleDateString("pt-BR")}</p>
+                  {(userRole === "admin" || userRole === "gerente") && (
+                    <div className="flex gap-2 mt-2">
+                      <Button
+                        className="h-7 px-2 text-[10px] gap-1 border border-yellow-500/40 bg-yellow-500/5 text-yellow-600 dark:text-yellow-500 hover:bg-yellow-500/10 shadow-none"
+                        onClick={() => {
+                          setEditPdvSale(tx);
+                          setEditPdvForm({
+                            description: tx.description || "",
+                            amount: String(tx.amount || ""),
+                            retro_date: new Date(tx.created_at).toISOString().split("T")[0],
+                          });
+                        }}
+                      >
+                        <Pencil className="h-3 w-3" />Editar
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <p className="font-display font-bold text-sm text-primary shrink-0">{formatCurrency(Number(tx.amount))}</p>
               </div>
@@ -1499,8 +1553,8 @@ const Vendas = () => {
                         onClick={() => setSelectedViewSale(sale)}>
                         <Eye className="h-3 w-3" />Ver detalhes
                       </Button>
-                      {/* Admin e vendedor têm acesso à edição da venda (com auditoria detalhada) */}
-                      {(userRole === "admin" || userRole === "vendedor") && (
+                      {/* Admin, gerente e vendedor têm acesso à edição da venda (com auditoria detalhada) */}
+                      {(userRole === "admin" || userRole === "gerente" || userRole === "vendedor") && (
                         <Button className="h-7 px-2 text-[10px] gap-1 border border-yellow-500/40 bg-yellow-500/5 text-yellow-600 dark:text-yellow-500 hover:bg-yellow-500/10 shadow-none"
                           onClick={() => handleOpenEdit(sale)}>
                           <Pencil className="h-3 w-3" />Editar
@@ -1967,6 +2021,28 @@ const Vendas = () => {
               </div>
             </div>
 
+            {/* Resumo de pagamento em tempo real */}
+            {(() => {
+              const _net = Math.max(0, (parseFloat(editForm.sale_price) || 0) - (parseFloat(editForm.discount) || 0));
+              const _cash = parseFloat(editForm.payment_cash) || 0;
+              const _card = parseFloat(editForm.payment_card) || 0;
+              const _pix = parseFloat(editForm.payment_pix) || 0;
+              const _tradeIn = editForm.has_trade_in ? (parseFloat(editForm.trade_in_value) || 0) : 0;
+              const _total = _cash + _card + _pix + _tradeIn;
+              const _rem = _net - _total;
+              return (
+                <div className="rounded-lg bg-muted/50 p-3 text-xs space-y-1">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Valor líquido</span><span className="font-semibold">{formatCurrency(_net)}</span></div>
+                  {_tradeIn > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Trade-in</span><span className="font-semibold text-primary">-{formatCurrency(_tradeIn)}</span></div>}
+                  <div className="flex justify-between"><span className="text-muted-foreground">Total pago (dinheiro + cartão + PIX)</span><span className="font-semibold">{formatCurrency(_cash + _card + _pix)}</span></div>
+                  <div className="border-t border-border pt-1 flex justify-between">
+                    <span className="font-medium">Restante</span>
+                    <span className={`font-bold ${Math.abs(_rem) < 0.01 ? "text-primary" : "text-destructive"}`}>{formatCurrency(_rem)}</span>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Trade-in */}
             <div className="flex items-center justify-between rounded-lg border border-border p-3">
               <div className="flex items-center gap-2">
@@ -2136,6 +2212,59 @@ const Vendas = () => {
                 Cancelar
               </Button>
               <Button type="submit" className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90" disabled={loading}>
+                {loading ? "Salvando..." : "Salvar Alterações"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit PDV Sale Dialog */}
+      <Dialog open={!!editPdvSale} onOpenChange={open => { if (!open) setEditPdvSale(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2 text-yellow-500">
+              <Zap className="h-4 w-4" /> Editar Venda PDV
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSavePdvEdit} className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Descrição</Label>
+              <Input
+                value={editPdvForm.description}
+                onChange={e => setEditPdvForm({ ...editPdvForm, description: e.target.value })}
+                placeholder="Ex: PDV: 2x Capinha..."
+                className="h-10"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Valor Total (R$)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={editPdvForm.amount}
+                onChange={e => setEditPdvForm({ ...editPdvForm, amount: e.target.value })}
+                placeholder="0.00"
+                required
+                className="h-10 font-medium"
+              />
+            </div>
+            <div className="border border-amber-500/30 rounded-xl p-3 bg-amber-500/5 space-y-1.5">
+              <Label className="text-xs font-bold text-amber-600 flex items-center gap-1.5">
+                <CalendarDays className="h-3.5 w-3.5" />
+                Data da Venda (Retroativa)
+              </Label>
+              <p className="text-[11px] text-muted-foreground">Altere a data caso o lançamento precise ser corrigido.</p>
+              <Input
+                type="date"
+                value={editPdvForm.retro_date}
+                onChange={e => setEditPdvForm({ ...editPdvForm, retro_date: e.target.value })}
+                className="h-10 border-amber-500/30"
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setEditPdvSale(null)}>Cancelar</Button>
+              <Button type="submit" className="flex-1" disabled={loading}>
                 {loading ? "Salvando..." : "Salvar Alterações"}
               </Button>
             </div>
