@@ -125,7 +125,7 @@ const Vendas = () => {
   // Estado para edição de venda PDV (acessórios)
   const [editPdvSale, setEditPdvSale] = useState<any | null>(null);
   const [editPdvForm, setEditPdvForm] = useState({
-    description: "", amount: "", retro_date: "",
+    description: "", amount: "", payment_cash: "", payment_card: "", payment_pix: "", retro_date: "",
   });
 
   const [pdvPayment, setPdvPayment] = useState({ cash: "", card: "", pix: "", customer: "", store_id: "" });
@@ -804,28 +804,82 @@ const Vendas = () => {
     }
   };
 
-  // ── Salvar edição de venda PDV (acessório) ──────────────────────────────
+  // ── Editar venda PDV (acessório) ──────────────────────────────────────────
+  const handleOpenPdvEdit = async (tx: any) => {
+    setLoading(true);
+    let cash = 0, card = 0, pix = 0;
+    try {
+      const { data: entries } = await supabase
+        .from("cash_entries")
+        .select("amount, payment_method")
+        .eq("description", tx.description);
+      
+      if (entries) {
+        entries.forEach(e => {
+          if (e.payment_method === "dinheiro") cash += Number(e.amount);
+          if (e.payment_method === "cartao_credito") card += Number(e.amount);
+          if (e.payment_method === "pix") pix += Number(e.amount);
+        });
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    
+    setEditPdvSale(tx);
+    setEditPdvForm({
+      description: tx.description || "",
+      amount: String(tx.amount || ""),
+      payment_cash: cash > 0 ? String(cash) : "",
+      payment_card: card > 0 ? String(card) : "",
+      payment_pix: pix > 0 ? String(pix) : "",
+      retro_date: new Date(tx.created_at).toISOString().split("T")[0],
+    });
+    setLoading(false);
+  };
+
   const handleSavePdvEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editPdvSale || !user) return;
+    
+    const amount = parseFloat(editPdvForm.amount) || 0;
+    const cash = parseFloat(editPdvForm.payment_cash) || 0;
+    const card = parseFloat(editPdvForm.payment_card) || 0;
+    const pix = parseFloat(editPdvForm.payment_pix) || 0;
+    const totalPayments = cash + card + pix;
+
+    if (amount <= 0) { toast.error("O valor deve ser maior que zero."); return; }
+    if (Math.abs(amount - totalPayments) > 0.01) { toast.error("A soma dos pagamentos deve ser igual ao valor total!"); return; }
+
     setLoading(true);
     try {
-      const amount = parseFloat(editPdvForm.amount) || 0;
-      if (amount <= 0) { toast.error("O valor deve ser maior que zero."); setLoading(false); return; }
       const retroIso = editPdvForm.retro_date
         ? new Date(editPdvForm.retro_date + "T12:00:00").toISOString()
         : undefined;
+      const newDesc = editPdvForm.description || editPdvSale.description;
+
       const { error } = await supabase
         .from("transactions")
         .update({
           amount,
-          description: editPdvForm.description || editPdvSale.description,
+          description: newDesc,
           ...(retroIso ? { created_at: retroIso } : {}),
         })
         .eq("id", editPdvSale.id);
       if (error) throw error;
+
+      // Conciliação de caixa (deleta os lançamentos baseados na descrição antiga e recria)
+      await supabase.from("cash_entries").delete().eq("description", editPdvSale.description);
+      
+      if (cash === 0 && card === 0 && pix === 0) {
+        await createPendingCashEntry(editPdvSale.store_id, user.id, amount, newDesc, "dinheiro", editPdvForm.retro_date);
+      } else {
+        if (cash > 0) await createPendingCashEntry(editPdvSale.store_id, user.id, cash, newDesc, "dinheiro", editPdvForm.retro_date);
+        if (card > 0) await createPendingCashEntry(editPdvSale.store_id, user.id, card, newDesc, "cartao_credito", editPdvForm.retro_date);
+        if (pix > 0) await createPendingCashEntry(editPdvSale.store_id, user.id, pix, newDesc, "pix", editPdvForm.retro_date);
+      }
+
       logAction("UPDATE_RECORD", "transactions", editPdvSale.id, editPdvSale, editPdvForm, editPdvSale.store_id);
-      toast.success("Venda de acessório atualizada!");
+      toast.success("Venda de acessório e caixa atualizados!");
       setEditPdvSale(null);
       fetchData();
     } catch (err: any) {
@@ -1492,14 +1546,7 @@ const Vendas = () => {
                     <div className="flex gap-2 mt-2">
                       <Button
                         className="h-7 px-2 text-[10px] gap-1 border border-yellow-500/40 bg-yellow-500/5 text-yellow-600 dark:text-yellow-500 hover:bg-yellow-500/10 shadow-none"
-                        onClick={() => {
-                          setEditPdvSale(tx);
-                          setEditPdvForm({
-                            description: tx.description || "",
-                            amount: String(tx.amount || ""),
-                            retro_date: new Date(tx.created_at).toISOString().split("T")[0],
-                          });
-                        }}
+                        onClick={() => handleOpenPdvEdit(tx)}
                       >
                         <Pencil className="h-3 w-3" />Editar
                       </Button>
@@ -2249,6 +2296,57 @@ const Vendas = () => {
                 className="h-10 font-medium"
               />
             </div>
+            
+            <div className="border-t border-border/60 pt-3">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Formas de Pagamento</span>
+              <div className="grid grid-cols-3 gap-3 mt-2">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-muted-foreground flex items-center gap-1"><Banknote className="h-3 w-3" /> Dinheiro</Label>
+                  <Input
+                    type="number" step="0.01"
+                    value={editPdvForm.payment_cash}
+                    onChange={e => setEditPdvForm({ ...editPdvForm, payment_cash: e.target.value })}
+                    placeholder="0.00" className="h-9"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-muted-foreground flex items-center gap-1"><CreditCard className="h-3 w-3" /> Cartão</Label>
+                  <Input
+                    type="number" step="0.01"
+                    value={editPdvForm.payment_card}
+                    onChange={e => setEditPdvForm({ ...editPdvForm, payment_card: e.target.value })}
+                    placeholder="0.00" className="h-9"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-muted-foreground flex items-center gap-1"><QrCode className="h-3 w-3" /> PIX</Label>
+                  <Input
+                    type="number" step="0.01"
+                    value={editPdvForm.payment_pix}
+                    onChange={e => setEditPdvForm({ ...editPdvForm, payment_pix: e.target.value })}
+                    placeholder="0.00" className="h-9"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {(() => {
+              const _net = parseFloat(editPdvForm.amount) || 0;
+              const _cash = parseFloat(editPdvForm.payment_cash) || 0;
+              const _card = parseFloat(editPdvForm.payment_card) || 0;
+              const _pix = parseFloat(editPdvForm.payment_pix) || 0;
+              const _rem = _net - (_cash + _card + _pix);
+              return (
+                <div className="rounded-lg bg-muted/50 p-3 text-xs space-y-1">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Valor Total</span><span className="font-semibold">{formatCurrency(_net)}</span></div>
+                  <div className="border-t border-border pt-1 flex justify-between">
+                    <span className="font-medium">Restante a informar</span>
+                    <span className={`font-bold ${Math.abs(_rem) < 0.01 ? "text-primary" : "text-destructive"}`}>{formatCurrency(_rem)}</span>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="border border-amber-500/30 rounded-xl p-3 bg-amber-500/5 space-y-1.5">
               <Label className="text-xs font-bold text-amber-600 flex items-center gap-1.5">
                 <CalendarDays className="h-3.5 w-3.5" />
