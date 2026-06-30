@@ -119,6 +119,8 @@ const Vendas = () => {
   const [showEditNewCustomerForm, setShowEditNewCustomerForm] = useState(false);
   const [editNewCustomerForm, setEditNewCustomerForm] = useState(emptyCustomerForm);
   const searchRef = useRef<HTMLDivElement>(null);
+  const isSubmitting = useRef(false);
+  const isPdvSubmitting = useRef(false);
 
   const [pdvPayment, setPdvPayment] = useState({ cash: "", card: "", pix: "", customer: "", store_id: "" });
 
@@ -357,159 +359,185 @@ const Vendas = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !selectedProduct) return;
+    if (loading || isSubmitting.current) return;
     if (salePriceAfterDiscount <= 0) {
       toast.error("O valor final da venda não pode ser R$ 0,00. Revise o desconto.");
       return;
     }
     if (Math.abs(remaining) > 0.01) { toast.error("A soma dos pagamentos deve ser igual ao valor de venda!"); return; }
+    
+    isSubmitting.current = true;
     setLoading(true);
 
-    // Salva/atualiza cliente se informado
-    let customerId = selectedCustomer?.id ?? null;
-    if (!selectedCustomer && customerSearch.trim()) {
-      const { data: existingCustomer } = await supabase.from("customers").select("*").ilike("name", customerSearch.trim()).maybeSingle();
-      if (existingCustomer) { customerId = existingCustomer.id; }
-    }
-
-    let tradeInProductId: string | null = null;
-    if (form.has_trade_in && form.trade_in_device_name) {
-      let existingTradeIn = null;
-
-      if (form.trade_in_device_imei) {
-        const { data: existingProduct } = await supabase
-          .from("products")
-          .select("*")
-          .eq("imei", form.trade_in_device_imei)
-          .maybeSingle();
-        existingTradeIn = existingProduct;
+    try {
+      // Salva/atualiza cliente se informado
+      let customerId = selectedCustomer?.id ?? null;
+      if (!selectedCustomer && customerSearch.trim()) {
+        const { data: existingCustomer } = await supabase.from("customers").select("*").ilike("name", customerSearch.trim()).maybeSingle();
+        if (existingCustomer) { customerId = existingCustomer.id; }
       }
 
-      if (existingTradeIn) {
-        const { data: updatedTip, error: tiErr } = await supabase
-          .from("products")
-          .update({
-            status: "in_stock",
-            cost_price: tradeInVal,
-            store_id: selectedProduct.store_id,
-            sale_price: null
-          })
-          .eq("id", existingTradeIn.id)
-          .select("id")
-          .maybeSingle();
+      let tradeInProductId: string | null = null;
+      if (form.has_trade_in && form.trade_in_device_name) {
+        let existingTradeIn = null;
 
-        if (tiErr) { toast.error(tiErr.message); setLoading(false); return; }
-        tradeInProductId = updatedTip?.id || existingTradeIn.id;
-      } else {
-        const { data: tip, error: tiErr } = await supabase.from("products").insert({
-          name: form.trade_in_device_name, brand: form.trade_in_device_brand,
-          model: form.trade_in_device_model || "N/A", imei: form.trade_in_device_imei || null,
-          cost_price: tradeInVal, store_id: selectedProduct.store_id,
-          created_by: user.id, status: "in_stock",
-        }).select("id").single();
-        if (tiErr) { toast.error(tiErr.message); setLoading(false); return; }
-        tradeInProductId = tip.id;
-      }
-    }
+        if (form.trade_in_device_imei) {
+          const { data: existingProduct } = await supabase
+            .from("products")
+            .select("*")
+            .eq("imei", form.trade_in_device_imei)
+            .maybeSingle();
+          existingTradeIn = existingProduct;
+        }
 
-    // 1. Baixa do produto do estoque (UPDATE direto - RLS desabilitada na tabela products)
-    const { data: updatedProduct, error: updateError } = await supabase
-      .from("products")
-      .update({ status: "sold", sale_price: salePriceAfterDiscount })
-      .eq("id", form.product_id)
-      .eq("status", "in_stock")
-      .select()
-      .maybeSingle();
+        if (existingTradeIn) {
+          const { data: updatedTip, error: tiErr } = await supabase
+            .from("products")
+            .update({
+              status: "in_stock",
+              cost_price: tradeInVal,
+              store_id: selectedProduct.store_id,
+              sale_price: null
+            })
+            .eq("id", existingTradeIn.id)
+            .select("id")
+            .maybeSingle();
 
-    if (updateError || !updatedProduct) {
-      const { data: checkProd } = await supabase
-        .from("products")
-        .select("status")
-        .eq("id", form.product_id)
-        .maybeSingle();
-
-      if (checkProd?.status === "sold") {
-        toast.error("Este aparelho acabou de ser vendido por outra pessoa. Tente outro aparelho.");
-      } else {
-        toast.error("Erro ao baixar produto do estoque: " + (updateError?.message || "Produto indisponível."));
-      }
-      setLoading(false);
-      return;
-    }
-
-    const { data: saleData, error: saleError } = await supabase.from("sales").insert({
-      product_id: form.product_id, store_id: selectedProduct.store_id,
-      sale_price: salePriceAfterDiscount, has_trade_in: form.has_trade_in,
-      trade_in_device_name: form.has_trade_in ? form.trade_in_device_name || null : null,
-      trade_in_device_brand: form.has_trade_in ? form.trade_in_device_brand || null : null,
-      trade_in_device_model: form.has_trade_in ? form.trade_in_device_model || null : null,
-      trade_in_device_imei: form.has_trade_in ? form.trade_in_device_imei || null : null,
-      trade_in_value: form.has_trade_in ? tradeInVal : 0, trade_in_product_id: tradeInProductId,
-      payment_cash: cashVal, payment_card: cardVal, payment_pix: pixVal,
-      customer_id: customerId,
-      customer_name: (selectedCustomer?.name || customerSearch) || null,
-      customer_phone: selectedCustomer?.phone ?? null,
-      customer_cpf: selectedCustomer?.cpf ?? null,
-      customer_address: selectedCustomer?.address ?? null,
-      notes: form.notes || null, commission_percent: commissionPercent,
-      commission_value: commissionValue, created_by: user.id,
-      seller_id: user.id, discount: discount,
-      warranty_days: parseInt(form.warranty_days) || 90,
-      installments: parseInt(form.installments) || 1,
-      ...(form.retro_date ? { created_at: new Date(form.retro_date + "T12:00:00").toISOString() } : {}),
-    }).select().single();
-
-    if (saleError) {
-      // Rollback do status do produto se a venda falhar
-      await supabase.from("products").update({ status: "in_stock", sale_price: null }).eq("id", form.product_id);
-      toast.error(saleError.message); 
-      setLoading(false); 
-      return; 
-    }
-
-    triggerWebhook("sale_completed", selectedProduct.store_id, saleData);
-    logAction("CREATE_SALE", "sales", (saleData as any).id, null, saleData, selectedProduct.store_id);
-
-    const desc = `Venda: ${selectedProduct.name}${selectedCustomer?.name ? ` → ${selectedCustomer.name}` : ""}`;
-    
-    // Calcula taxas e liquidez se conta destino informada
-    let netAmount = salePriceAfterDiscount;
-    let expectedDate = new Date();
-    
-    if (form.destination_account_id && (cardVal > 0 || pixVal > 0)) {
-      const acc = bankAccounts.find(a => a.id === form.destination_account_id);
-      if (acc) {
-        if (cardVal > 0) {
-          const fee = Number(acc.credit_fee_percent) || 0;
-          const days = Number(acc.credit_settlement_days) || 30;
-          netAmount -= (cardVal * (fee / 100));
-          expectedDate.setDate(expectedDate.getDate() + days); // simples adicionamento de dias
-        } else if (pixVal > 0) {
-          const fee = Number(acc.pix_fee_percent) || 0;
-          const days = Number(acc.pix_settlement_days) || 0;
-          netAmount -= (pixVal * (fee / 100));
-          expectedDate.setDate(expectedDate.getDate() + days);
+          if (tiErr) { toast.error(tiErr.message); return; }
+          tradeInProductId = updatedTip?.id || existingTradeIn.id;
+        } else {
+          const { data: tip, error: tiErr } = await supabase.from("products").insert({
+            name: form.trade_in_device_name, brand: form.trade_in_device_brand,
+            model: form.trade_in_device_model || "N/A", imei: form.trade_in_device_imei || null,
+            cost_price: tradeInVal, store_id: selectedProduct.store_id,
+            created_by: user.id, status: "in_stock",
+          }).select("id").single();
+          if (tiErr) { toast.error(tiErr.message); return; }
+          tradeInProductId = tip.id;
         }
       }
+
+      // 1. Baixa do produto do estoque (UPDATE direto - RLS desabilitada na tabela products)
+      const { data: updatedProduct, error: updateError } = await supabase
+        .from("products")
+        .update({ status: "sold", sale_price: salePriceAfterDiscount })
+        .eq("id", form.product_id)
+        .eq("status", "in_stock")
+        .select()
+        .maybeSingle();
+
+      if (updateError || !updatedProduct) {
+        const { data: checkProd } = await supabase
+          .from("products")
+          .select("status")
+          .eq("id", form.product_id)
+          .maybeSingle();
+
+        if (checkProd?.status === "sold") {
+          toast.error("Este aparelho acabou de ser vendido por outra pessoa. Tente outro aparelho.");
+        } else {
+          toast.error("Erro ao baixar produto do estoque: " + (updateError?.message || "Produto indisponível."));
+        }
+        return;
+      }
+
+      const { data: saleData, error: saleError } = await supabase.from("sales").insert({
+        product_id: form.product_id, store_id: selectedProduct.store_id,
+        sale_price: salePriceAfterDiscount, has_trade_in: form.has_trade_in,
+        trade_in_device_name: form.has_trade_in ? form.trade_in_device_name || null : null,
+        trade_in_device_brand: form.has_trade_in ? form.trade_in_device_brand || null : null,
+        trade_in_device_model: form.has_trade_in ? form.trade_in_device_model || null : null,
+        trade_in_device_imei: form.has_trade_in ? form.trade_in_device_imei || null : null,
+        trade_in_value: form.has_trade_in ? tradeInVal : 0, trade_in_product_id: tradeInProductId,
+        payment_cash: cashVal, payment_card: cardVal, payment_pix: pixVal,
+        customer_id: customerId,
+        customer_name: (selectedCustomer?.name || customerSearch) || null,
+        customer_phone: selectedCustomer?.phone ?? null,
+        customer_cpf: selectedCustomer?.cpf ?? null,
+        customer_address: selectedCustomer?.address ?? null,
+        notes: form.notes || null, commission_percent: commissionPercent,
+        commission_value: commissionValue, created_by: user.id,
+        seller_id: user.id, discount: discount,
+        warranty_days: parseInt(form.warranty_days) || 90,
+        installments: parseInt(form.installments) || 1,
+        ...(form.retro_date ? { created_at: new Date(form.retro_date + "T12:00:00").toISOString() } : {}),
+      }).select().single();
+
+      if (saleError) {
+        // Rollback do status do produto se a venda falhar
+        await supabase.from("products").update({ status: "in_stock", sale_price: null }).eq("id", form.product_id);
+        toast.error(saleError.message); 
+        return; 
+      }
+
+      triggerWebhook("sale_completed", selectedProduct.store_id, saleData);
+      logAction("CREATE_SALE", "sales", (saleData as any).id, null, saleData, selectedProduct.store_id);
+
+      const desc = `Venda: ${selectedProduct.name}${selectedCustomer?.name ? ` → ${selectedCustomer.name}` : ""}`;
+      
+      // Calcula taxas e liquidez se conta destino informada
+      let netAmount = salePriceAfterDiscount;
+      let expectedDate = new Date();
+      
+      if (form.destination_account_id && (cardVal > 0 || pixVal > 0)) {
+        const acc = bankAccounts.find(a => a.id === form.destination_account_id);
+        if (acc) {
+          if (cardVal > 0) {
+            const fee = Number(acc.credit_fee_percent) || 0;
+            const days = Number(acc.credit_settlement_days) || 30;
+            netAmount -= (cardVal * (fee / 100));
+            expectedDate = new Date();
+            expectedDate.setDate(expectedDate.getDate() + days); // simples adicionamento de dias
+          }
+          if (pixVal > 0) {
+            const fee = Number(acc.pix_fee_percent) || 0;
+            const days = Number(acc.pix_settlement_days) || 0;
+            netAmount -= (pixVal * (fee / 100));
+            const pixDate = new Date();
+            pixDate.setDate(pixDate.getDate() + days);
+            if (pixDate > expectedDate) {
+              expectedDate = pixDate;
+            }
+          }
+        }
+      }
+
+      await supabase.from("transactions").insert({
+        type: "sale", amount: salePriceAfterDiscount, net_amount: netAmount,
+        description: desc, store_id: selectedProduct.store_id, product_id: form.product_id,
+        created_by: user.id, destination_account_id: form.destination_account_id || null,
+        expected_settlement_date: expectedDate.toISOString(),
+        ...(form.retro_date ? { created_at: new Date(form.retro_date + "T12:00:00").toISOString() } : {}),
+      });
+      
+      if (cashVal === 0 && cardVal === 0 && pixVal === 0) {
+        await createPendingCashEntry(selectedProduct.store_id, user.id, salePriceAfterDiscount, desc, "dinheiro", form.retro_date);
+      } else {
+        if (cashVal > 0) {
+          await createPendingCashEntry(selectedProduct.store_id, user.id, cashVal, desc, "dinheiro", form.retro_date);
+        }
+        if (cardVal > 0) {
+          await createPendingCashEntry(selectedProduct.store_id, user.id, cardVal, desc, "cartao_credito", form.retro_date);
+        }
+        if (pixVal > 0) {
+          await createPendingCashEntry(selectedProduct.store_id, user.id, pixVal, desc, "pix", form.retro_date);
+        }
+      }
+
+      toast.success("Venda registrada! Confirme o recebimento no caixa.");
+      setDialogOpen(false); resetForm(); fetchData();
+    } catch (err: any) {
+      toast.error("Erro inesperado ao registrar venda: " + err.message);
+    } finally {
+      isSubmitting.current = false;
+      setLoading(false);
     }
-
-    await supabase.from("transactions").insert({
-      type: "sale", amount: salePriceAfterDiscount, net_amount: netAmount,
-      description: desc, store_id: selectedProduct.store_id, product_id: form.product_id,
-      created_by: user.id, destination_account_id: form.destination_account_id || null,
-      expected_settlement_date: expectedDate.toISOString(),
-      ...(form.retro_date ? { created_at: new Date(form.retro_date + "T12:00:00").toISOString() } : {}),
-    });
-    
-    const mainPayment = cashVal > 0 ? "dinheiro" : cardVal > 0 ? "cartao_credito" : pixVal > 0 ? "pix" : "dinheiro";
-    await createPendingCashEntry(selectedProduct.store_id, user.id, cashVal > 0 ? cashVal : salePriceAfterDiscount, desc, mainPayment, form.retro_date);
-
-    toast.success("Venda registrada! Confirme o recebimento no caixa.");
-    setDialogOpen(false); resetForm(); fetchData();
-    setLoading(false);
   };
 
   const handlePdvSubmit = async () => {
     if (!user || cart.length === 0 || !activeStoreId) return;
+    if (loading || isPdvSubmitting.current) return;
+    isPdvSubmitting.current = true;
     setLoading(true);
     try {
       // 1. Atualizar estoque de cada item
@@ -524,11 +552,29 @@ const Vendas = () => {
 
       const desc = `PDV: ${cart.map(i => `${i.qty}x ${i.acc.name}`).join(", ")}${pdvPayment.customer ? ` → ${pdvPayment.customer}` : ""}`;
       await supabase.from("transactions").insert({ type: "income", category: "acessorio", amount: cartTotal, description: desc, store_id: activeStoreId, created_by: user.id });
-      const mp = pdvCash > 0 ? "dinheiro" : pdvCard > 0 ? "cartao_credito" : pdvPix > 0 ? "pix" : "dinheiro";
-      await createPendingCashEntry(activeStoreId, user.id, cartTotal, desc, mp);
+      
+      if (pdvCash === 0 && pdvCard === 0 && pdvPix === 0) {
+        await createPendingCashEntry(activeStoreId, user.id, cartTotal, desc, "dinheiro");
+      } else {
+        if (pdvCash > 0) {
+          const cashAmount = pdvCash - pdvTroco;
+          if (cashAmount > 0) await createPendingCashEntry(activeStoreId, user.id, cashAmount, desc, "dinheiro");
+        }
+        if (pdvCard > 0) {
+          await createPendingCashEntry(activeStoreId, user.id, pdvCard, desc, "cartao_credito");
+        }
+        if (pdvPix > 0) {
+          await createPendingCashEntry(activeStoreId, user.id, pdvPix, desc, "pix");
+        }
+      }
+
       toast.success("Venda rápida registrada!"); setPdvOpen(false); resetPdv(); fetchData();
-    } catch (err: any) { toast.error(err.message || "Erro"); }
-    setLoading(false);
+    } catch (err: any) { 
+      toast.error(err.message || "Erro"); 
+    } finally {
+      isPdvSubmitting.current = false;
+      setLoading(false);
+    }
   };
 
   const handleDeleteSale = async (saleId: string, reason: string) => {

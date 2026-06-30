@@ -433,6 +433,7 @@ const OrdensServico = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const isSubmitting = useRef(false);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [existingReceiptUrl, setExistingReceiptUrl] = useState<string | null>(null);
 
@@ -542,71 +543,98 @@ const OrdensServico = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    if (loading || isSubmitting.current) return;
 
     if (form.device_is_off && !deviceOffAgreed) {
       toast.error("O cliente deve concordar com o termo de entrada de aparelho desligado!");
       return;
     }
 
+    isSubmitting.current = true;
     setLoading(true);
 
-    const storeIdToUse = activeStoreId === "all" ? form.store_id || stores[0]?.id : activeStoreId;
+    try {
+      const storeIdToUse = activeStoreId === "all" ? form.store_id || stores[0]?.id : activeStoreId;
 
-    if (form.customer_name) {
-      let query = supabase.from("customers" as any).select("id").eq("name", form.customer_name);
-      if (form.customer_phone) query = query.eq("phone", form.customer_phone);
-      if (form.customer_cpf) query = query.eq("cpf", form.customer_cpf);
-      
-      const { data: extCust } = await query.limit(1).maybeSingle();
-      
-      if (!extCust) {
-        await supabase.from("customers" as any).insert({
-          name: form.customer_name,
-          phone: form.customer_phone || null,
-          cpf: form.customer_cpf || null,
-          created_by: user.id,
-          store_id: storeIdToUse,
-        });
+      // Duplication check (e.g. within 15 seconds)
+      const fifteenSecondsAgo = new Date(Date.now() - 15000).toISOString();
+      const { data: recentOS } = await supabase
+        .from("service_orders")
+        .select("id")
+        .eq("created_by", user.id)
+        .eq("customer_name", form.customer_name)
+        .eq("device_brand", form.device_brand)
+        .eq("device_model", form.device_model)
+        .gt("created_at", fifteenSecondsAgo)
+        .limit(1);
+
+      if (recentOS && recentOS.length > 0) {
+        toast.error("Uma OS semelhante foi criada recentemente. Evitando duplicação.");
+        isSubmitting.current = false;
+        setLoading(false);
+        return;
       }
-    }
 
-    const { error, data } = await supabase.from("service_orders").insert({
-      customer_name: form.customer_name,
-      customer_phone: form.customer_phone || null,
-      customer_cpf: form.customer_cpf || null,
-      device_brand: form.device_brand,
-      device_model: form.device_model,
-      device_imei: form.device_imei || null,
-      device_color: form.device_color || null,
-      device_condition: form.device_condition || null,
-      device_password: form.device_password || null,
-      device_accessories: form.device_accessories || null,
-      reported_defect: form.reported_defect,
-      requested_service: form.requested_service,
-      store_id: storeIdToUse,
-      technician_id: form.technician_id || null,
-      estimated_price: form.estimated_price ? parseFloat(form.estimated_price) : 0,
-      estimated_completion: form.estimated_completion || null,
-      device_is_off: form.device_is_off,
-      entry_checklist: form.entry_checklist,
-      terms_accepted: form.terms_accepted,
-      terms_text: TERMS_TEXT,
-      signature_data: signatureData || null,
-      internal_notes: form.internal_notes || null,
-      created_by: user.id,
-      status: "open",
-    } as any).select().single();
+      if (form.customer_name) {
+        let query = supabase.from("customers" as any).select("id").eq("name", form.customer_name);
+        if (form.customer_phone) query = query.eq("phone", form.customer_phone);
+        if (form.customer_cpf) query = query.eq("cpf", form.customer_cpf);
+        
+        const { data: extCust } = await query.limit(1).maybeSingle();
+        
+        if (!extCust) {
+          await supabase.from("customers" as any).insert({
+            name: form.customer_name,
+            phone: form.customer_phone || null,
+            cpf: form.customer_cpf || null,
+            created_by: user.id,
+            store_id: storeIdToUse,
+          });
+        }
+      }
 
-    if (error) { 
-      toast.error("Erro ao criar OS: " + error.message); 
-    } else { 
-      toast.success("Ordem de Serviço criada!"); 
-      setDialogOpen(false); 
-      resetForm(); 
-      fetchData(); 
-      logAction("CREATE_RECORD", "service_orders" as any, (data as any)?.id, null, form, storeIdToUse);
+      const { error, data } = await supabase.from("service_orders").insert({
+        customer_name: form.customer_name,
+        customer_phone: form.customer_phone || null,
+        customer_cpf: form.customer_cpf || null,
+        device_brand: form.device_brand,
+        device_model: form.device_model,
+        device_imei: form.device_imei || null,
+        device_color: form.device_color || null,
+        device_condition: form.device_condition || null,
+        device_password: form.device_password || null,
+        device_accessories: form.device_accessories || null,
+        reported_defect: form.reported_defect,
+        requested_service: form.requested_service,
+        store_id: storeIdToUse,
+        technician_id: form.technician_id || null,
+        estimated_price: form.estimated_price ? parseFloat(form.estimated_price) : 0,
+        estimated_completion: form.estimated_completion || null,
+        device_is_off: form.device_is_off,
+        entry_checklist: form.entry_checklist,
+        terms_accepted: form.terms_accepted,
+        terms_text: TERMS_TEXT,
+        signature_data: signatureData || null,
+        internal_notes: form.internal_notes || null,
+        created_by: user.id,
+        status: "open",
+      } as any).select().single();
+
+      if (error) { 
+        toast.error("Erro ao criar OS: " + error.message); 
+      } else { 
+        toast.success("Ordem de Serviço criada!"); 
+        setDialogOpen(false); 
+        resetForm(); 
+        fetchData(); 
+        logAction("CREATE_RECORD", "service_orders" as any, (data as any)?.id, null, form, storeIdToUse);
+      }
+    } catch (err: any) {
+      toast.error("Erro inesperado: " + err.message);
+    } finally {
+      isSubmitting.current = false;
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const updateStatus = async (orderId: string, newStatus: string, oldStatus: string, reason?: string) => {

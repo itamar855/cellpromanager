@@ -63,6 +63,7 @@ const Dashboard = () => {
     totalSalesRevenue: 0, totalProfit: 0,
     expensesPJ: 0, expensesPF: 0, storeCount: 0, openOS: 0, salesCount: 0,
     totalAccessories: 0, totalLeads: 0,
+    faturamentoBruto: 0, faturamentoLiquido: 0, custoPecasOS: 0,
   });
   const [storeData, setStoreData] = useState<{ name: string; aparelhos: number; acessorios: number; investido: number }[]>([]);
   const [dailySales, setDailySales] = useState<{ date: string; total: number }[]>([]);
@@ -103,8 +104,8 @@ const Dashboard = () => {
         : Promise.resolve({ data: [] }),
       can("os")
         ? (!isFiltered 
-            ? supabase.from("service_orders").select("id, status, store_id, created_at").gte("created_at", start).lte("created_at", end) 
-            : supabase.from("service_orders").select("id, status, store_id, created_at").eq("store_id", effectiveStoreId).gte("created_at", start).lte("created_at", end))
+            ? supabase.from("service_orders").select("id, status, store_id, created_at, final_price, estimated_price").gte("created_at", start).lte("created_at", end) 
+            : supabase.from("service_orders").select("id, status, store_id, created_at, final_price, estimated_price").eq("store_id", effectiveStoreId).gte("created_at", start).lte("created_at", end))
         : Promise.resolve({ data: [] }),
       can("estoque") 
         ? (!isFiltered ? supabase.from("accessories" as any).select("*") : supabase.from("accessories" as any).select("*").eq("store_id", effectiveStoreId))
@@ -127,6 +128,17 @@ const Dashboard = () => {
     const accessories = (accRes.data ?? []) as any[];
     const leads = leadsRes.data ?? [];
 
+    // Fetch service order items for the service orders in the period
+    let serviceOrderItems: any[] = [];
+    if (can("os") && serviceOrders.length > 0) {
+      const osIds = serviceOrders.map((o: any) => o.id);
+      const { data: itemsData } = await supabase
+        .from("service_order_items" as any)
+        .select("service_order_id, unit_cost, quantity")
+        .in("service_order_id", osIds);
+      serviceOrderItems = itemsData ?? [];
+    }
+
     const inStock = products.filter((p: any) => p.status === "in_stock");
     const totalInvested = inStock.reduce((sum: number, p: any) => sum + Number(p.cost_price), 0);
     const totalInvestedAcc = accessories.reduce((sum: number, a: any) => sum + Number(a.cost_price) * a.quantity, 0);
@@ -141,6 +153,37 @@ const Dashboard = () => {
     const expensesPF = transactions.filter((t: any) => t.type === "expense_pf" || t.type === "pro_labore").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
     const openOS = serviceOrders.filter((o: any) => !["delivered", "cancelled"].includes(o.status)).length;
 
+    // Calcular faturamento e custos consolidados
+    const receitaAparelhos = sales.reduce((sum: number, s: any) => sum + Number(s.sale_price), 0);
+    const accSales = transactions.filter((t: any) => t.type === "income" && t.category === "acessorio");
+    const receitaAcessorios = accSales.reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+    
+    // Receita de serviços concluídos (status entregue)
+    const osDelivered = serviceOrders.filter((o: any) => o.status === "delivered");
+    const receitaOS = osDelivered.reduce((sum: number, o: any) => sum + Number(o.final_price || o.estimated_price || 0), 0);
+
+    const faturamentoBruto = receitaAparelhos + receitaAcessorios + receitaOS;
+
+    // Custos de aparelhos vendidos
+    const cmvAparelhos = sales.reduce((sum: number, s: any) => {
+      const product = products.find((p: any) => p.id === s.product_id);
+      return sum + Number(product?.cost_price || 0);
+    }, 0);
+    // Custos de acessórios vendidos (DRE)
+    const cmvAcessorios = transactions.filter((t: any) => t.type === "expense_pj" && t.category === "acessorio").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+    
+    // Custo de peças de serviços (OS não canceladas)
+    const activeOSIds = new Set(serviceOrders.filter((o: any) => o.status !== "cancelled").map((o: any) => o.id));
+    const custoPecasOS = serviceOrderItems
+      .filter((item: any) => activeOSIds.has(item.service_order_id))
+      .reduce((sum: number, item: any) => sum + (Number(item.unit_cost) * Number(item.quantity || 1)), 0);
+
+    // Despesas PJ adicionais (que não sejam compra de acessório já contabilizado no CMV)
+    const despesasPJAdicionais = transactions.filter((t: any) => t.type === "expense_pj" && t.category !== "acessorio").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+    const despesasPFTotal = transactions.filter((t: any) => t.type === "expense_pf" || t.type === "pro_labore").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+
+    const faturamentoLiquido = faturamentoBruto - cmvAparelhos - cmvAcessorios - custoPecasOS - despesasPJAdicionais - despesasPFTotal;
+
     setStats({
       totalStock: inStock.length, totalInvested, totalInvestedAcc,
       totalSalesRevenue, totalProfit, expensesPJ, expensesPF,
@@ -148,6 +191,9 @@ const Dashboard = () => {
       openOS, salesCount: sales.length,
       totalAccessories: accessories.reduce((sum: number, a: any) => sum + a.quantity, 0),
       totalLeads: leads.length,
+      faturamentoBruto,
+      faturamentoLiquido,
+      custoPecasOS,
     });
 
     if (isAdmin) {
@@ -327,6 +373,41 @@ const Dashboard = () => {
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+
+      {canSeeFinancials && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Card className="border-border/50 shadow-lg shadow-black/10 bg-gradient-to-br from-card to-card/50">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-semibold">Faturamento Bruto</p>
+                <TrendingUp className="h-4 w-4 text-emerald-500" />
+              </div>
+              <p className="font-display text-2xl font-bold text-emerald-500">{formatCurrency(stats.faturamentoBruto)}</p>
+              <p className="text-[10px] text-muted-foreground mt-1">Aparelhos + Acessórios + Serviços</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/50 shadow-lg shadow-black/10 bg-gradient-to-br from-card to-card/50">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-semibold">Faturamento Líquido</p>
+                <TrendingUp className="h-4 w-4 text-blue-500" />
+              </div>
+              <p className="font-display text-2xl font-bold text-blue-500">{formatCurrency(stats.faturamentoLiquido)}</p>
+              <p className="text-[10px] text-muted-foreground mt-1">Lucro real após custos e despesas</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/50 shadow-lg shadow-black/10 bg-gradient-to-br from-card to-card/50">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-semibold">Pago em Peças (OS)</p>
+                <Package className="h-4 w-4 text-orange-400" />
+              </div>
+              <p className="font-display text-2xl font-bold text-orange-400">{formatCurrency(stats.custoPecasOS)}</p>
+              <p className="text-[10px] text-muted-foreground mt-1">Custo de peças em OS realizadas</p>
+            </CardContent>
+          </Card>
         </div>
       )}
 
