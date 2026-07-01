@@ -25,8 +25,10 @@ Deno.serve(async (req) => {
     const body = await req.json();
     console.log("Evolution API Webhook received:", JSON.stringify(body, null, 2));
 
-    if (body.event !== "messages.upsert") {
-      return new Response(JSON.stringify({ status: "ignored_event" }), {
+    // Accept both MESSAGES_UPSERT and SEND_MESSAGE events
+    const validEvents = ["messages.upsert", "send.message", "MESSAGES_UPSERT", "SEND_MESSAGE"];
+    if (!validEvents.includes(body.event)) {
+      return new Response(JSON.stringify({ status: "ignored_event", event: body.event }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -41,16 +43,46 @@ Deno.serve(async (req) => {
 
     const key = messageData.key;
     const remoteJid = key?.remoteJid || "";
-    const cleanSender = remoteJid.split("@")[0].replace(/\D/g, "");
+    const remoteJidAlt = key?.remoteJidAlt || "";
+    const isLidFormat = remoteJid.endsWith("@lid");
+    const isGroup = remoteJid.endsWith("@g.us");
 
+    // Extract sender JID (handles groups vs direct messages)
+    let senderJid = "";
+    if (isGroup) {
+      senderJid = messageData.participant || key?.participant || "";
+    } else if (isLidFormat && remoteJidAlt) {
+      senderJid = remoteJidAlt;
+    } else {
+      senderJid = remoteJid;
+    }
+
+    const cleanSender = senderJid.split("@")[0].replace(/\D/g, "");
     const cleanAllowed = allowedPhone.replace(/\D/g, "");
-    if (!cleanAllowed || cleanSender !== cleanAllowed) {
-      console.warn(`Unauthorized: ${cleanSender}. Allowed: ${cleanAllowed}`);
+    
+    // Handle Brazilian 9-digit quirk (12 vs 13 digits)
+    const cleanSenderWith9 = cleanSender.length === 12
+      ? cleanSender.slice(0, 4) + "9" + cleanSender.slice(4)
+      : cleanSender;
+
+    const isAuthorized = cleanAllowed && (
+      cleanSender === cleanAllowed ||
+      cleanSenderWith9 === cleanAllowed ||
+      key?.fromMe === true
+    );
+
+    if (!isAuthorized) {
+      console.warn(`Unauthorized sender: ${cleanSender} in chat ${remoteJid}. Allowed: ${cleanAllowed}`);
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Reply to the source chat (could be the group or private chat)
+    const replyTo = remoteJid;
+
+
 
     const messageContent = messageData.message;
     let textMessage = "";
@@ -228,7 +260,7 @@ Lançamento registrado no sistema! 🚀`;
         method: "POST",
         headers: { "Content-Type": "application/json", "apikey": evolutionApiKey },
         body: JSON.stringify({
-          number: cleanSender,
+          number: replyTo,
           text: replyMessage
         })
       });
