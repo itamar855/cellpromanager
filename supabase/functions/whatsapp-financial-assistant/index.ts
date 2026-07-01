@@ -47,6 +47,15 @@ Deno.serve(async (req) => {
     const isLidFormat = remoteJid.endsWith("@lid");
     const isGroup = remoteJid.endsWith("@g.us");
 
+    // Restrict group messages ONLY to the Gastos Pessoais group ID
+    const allowedGroupJid = "120363425514605912@g.us";
+    if (isGroup && remoteJid !== allowedGroupJid) {
+      console.log(`Ignored message from unrelated group: ${remoteJid}`);
+      return new Response(JSON.stringify({ status: "ignored_group" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Extract sender JID (handles groups vs direct messages)
     let senderJid = "";
     if (isGroup) {
@@ -60,19 +69,25 @@ Deno.serve(async (req) => {
     const cleanSender = senderJid.split("@")[0].replace(/\D/g, "");
     const cleanAllowed = allowedPhone.replace(/\D/g, "");
     
-    // Handle Brazilian 9-digit quirk (12 vs 13 digits)
-    const cleanSenderWith9 = cleanSender.length === 12
-      ? cleanSender.slice(0, 4) + "9" + cleanSender.slice(4)
-      : cleanSender;
+    // Normalize both numbers to 12 digits (removing the 9th digit) to avoid formatting mismatches
+    const normalizePhone = (num: string) => {
+      const parsed = num.replace(/\D/g, "");
+      if (parsed.length === 13 && parsed.startsWith("55")) {
+        return parsed.slice(0, 4) + parsed.slice(5); // remove the 9th digit (55 + DDD + 9 + Number)
+      }
+      return parsed;
+    };
 
-    const isAuthorized = cleanAllowed && (
-      cleanSender === cleanAllowed ||
-      cleanSenderWith9 === cleanAllowed ||
+    const normSender = normalizePhone(cleanSender);
+    const normAllowed = normalizePhone(cleanAllowed);
+
+    const isAuthorized = normAllowed && (
+      normSender === normAllowed ||
       key?.fromMe === true
     );
 
     if (!isAuthorized) {
-      console.warn(`Unauthorized sender: ${cleanSender} in chat ${remoteJid}. Allowed: ${cleanAllowed}`);
+      console.warn(`Unauthorized sender: ${cleanSender} (normalized: ${normSender}) in chat ${remoteJid}. Allowed: ${normAllowed}`);
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -81,6 +96,7 @@ Deno.serve(async (req) => {
 
     // Reply to the source chat (could be the group or private chat)
     const replyTo = remoteJid;
+
 
 
 
