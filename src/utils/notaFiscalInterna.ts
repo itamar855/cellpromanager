@@ -173,3 +173,125 @@ export const gerarNotaFiscalInterna = async (data: NotaFiscalData): Promise<any>
 
   return doc;
 };
+
+// --- RELATÓRIO DRE DETALHADO COM MOVIMENTAÇÕES ---
+export interface DreDetailedData {
+  period: string;
+  lojaNome?: string;
+  lojaCnpj?: string;
+  lojaEndereco?: string;
+  lojaTelefone?: string;
+  lojas: { id: string; nome: string }[];
+  movimentacoes: {
+    data: string;
+    tipo: "venda" | "os" | "despesa_pj" | "despesa_pf" | "prolabore" | "entrada_caixa" | "saida_caixa";
+    descricao: string;
+    valor: number;
+    loja: string;
+    categoria?: string;
+    formaPagamento?: string;
+    detalhes?: string;
+  }[];
+  resumo: {
+    receitaBruta: number;
+    cmv: number;
+    lucroBruto: number;
+    despesas: number;
+    lucroLiquido: number;
+  };
+}
+
+export const gerarRelatorioDREDetailed = async (data: DreDetailedData): Promise<any> => {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const W = 210;
+  const M = 12;
+  const CW = W - M * 2;
+  let y = M;
+
+  const COLORS = {
+    PRIMARY: [20, 40, 80] as [number, number, number],
+    TEXT: [30, 30, 30] as [number, number, number],
+    LIGHT_TEXT: [110, 110, 110] as [number, number, number],
+    HEADER: [248, 250, 252] as [number, number, number],
+    POS: [20, 150, 70] as [number, number, number],
+    NEG: [200, 40, 40] as [number, number, number],
+    BORDER: [226, 232, 240] as [number, number, number],
+  };
+
+  const drawHeader = (text: string, size = 11) => {
+    doc.setFillColor(...COLORS.HEADER);
+    doc.rect(M, y, CW, 8, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(size);
+    doc.setTextColor(...COLORS.PRIMARY);
+    doc.text(text, M + 4, y + 5.5);
+    y += 10;
+  };
+
+  const drawLine = (label: string, value: string, col1 = M, col2 = M + CW - 40, bold = true) => {
+    doc.setFont("helvetica", bold ? "bold" : "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(...COLORS.TEXT);
+    doc.text(label, col1, y);
+    doc.text(value, col2, y, { align: "right" });
+    y += 5;
+  };
+
+  // Capa
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.setTextColor(...COLORS.PRIMARY);
+  doc.text("RELATÓRIO DRE DETALHADO", M, y);
+  y += 8;
+  doc.setFontSize(10);
+  doc.text(`Período: ${data.period}`, M, y);
+  y += 6;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.text(`Loja: ${data.lojaNome || "Todas as lojas"}`, M, y);
+  y += 10;
+
+  // RESUMO
+  drawHeader("RESUMO DO PERÍODO");
+  y += 2;
+  drawLine("Receita Bruta", formatCurrency(data.resumo.receitaBruta));
+  drawLine("(-) Custo Mercadorias Vendidas", formatCurrency(data.resumo.cmv));
+  drawLine("= Lucro Bruto", formatCurrency(data.resumo.lucroBruto), M, M + CW - 40, true);
+  drawLine("(-) Despesas Totais", formatCurrency(data.resumo.despesas));
+  drawLine("= LUCRO LÍQUIDO", formatCurrency(data.resumo.lucroLiquido), M, M + CW - 40, true);
+  y += 5;
+
+  // MOVIMENTAÇÕES
+  drawHeader("TODAS AS MOVIMENTAÇÕES");
+  y += 2;
+
+  // Cabeçalho da tabela
+  doc.setFillColor(...COLORS.HEADER);
+  doc.rect(M, y, CW, 7, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6);
+  doc.setTextColor(...COLORS.PRIMARY);
+  const cols = ["Data", "Tipo", "Descrição", "Categoria", "Valor"];
+  const colWidths = [25, 22, 55, 30, 25];
+  let x = M + 2;
+  cols.forEach((c, i) => { doc.text(c, x, y + 4.5); x += colWidths[i]; });
+  y += 8;
+
+  // Dados
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...COLORS.TEXT);
+  data.movimentacoes.forEach(m => {
+    if (y > 270) { doc.addPage(); y = M + 10; }
+    x = M + 2;
+    doc.text(m.data, x, y); x += colWidths[0];
+    const tipoLabel = { venda: "VENDA", os: "OS", despesa_pj: "DESPESA PJ", despesa_pf: "DESPESA PF", prolabore: "PROLABORE", entrada_caixa: "ENTRADA", saida_caixa: "SAÍDA" }[m.tipo] || m.tipo.toUpperCase();
+    doc.text(tipoLabel, x, y); x += colWidths[1];
+    doc.text(m.descricao.substring(0, 30), x, y); x += colWidths[2];
+    doc.text((m.categoria || "-").substring(0, 15), x, y); x += colWidths[3];
+    doc.setTextColor(m.valor >= 0 ? COLORS.POS[0] : COLORS.NEG[0], m.valor >= 0 ? COLORS.POS[1] : COLORS.NEG[1], m.valor >= 0 ? COLORS.POS[2] : COLORS.NEG[2]);
+    doc.text(formatCurrency(m.valor), x, y, { align: "right" });
+    y += 5;
+  });
+
+  return doc;
+};

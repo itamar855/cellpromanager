@@ -310,7 +310,7 @@ const Relatorios = () => {
     setLeadsData({ total, bySource, conversion });
   }, [period, storeId, customStart, customEnd]);
 
-  useEffect(() => { if (tab === "leads") fetchLeads(); }, [tab, fetchLeads]);
+  useEffect(() => { if (tab === "leads") fetchLeads(); }, [tab, fetchLeads, period, customStart, customEnd]);
 
   // ── GERAR NOTA ────────────────────────────────────────────────────────────
   const handleGerarNota = async (row: any, enviarWhatsApp = false) => {
@@ -356,7 +356,74 @@ const Relatorios = () => {
     setNotaLoading(null);
   };
 
-  const filterProps = { period, setPeriod, storeId, setStoreId, stores, customStart, setCustomStart, customEnd, setCustomEnd, userRole };
+const filterProps = { period, setPeriod, storeId, setStoreId, stores, customStart, setCustomStart, customEnd, setCustomEnd, userRole };
+
+   const exportarDREDetailed = async () => {
+     const { start, end } = getPeriodDates(period, customStart, customEnd);
+     const effectiveStoreId = userRole === "admin" ? storeId : activeStoreId;
+     
+     const q = (t: any) => effectiveStoreId && effectiveStoreId !== "all" ? t.eq("store_id", effectiveStoreId) : t;
+     
+     const [salesRes, osRes, txRes] = await Promise.all([
+       q(supabase.from("sales").select("*").gte("created_at", start).lte("created_at", end)),
+       q(supabase.from("service_orders").select("*").eq("status", "delivered").gte("created_at", start).lte("created_at", end)),
+       q(supabase.from("transactions").select("*").gte("created_at", start).lte("created_at", end)),
+     ]);
+
+     const movimentacoes: any[] = [];
+     
+     (salesRes.data ?? []).forEach((s: any) => {
+       movimentacoes.push({
+         data: new Date(s.created_at).toLocaleDateString("pt-BR"),
+         tipo: "venda",
+         descricao: `Venda de produto`,
+         valor: Number(s.sale_price),
+         loja: (storeMap.get(s.store_id) as any)?.name || "-",
+         categoria: "Aparelho",
+         formaPagamento: [s.payment_cash ? "Dinheiro" : "", s.payment_card ? "Cartão" : "", s.payment_pix ? "Pix" : ""].filter(Boolean).join(", "),
+       });
+     });
+
+     (osRes.data ?? []).forEach((o: any) => {
+       movimentacoes.push({
+         data: new Date(o.delivered_at || o.created_at).toLocaleDateString("pt-BR"),
+         tipo: "os",
+         descricao: `${o.device_brand} ${o.device_model} - ${o.requested_service}`,
+         valor: Number(o.final_price || o.estimated_price || 0),
+         loja: (storeMap.get(o.store_id) as any)?.name || "-",
+         categoria: "Serviço",
+       });
+     });
+
+     (txRes.data ?? []).forEach((t: any) => {
+       const tipoMap: any = { income: "entrada_caixa", expense_pj: "despesa_pj", expense_pf: "despesa_pf", pro_labore: "prolabore" };
+       movimentacoes.push({
+         data: new Date(t.created_at).toLocaleDateString("pt-BR"),
+         tipo: tipoMap[t.type] || t.type,
+         descricao: t.description || t.category || "Transação",
+         valor: t.type === "income" ? Number(t.amount) : -Number(t.amount),
+         loja: (storeMap.get(t.store_id) as any)?.name || "-",
+         categoria: t.category,
+       });
+     });
+
+     movimentacoes.sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
+
+     const { gerarRelatorioDREDetailed } = await import("@/utils/notaFiscalInterna");
+     const store = stores.find((s: any) => s.id === effectiveStoreId) as any;
+     
+     const doc = await gerarRelatorioDREDetailed({
+       period: `${customStart || "Início"} a ${customEnd || "Fim"}`,
+       lojaNome: store?.name,
+       lojaCnpj: store?.cnpj,
+       lojas: stores.map((s: any) => ({ id: s.id, nome: s.name })),
+       movimentacoes,
+       resumo: dre,
+     });
+     
+     doc.save(`dre-detalhado-${Date.now()}.pdf`);
+     toast.success("Relatório PDF detalhado gerado!");
+   };
 
   const dreLines = [
     { label: "Receita de Aparelhos", value: dre.receitaAparelhos ?? 0, sub: `${dre.qtdVendasAparelhos ?? 0} vendas`, type: "income" },
@@ -430,9 +497,12 @@ const Relatorios = () => {
         <TabsContent value="dre" className="space-y-4 mt-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <Filters {...filterProps} />
-            <Button className="gap-1.5 h-9 bg-transparent border border-border text-foreground hover:bg-muted text-xs" onClick={() => exportCSV(dreLines.map(l => ({ item: l.label, valor: formatCurrency(Math.abs(l.value)) })), "dre.csv")}>
-              <Download className="h-3.5 w-3.5" /> CSV
-            </Button>
+<Button className="gap-1.5 h-9 bg-transparent border border-border text-foreground hover:bg-muted text-xs" onClick={() => exportCSV(dreLines.map(l => ({ item: l.label, valor: formatCurrency(Math.abs(l.value)) })), "dre.csv")}>
+               <Download className="h-3.5 w-3.5" /> CSV
+             </Button>
+             <Button className="gap-1.5 h-9 bg-transparent border border-primary/30 text-primary hover:bg-primary/10 text-xs" onClick={exportarDREDetailed}>
+               <FileText className="h-3.5 w-3.5" /> PDF Detalhado
+             </Button>
           </div>
           <Card className="border-border/50">
             <CardHeader className="pb-2"><CardTitle className="font-display text-sm flex items-center gap-2"><FileText className="h-4 w-4 text-primary" /> DRE Simplificado</CardTitle></CardHeader>
